@@ -2,6 +2,7 @@ import { EnvVarWarning } from "@/components/env-var-warning";
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { UploadBookForm } from "@/components/upload-book-form";
+import { BooksList } from "@/components/books-list";
 import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
@@ -28,16 +29,17 @@ async function HomeContent() {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (user) {
-    // User is logged in - show upload form
+    // User is logged in - show upload form and books list
     return (
-      <div className="w-full max-w-2xl">
-        <div className="mb-8 text-center">
+      <div className="w-full max-w-2xl space-y-8">
+        <div>
           <h1 className="text-3xl font-bold mb-2">My Library</h1>
           <p className="text-muted-foreground">
             Upload EPUB books to your personal library
           </p>
         </div>
         <UploadBookForm />
+        <BooksList />
       </div>
     );
   }
