@@ -1,6 +1,6 @@
 "use client";
 
-import { StatefulReader, StatefulPreferencesProvider, ThStoreProvider } from "@edrlab/thorium-web/epub";
+import { StatefulReader, StatefulPreferencesProvider, ThStoreProvider, ThI18nProvider } from "@edrlab/thorium-web/epub";
 import { useEffect, useState } from "react";
 
 interface BookReaderProps {
@@ -29,10 +29,12 @@ export function BookReader({ rawManifest, selfHref }: BookReaderProps) {
     <div className="w-full h-screen">
       <ThStoreProvider>
         <StatefulPreferencesProvider>
-          <StatefulReader
-            rawManifest={rawManifest}
-            selfHref={selfHref}
-          />
+          <ThI18nProvider>
+            <StatefulReader
+              rawManifest={rawManifest}
+              selfHref={selfHref}
+            />
+          </ThI18nProvider>
         </StatefulPreferencesProvider>
       </ThStoreProvider>
     </div>
