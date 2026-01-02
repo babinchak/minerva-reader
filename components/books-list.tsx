@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookOpen, User, Calendar, FileText } from "lucide-react";
+import Link from "next/link";
 
 export async function BooksList() {
   const supabase = await createClient();
@@ -142,9 +143,10 @@ export async function BooksList() {
       <CardContent>
         <div className="space-y-4">
           {userBooks.map((book) => (
-            <div
+            <Link
               key={book.id}
-              className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+              href={`/read/${book.id}`}
+              className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer block"
             >
               <div className="flex-shrink-0">
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -179,7 +181,7 @@ export async function BooksList() {
                   )}
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </CardContent>
