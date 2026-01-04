@@ -2,6 +2,7 @@
 
 import { StatefulReader, StatefulPreferencesProvider, ThStoreProvider, ThI18nProvider } from "@edrlab/thorium-web/epub";
 import { useEffect, useState } from "react";
+import { TextSelectionHandler } from "@/components/text-selection-handler";
 
 interface BookReaderProps {
   rawManifest: any;
@@ -34,6 +35,7 @@ export function BookReader({ rawManifest, selfHref }: BookReaderProps) {
               rawManifest={rawManifest}
               selfHref={selfHref}
             />
+            <TextSelectionHandler rawManifest={rawManifest} />
           </ThI18nProvider>
         </StatefulPreferencesProvider>
       </ThStoreProvider>
