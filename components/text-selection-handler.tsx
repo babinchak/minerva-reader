@@ -207,7 +207,7 @@ export function TextSelectionHandler({ rawManifest }: TextSelectionHandlerProps)
   return (
     <Button
       onClick={handleButtonClick}
-      className="fixed top-4 right-4 z-50 shadow-lg"
+      className="fixed bottom-4 right-4 z-50 shadow-lg"
       variant="default"
     >
       Log Position
