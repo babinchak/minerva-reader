@@ -6,6 +6,7 @@ import { TextSelectionHandler } from "@/components/text-selection-handler";
 import { AIAgentPane } from "@/components/ai-agent-pane";
 import { Button } from "@/components/ui/button";
 import { Bot } from "lucide-react";
+import { useParams } from "next/navigation";
 
 interface BookReaderProps {
   rawManifest: any;
@@ -16,6 +17,8 @@ export function BookReader({ rawManifest, selfHref }: BookReaderProps) {
   const [mounted, setMounted] = useState(false);
   const [isAIPaneOpen, setIsAIPaneOpen] = useState(false);
   const [selectedText, setSelectedText] = useState<string>("");
+  const params = useParams();
+  const bookId = params?.bookId as string;
 
   useEffect(() => {
     setMounted(true);
@@ -76,7 +79,7 @@ export function BookReader({ rawManifest, selfHref }: BookReaderProps) {
                 rawManifest={rawManifest}
                 selfHref={selfHref}
               />
-              <TextSelectionHandler rawManifest={rawManifest} />
+              <TextSelectionHandler rawManifest={rawManifest} bookId={bookId} />
             </ThI18nProvider>
           </StatefulPreferencesProvider>
         </ThStoreProvider>

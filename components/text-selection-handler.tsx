@@ -2,9 +2,12 @@
 
 import { useStore } from "react-redux";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
 
 interface TextSelectionHandlerProps {
   rawManifest: any;
+  bookId: string;
 }
 
 interface SelectionPosition {
@@ -14,10 +17,19 @@ interface SelectionPosition {
   viewEnd: string;
 }
 
-export function TextSelectionHandler({ rawManifest }: TextSelectionHandlerProps) {
+interface Summary {
+  toc_title: string;
+  chapter_path: string;
+  start_position: string;
+  end_position: string | null;
+}
+
+export function TextSelectionHandler({ rawManifest, bookId }: TextSelectionHandlerProps) {
   // Get readingOrder from manifest
   const readingOrder = rawManifest?.readingOrder || [];
   const store = useStore();
+  const [summaries, setSummaries] = useState<Summary[]>([]);
+  const supabase = createClient();
 
   const handleButtonClick = () => {
     // Try to get selection from the main document first
@@ -206,6 +218,163 @@ export function TextSelectionHandler({ rawManifest }: TextSelectionHandlerProps)
     console.log("Selection end position:", positions.end);
     console.log("View start position:", positions.viewStart);
     console.log("View end position:", positions.viewEnd);
+
+    // Query summaries for this selection
+    querySummariesForSelection(bookId, positions.start, positions.end);
+  };
+
+  const querySummariesForSelection = async (
+    bookId: string,
+    startPosition: string,
+    endPosition: string
+  ) => {
+    try {
+      // Extract reading_order_index from start position (first number before "/")
+      const readingOrderIndex = parseInt(startPosition.split("/")[0], 10);
+      
+      if (isNaN(readingOrderIndex)) {
+        console.error("Could not extract reading_order_index from position:", startPosition);
+        setSummaries([]);
+        return;
+      }
+
+      // Query summaries where reading_order_index column matches the selection's reading_order_index
+      // Note: Summaries can span multiple reading order items, so we also need to check
+      // if the selection's reading_order_index falls within the summary's range
+      const { data, error } = await supabase
+        .from("summaries")
+        .select("toc_title, chapter_path, start_position, end_position, reading_order_index")
+        .eq("book_id", bookId)
+        .eq("reading_order_index", readingOrderIndex);
+
+      if (error) {
+        console.error("Error querying summaries:", error);
+        setSummaries([]);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        console.log("No summaries found for this book");
+        setSummaries([]);
+        return;
+      }
+
+      // Filter summaries where selection intersects with start_position and end_position
+      const matchingSummaries = data.filter((summary) => {
+        return positionsIntersect(
+          startPosition,
+          endPosition,
+          summary.start_position,
+          summary.end_position
+        );
+      });
+
+      // Sort by chapter_path
+      matchingSummaries.sort((a, b) => {
+        return (a.chapter_path || "").localeCompare(b.chapter_path || "");
+      });
+
+      setSummaries(matchingSummaries);
+
+      // Display results
+      console.log("Matching summaries:", matchingSummaries);
+      if (matchingSummaries.length > 0) {
+        console.log("\n=== Matching Chapter Summaries ===");
+        matchingSummaries.forEach((summary) => {
+          console.log(`${summary.chapter_path} - ${summary.toc_title}`);
+        });
+        console.log("================================\n");
+      } else {
+        console.log("No matching summaries found for this selection");
+      }
+    } catch (error) {
+      console.error("Error in querySummariesForSelection:", error);
+      setSummaries([]);
+    }
+  };
+
+  // Helper function to check if two position ranges intersect
+  const positionsIntersect = (
+    selectionStart: string,
+    selectionEnd: string,
+    summaryStart: string,
+    summaryEnd: string | null
+  ): boolean => {
+    // Parse positions: 
+    // - Selection format: "reading_order_index/element_path/char_offset" (e.g., "3/49/391")
+    //   - We need to extract: reading_order_index and element_path (drop char_offset)
+    // - Summary format: "element_path" (e.g., "3" or "49") - just the element path, no reading_order_index prefix
+    //   - The reading_order_index is already filtered in the query
+    
+    // Extract reading_order_index from selection (first number)
+    const getReadingOrderIndex = (pos: string): number | null => {
+      const parts = pos.split("/");
+      if (parts.length < 1) return null;
+      const index = parseInt(parts[0], 10);
+      return isNaN(index) ? null : index;
+    };
+
+    // Extract element path from selection (drop reading_order_index and char_offset)
+    const getSelectionElementPath = (pos: string): number[] | null => {
+      const parts = pos.split("/");
+      if (parts.length < 3) return null; // Need at least reading_order_index/element_path/char_offset
+      // Skip first part (reading_order_index) and last part (char_offset)
+      const elementParts = parts.slice(1, -1);
+      const numericParts = elementParts.map(p => {
+        const num = parseInt(p, 10);
+        return isNaN(num) ? null : num;
+      });
+      const validParts = numericParts.filter(p => p !== null) as number[];
+      return validParts.length > 0 ? validParts : null;
+    };
+
+    // Parse summary element path (it's just the element path, e.g., "3" or "49")
+    const getSummaryElementPath = (pos: string | null): number[] | null => {
+      if (!pos) return null;
+      const parts = pos.split("/");
+      const numericParts = parts.map(p => {
+        const num = parseInt(p, 10);
+        return isNaN(num) ? null : num;
+      });
+      const validParts = numericParts.filter(p => p !== null) as number[];
+      return validParts.length > 0 ? validParts : null;
+    };
+
+    const selStartPath = getSelectionElementPath(selectionStart);
+    const selEndPath = getSelectionElementPath(selectionEnd);
+    const sumStartPath = getSummaryElementPath(summaryStart);
+    const sumEndPath = getSummaryElementPath(summaryEnd);
+
+    if (selStartPath === null || selEndPath === null || sumStartPath === null) {
+      return false;
+    }
+
+    // Compare element paths numerically
+    const comparePaths = (path1: number[], path2: number[]): number => {
+      const minLength = Math.min(path1.length, path2.length);
+      for (let i = 0; i < minLength; i++) {
+        if (path1[i] < path2[i]) return -1;
+        if (path1[i] > path2[i]) return 1;
+      }
+      // If one is a prefix of the other, the shorter one comes first
+      if (path1.length < path2.length) return -1;
+      if (path1.length > path2.length) return 1;
+      return 0;
+    };
+
+    // Check if selection element path range intersects with summary element path range
+    // Selection range: [selStartPath, selEndPath]
+    // Summary range: [sumStartPath, sumEndPath] (or [sumStartPath, infinity] if sumEndPath is null)
+    
+    // Selection starts before or at summary end
+    const startsBeforeEnd = sumEndPath === null
+      ? true // Summary extends to end
+      : comparePaths(selStartPath, sumEndPath) <= 0;
+    
+    // Selection ends after or at summary start
+    const endsAfterStart = comparePaths(selEndPath, sumStartPath) >= 0;
+
+    return startsBeforeEnd && endsAfterStart;
   };
 
   return (
