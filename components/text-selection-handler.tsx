@@ -10,6 +10,8 @@ interface TextSelectionHandlerProps {
 interface SelectionPosition {
   start: string;
   end: string;
+  viewStart: string;
+  viewEnd: string;
 }
 
 export function TextSelectionHandler({ rawManifest }: TextSelectionHandlerProps) {
@@ -200,8 +202,10 @@ export function TextSelectionHandler({ rawManifest }: TextSelectionHandlerProps)
 
     // Calculate positions
     const positions = calculatePositions(range, readingOrder, targetDoc, readingOrderIndexFromStore);
-    console.log("Start position:", positions.start);
-    console.log("End position:", positions.end);
+    console.log("Selection start position:", positions.start);
+    console.log("Selection end position:", positions.end);
+    console.log("View start position:", positions.viewStart);
+    console.log("View end position:", positions.viewEnd);
   };
 
   return (
@@ -369,9 +373,14 @@ function calculatePositions(range: Range, readingOrder: any[], targetDoc: Docume
   const endPath = getElementPath(endContainer, endOffset);
   const endPosition = `${readingOrderIndex}/${endPath}`;
 
+  // Calculate view start and end positions (visible text in viewport)
+  const viewPositions = calculateViewPositions(targetDoc, readingOrder, readingOrderIndex);
+
   return {
     start: startPosition,
     end: endPosition,
+    viewStart: viewPositions.viewStart,
+    viewEnd: viewPositions.viewEnd,
   };
 }
 
@@ -487,4 +496,124 @@ function getFirstTextNode(element: Element): Text | null {
     }
   }
   return null;
+}
+
+function calculateViewPositions(targetDoc: Document, readingOrder: any[], readingOrderIndex: number): { viewStart: string; viewEnd: string } {
+  const viewport = targetDoc.defaultView || window;
+  
+  // Get viewport height (getBoundingClientRect returns coordinates relative to viewport, not scroll position)
+  let viewportHeight = 0;
+  
+  try {
+    viewportHeight = viewport.innerHeight || targetDoc.documentElement.clientHeight || 0;
+  } catch (e) {
+    // Fallback if we can't access viewport
+    viewportHeight = targetDoc.documentElement.clientHeight || 0;
+  }
+
+  // Find the first visible text node (viewport-relative: top is 0, bottom is viewportHeight)
+  const firstVisibleNode = findFirstVisibleTextNode(targetDoc, 0, viewportHeight);
+  const viewStart = firstVisibleNode 
+    ? `${readingOrderIndex}/${getElementPath(firstVisibleNode.node, firstVisibleNode.offset)}`
+    : "unknown/0";
+
+  // Find the last visible text node
+  const lastVisibleNode = findLastVisibleTextNode(targetDoc, 0, viewportHeight);
+  const viewEnd = lastVisibleNode
+    ? `${readingOrderIndex}/${getElementPath(lastVisibleNode.node, lastVisibleNode.offset)}`
+    : "unknown/0";
+
+  return { viewStart, viewEnd };
+}
+
+function findFirstVisibleTextNode(doc: Document, viewportTop: number, viewportBottom: number): { node: Node; offset: number } | null {
+  const body = doc.body || doc.documentElement;
+  if (!body) return null;
+
+  const walker = doc.createTreeWalker(
+    body,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === Node.TEXT_NODE && node.textContent && node.textContent.trim().length > 0) {
+      try {
+        const range = doc.createRange();
+        range.selectNodeContents(node);
+        const rect = range.getBoundingClientRect();
+        
+        // Check if the text node is visible in the viewport
+        // getBoundingClientRect returns coordinates relative to viewport (0 = top of viewport)
+        if (rect.top < viewportBottom && rect.bottom > viewportTop && rect.height > 0) {
+          const textNode = node as Text;
+          const textContent = textNode.textContent || "";
+          
+          // If the top of the text node is above the viewport, find the offset
+          let offset = 0;
+          if (rect.top < viewportTop && rect.height > 0) {
+            // Calculate approximate offset based on the portion of text above viewport
+            const portionAboveViewport = Math.max(0, (viewportTop - rect.top) / rect.height);
+            offset = Math.floor(textContent.length * portionAboveViewport);
+            offset = Math.min(textContent.length, Math.max(0, offset));
+          }
+          
+          return { node: textNode, offset };
+        }
+      } catch (e) {
+        // Skip if we can't get bounding rect
+        continue;
+      }
+    }
+  }
+
+  return null;
+}
+
+function findLastVisibleTextNode(doc: Document, viewportTop: number, viewportBottom: number): { node: Node; offset: number } | null {
+  const body = doc.body || doc.documentElement;
+  if (!body) return null;
+
+  const walker = doc.createTreeWalker(
+    body,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+
+  let lastVisible: { node: Node; offset: number } | null = null;
+  let node: Node | null;
+  
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === Node.TEXT_NODE && node.textContent && node.textContent.trim().length > 0) {
+      try {
+        const range = doc.createRange();
+        range.selectNodeContents(node);
+        const rect = range.getBoundingClientRect();
+        
+        // Check if the text node is visible in the viewport
+        // getBoundingClientRect returns coordinates relative to viewport (0 = top of viewport)
+        if (rect.top < viewportBottom && rect.bottom > viewportTop && rect.height > 0) {
+          const textNode = node as Text;
+          const textContent = textNode.textContent || "";
+          
+          // If the bottom of the text node is below the viewport, find the offset
+          let offset = textContent.length;
+          if (rect.bottom > viewportBottom && rect.height > 0) {
+            // Calculate approximate offset based on the portion of text visible
+            const portionVisible = Math.max(0, (viewportBottom - rect.top) / rect.height);
+            offset = Math.floor(textContent.length * portionVisible);
+            offset = Math.min(textContent.length, Math.max(0, offset));
+          }
+          
+          lastVisible = { node: textNode, offset };
+        }
+      } catch (e) {
+        // Skip if we can't get bounding rect
+        continue;
+      }
+    }
+  }
+
+  return lastVisible;
 }
