@@ -22,6 +22,8 @@ interface Summary {
   chapter_path: string;
   start_position: string;
   end_position: string | null;
+  start_reading_order: number;
+  end_reading_order: number;
 }
 
 export function TextSelectionHandler({ rawManifest, bookId }: TextSelectionHandlerProps) {
@@ -238,14 +240,14 @@ export function TextSelectionHandler({ rawManifest, bookId }: TextSelectionHandl
         return;
       }
 
-      // Query summaries where reading_order_index column matches the selection's reading_order_index
-      // Note: Summaries can span multiple reading order items, so we also need to check
-      // if the selection's reading_order_index falls within the summary's range
+      // Query summaries where the current reading order falls between start_reading_order and end_reading_order
+      // Note: Summaries can span multiple reading order items
       const { data, error } = await supabase
         .from("summaries")
-        .select("toc_title, chapter_path, start_position, end_position, reading_order_index")
+        .select("toc_title, chapter_path, start_position, end_position, start_reading_order, end_reading_order")
         .eq("book_id", bookId)
-        .eq("reading_order_index", readingOrderIndex);
+        .gte("end_reading_order", readingOrderIndex)
+        .lte("start_reading_order", readingOrderIndex);
 
       if (error) {
         console.error("Error querying summaries:", error);
@@ -260,12 +262,15 @@ export function TextSelectionHandler({ rawManifest, bookId }: TextSelectionHandl
       }
 
       // Filter summaries where selection intersects with start_position and end_position
+      // Positions are in format: {start_reading_order}/{start_position} and {end_reading_order}/{end_position}
       const matchingSummaries = data.filter((summary) => {
         return positionsIntersect(
           startPosition,
           endPosition,
           summary.start_position,
-          summary.end_position
+          summary.end_position,
+          summary.start_reading_order,
+          summary.end_reading_order
         );
       });
 
@@ -298,13 +303,14 @@ export function TextSelectionHandler({ rawManifest, bookId }: TextSelectionHandl
     selectionStart: string,
     selectionEnd: string,
     summaryStart: string,
-    summaryEnd: string | null
+    summaryEnd: string | null,
+    summaryStartReadingOrder: number,
+    summaryEndReadingOrder: number
   ): boolean => {
     // Parse positions: 
     // - Selection format: "reading_order_index/element_path/char_offset" (e.g., "3/49/391")
-    //   - We need to extract: reading_order_index and element_path (drop char_offset)
-    // - Summary format: "element_path" (e.g., "3" or "49") - just the element path, no reading_order_index prefix
-    //   - The reading_order_index is already filtered in the query
+    // - Summary format: "element_path" (e.g., "3" or "49") - just the element path
+    // - Summary positions are in context of: {start_reading_order}/{start_position} and {end_reading_order}/{end_position}
     
     // Extract reading_order_index from selection (first number)
     const getReadingOrderIndex = (pos: string): number | null => {
@@ -340,17 +346,23 @@ export function TextSelectionHandler({ rawManifest, bookId }: TextSelectionHandl
       return validParts.length > 0 ? validParts : null;
     };
 
-    const selStartPath = getSelectionElementPath(selectionStart);
-    const selEndPath = getSelectionElementPath(selectionEnd);
-    const sumStartPath = getSummaryElementPath(summaryStart);
-    const sumEndPath = getSummaryElementPath(summaryEnd);
-
-    if (selStartPath === null || selEndPath === null || sumStartPath === null) {
-      return false;
-    }
-
-    // Compare element paths numerically
-    const comparePaths = (path1: number[], path2: number[]): number => {
+    // Compare positions: format is {reading_order}/{element_path}
+    // We need to compare both reading_order and element_path
+    const comparePositions = (
+      readingOrder1: number,
+      path1: number[] | null,
+      readingOrder2: number,
+      path2: number[] | null
+    ): number => {
+      // First compare reading orders
+      if (readingOrder1 < readingOrder2) return -1;
+      if (readingOrder1 > readingOrder2) return 1;
+      
+      // If reading orders are equal, compare paths
+      if (path1 === null && path2 === null) return 0;
+      if (path1 === null) return -1; // null path comes before non-null
+      if (path2 === null) return 1;
+      
       const minLength = Math.min(path1.length, path2.length);
       for (let i = 0; i < minLength; i++) {
         if (path1[i] < path2[i]) return -1;
@@ -362,17 +374,35 @@ export function TextSelectionHandler({ rawManifest, bookId }: TextSelectionHandl
       return 0;
     };
 
-    // Check if selection element path range intersects with summary element path range
-    // Selection range: [selStartPath, selEndPath]
-    // Summary range: [sumStartPath, sumEndPath] (or [sumStartPath, infinity] if sumEndPath is null)
+    const selStartReadingOrder = getReadingOrderIndex(selectionStart);
+    const selEndReadingOrder = getReadingOrderIndex(selectionEnd);
+    const selStartPath = getSelectionElementPath(selectionStart);
+    const selEndPath = getSelectionElementPath(selectionEnd);
+    const sumStartPath = getSummaryElementPath(summaryStart);
+    const sumEndPath = getSummaryElementPath(summaryEnd);
+
+    if (selStartReadingOrder === null || selEndReadingOrder === null || selStartPath === null || selEndPath === null || sumStartPath === null) {
+      return false;
+    }
+
+    // Build full positions for comparison
+    // Selection: {selStartReadingOrder}/{selStartPath} to {selEndReadingOrder}/{selEndPath}
+    // Summary: {summaryStartReadingOrder}/{sumStartPath} to {summaryEndReadingOrder}/{sumEndPath}
+    // If summaryEndPath is null, assume it goes to the end of the file (end of summaryEndReadingOrder chapter)
+
+    // Check if selection start is before or at summary end
+    const summaryEndPathForComparison = sumEndPath === null 
+      ? null // null means end of file - we'll handle this specially
+      : sumEndPath;
     
     // Selection starts before or at summary end
-    const startsBeforeEnd = sumEndPath === null
-      ? true // Summary extends to end
-      : comparePaths(selStartPath, sumEndPath) <= 0;
+    // If summaryEndPath is null, we compare reading orders only (assume end of file)
+    const startsBeforeEnd = summaryEndPathForComparison === null
+      ? selStartReadingOrder <= summaryEndReadingOrder
+      : comparePositions(selStartReadingOrder, selStartPath, summaryEndReadingOrder, summaryEndPathForComparison) <= 0;
     
     // Selection ends after or at summary start
-    const endsAfterStart = comparePaths(selEndPath, sumStartPath) >= 0;
+    const endsAfterStart = comparePositions(selEndReadingOrder, selEndPath, summaryStartReadingOrder, sumStartPath) >= 0;
 
     return startsBeforeEnd && endsAfterStart;
   };
