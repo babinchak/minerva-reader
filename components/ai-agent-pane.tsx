@@ -41,22 +41,101 @@ export function AIAgentPane({ isOpen, onClose, selectedText }: AIAgentPaneProps)
       timestamp: new Date(),
     };
 
+    const userInput = input;
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
 
-    // TODO: Integrate with AI API
-    // For now, simulate a response
-    setTimeout(() => {
-      const assistantMessage: AIMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "I understand you're asking about: " + input + ". This is a placeholder response. AI integration will be added soon.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+    // Create assistant message placeholder
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: AIMessage = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, assistantMessage]);
+
+    try {
+      // Prepare messages for API (exclude the empty assistant message we just added)
+      const messagesForAPI = [
+        ...messages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+        { role: "user" as const, content: userInput },
+      ];
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ messages: messagesForAPI }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      if (!response.body) {
+        throw new Error("No response body");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data === "[DONE]") {
+              setIsLoading(false);
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: msg.content + parsed.content }
+                      : msg
+                  )
+                );
+              }
+            } catch (e) {
+              // Ignore JSON parse errors for incomplete chunks
+            }
+          }
+        }
+      }
+
       setIsLoading(false);
-    }, 1000);
+    } catch (error) {
+      console.error("Error calling chat API:", error);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? {
+                ...msg,
+                content:
+                  "Sorry, I encountered an error. Please make sure the OpenAI API key is configured correctly.",
+              }
+            : msg
+        )
+      );
+      setIsLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
