@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { X, Send, Bot } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { getCurrentSelectionPosition, querySummariesForPosition } from "@/lib/book-position-utils";
 
 interface AIMessage {
   id: string;
@@ -17,9 +19,11 @@ interface AIAgentPaneProps {
   isOpen: boolean;
   onClose: () => void;
   selectedText?: string;
+  bookId?: string;
+  rawManifest?: any;
 }
 
-export function AIAgentPane({ isOpen, onClose, selectedText }: AIAgentPaneProps) {
+export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest }: AIAgentPaneProps) {
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       id: "1",
@@ -30,6 +34,29 @@ export function AIAgentPane({ isOpen, onClose, selectedText }: AIAgentPaneProps)
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [bookTitle, setBookTitle] = useState<string>("");
+  const [bookAuthor, setBookAuthor] = useState<string>("");
+  const supabase = createClient();
+
+  // Fetch book metadata when bookId is available
+  useEffect(() => {
+    if (bookId) {
+      const fetchBookMetadata = async () => {
+        const { data, error } = await supabase
+          .from("books")
+          .select("title, author")
+          .eq("id", bookId)
+          .single();
+        
+        if (!error && data) {
+          setBookTitle(data.title || "");
+          setBookAuthor(data.author || "");
+        }
+      };
+      
+      fetchBookMetadata();
+    }
+  }, [bookId, supabase]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -145,6 +172,194 @@ export function AIAgentPane({ isOpen, onClose, selectedText }: AIAgentPaneProps)
     }
   };
 
+  const handleExplainSelection = async () => {
+    if (!bookId || !rawManifest || isLoading) return;
+
+    // Get current selection text directly (don't rely on prop which might be stale)
+    let currentSelectedText = "";
+    let selection: Selection | null = window.getSelection();
+    
+    if (selection && selection.rangeCount > 0 && selection.toString().trim() !== "") {
+      currentSelectedText = selection.toString().trim();
+    } else {
+      // Try to get selection from iframe
+      const iframes = document.querySelectorAll("iframe");
+      for (const iframe of iframes) {
+        try {
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (iframeDoc) {
+            const iframeSelection = iframeDoc.getSelection();
+            if (iframeSelection && iframeSelection.rangeCount > 0 && iframeSelection.toString().trim() !== "") {
+              currentSelectedText = iframeSelection.toString().trim();
+              selection = iframeSelection;
+              break;
+            }
+          }
+        } catch (e) {
+          // Cross-origin iframe, skip
+          continue;
+        }
+      }
+    }
+
+    if (!currentSelectedText) {
+      console.error("No text selected");
+      return;
+    }
+
+    // Get current selection position
+    const readingOrder = rawManifest?.readingOrder || [];
+    const position = getCurrentSelectionPosition(readingOrder, null);
+    
+    if (!position) {
+      console.error("Could not get current selection position");
+      return;
+    }
+
+    setIsLoading(true);
+
+    // Query summaries for the current position
+    const summaries = await querySummariesForPosition(bookId, position.start, position.end);
+
+    // Build the prompt with context
+    let prompt = "";
+    
+    // Add book context
+    if (bookTitle) {
+      prompt += `Book: ${bookTitle}\n`;
+    }
+    if (bookAuthor) {
+      prompt += `Author: ${bookAuthor}\n`;
+    }
+    if (bookTitle || bookAuthor) {
+      prompt += "\n";
+    }
+
+    // Add chapter summaries (if any)
+    if (summaries.length > 0) {
+      prompt += "Chapter Summaries:\n";
+      summaries.forEach((summary) => {
+        const chapterTitle = summary.toc_title || "Untitled";
+        const chapterPath = summary.chapter_path || "Unknown";
+        prompt += `\n${chapterPath} - ${chapterTitle}:\n`;
+        if (summary.summary_text) {
+          prompt += `${summary.summary_text}\n`;
+        } else {
+          prompt += `(No summary text available)\n`;
+        }
+      });
+      prompt += "\n";
+    }
+
+    // Add the selected text and instruction
+    prompt += `Please explain the following selected text from the book:\n\n"${currentSelectedText}"\n\nProvide a clear and helpful explanation of this text in the context of the book.`;
+
+    // Log the entire prompt
+    console.log("=== Full Prompt to AI ===");
+    console.log(prompt);
+    console.log("=========================");
+
+    // Add user message (just "Explain text" for display)
+    const userMessage: AIMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      content: "Explain text",
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+
+    // Create assistant message placeholder
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: AIMessage = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, assistantMessage]);
+
+    try {
+      // Prepare messages for API - include the full prompt as the user message
+      const messagesForAPI = [
+        ...messages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+        { role: "user" as const, content: prompt },
+      ];
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ messages: messagesForAPI }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      if (!response.body) {
+        throw new Error("No response body");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data === "[DONE]") {
+              setIsLoading(false);
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: msg.content + parsed.content }
+                      : msg
+                  )
+                );
+              }
+            } catch (e) {
+              // Ignore JSON parse errors for incomplete chunks
+            }
+          }
+        }
+      }
+
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Error calling chat API:", error);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? {
+                ...msg,
+                content:
+                  "Sorry, I encountered an error. Please make sure the OpenAI API key is configured correctly.",
+              }
+            : msg
+        )
+      );
+      setIsLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -212,6 +427,17 @@ export function AIAgentPane({ isOpen, onClose, selectedText }: AIAgentPaneProps)
 
       {/* Input */}
       <div className="p-4 border-t border-border">
+        {/* Explain Selection Button */}
+        {selectedText && bookId && rawManifest && (
+          <Button
+            onClick={handleExplainSelection}
+            disabled={isLoading || !selectedText.trim()}
+            className="w-full mb-2"
+            variant="outline"
+          >
+            Explain selection
+          </Button>
+        )}
         <div className="flex gap-2">
           <Input
             value={input}

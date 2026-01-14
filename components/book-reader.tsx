@@ -90,6 +90,8 @@ export function BookReader({ rawManifest, selfHref }: BookReaderProps) {
         isOpen={isAIPaneOpen}
         onClose={() => setIsAIPaneOpen(false)}
         selectedText={selectedText}
+        bookId={bookId}
+        rawManifest={rawManifest}
       />
 
       {/* Toggle Button */}
