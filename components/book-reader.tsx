@@ -7,6 +7,7 @@ import { AIAgentPane } from "@/components/ai-agent-pane";
 import { Button } from "@/components/ui/button";
 import { Bot } from "lucide-react";
 import { useParams } from "next/navigation";
+import { getSelectedText } from "@/lib/book-position-utils";
 
 interface BookReaderProps {
   rawManifest: any;
@@ -27,29 +28,7 @@ export function BookReader({ rawManifest, selfHref }: BookReaderProps) {
   useEffect(() => {
     // Listen for text selection events
     const handleSelection = () => {
-      const selection = window.getSelection();
-      if (selection && selection.toString().trim()) {
-        setSelectedText(selection.toString().trim());
-      } else {
-        // Try to get selection from iframe
-        const iframes = document.querySelectorAll("iframe");
-        for (const iframe of iframes) {
-          try {
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-            if (iframeDoc) {
-              const iframeSelection = iframeDoc.getSelection();
-              if (iframeSelection && iframeSelection.toString().trim()) {
-                setSelectedText(iframeSelection.toString().trim());
-                return;
-              }
-            }
-          } catch (e) {
-            // Cross-origin iframe, skip
-            continue;
-          }
-        }
-        setSelectedText("");
-      }
+      setSelectedText(getSelectedText());
     };
 
     document.addEventListener("selectionchange", handleSelection);

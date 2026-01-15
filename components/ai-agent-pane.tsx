@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { X, Send, Bot } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getCurrentSelectionPosition, querySummariesForPosition } from "@/lib/book-position-utils";
+import { getCurrentSelectionPosition, querySummariesForPosition, getSelectedText } from "@/lib/book-position-utils";
 
 interface AIMessage {
   id: string;
@@ -20,7 +20,7 @@ interface AIAgentPaneProps {
   onClose: () => void;
   selectedText?: string;
   bookId?: string;
-  rawManifest?: any;
+  rawManifest?: { readingOrder?: Array<{ href?: string }> };
 }
 
 export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest }: AIAgentPaneProps) {
@@ -37,6 +37,60 @@ export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest
   const [bookTitle, setBookTitle] = useState<string>("");
   const [bookAuthor, setBookAuthor] = useState<string>("");
   const supabase = createClient();
+
+  // Helper function to handle streaming response
+  const handleStreamingResponse = async (
+    response: Response,
+    assistantMessageId: string
+  ) => {
+    if (!response.ok) {
+      throw new Error(`API error: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error("No response body");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6);
+          if (data === "[DONE]") {
+            setIsLoading(false);
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.content) {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { ...msg, content: msg.content + parsed.content }
+                    : msg
+                )
+              );
+            }
+            } catch {
+              // Ignore JSON parse errors for incomplete chunks
+            }
+        }
+      }
+    }
+
+    setIsLoading(false);
+  };
 
   // Fetch book metadata when bookId is available
   useEffect(() => {
@@ -101,53 +155,7 @@ export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest
         body: JSON.stringify({ messages: messagesForAPI }),
       });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.statusText}`);
-      }
-
-      if (!response.body) {
-        throw new Error("No response body");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") {
-              setIsLoading(false);
-              return;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? { ...msg, content: msg.content + parsed.content }
-                      : msg
-                  )
-                );
-              }
-            } catch (e) {
-              // Ignore JSON parse errors for incomplete chunks
-            }
-          }
-        }
-      }
-
-      setIsLoading(false);
+      await handleStreamingResponse(response, assistantMessageId);
     } catch (error) {
       console.error("Error calling chat API:", error);
       setMessages((prev) =>
@@ -176,34 +184,9 @@ export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest
     if (!bookId || !rawManifest || isLoading) return;
 
     // Get current selection text directly (don't rely on prop which might be stale)
-    let currentSelectedText = "";
-    let selection: Selection | null = window.getSelection();
-    
-    if (selection && selection.rangeCount > 0 && selection.toString().trim() !== "") {
-      currentSelectedText = selection.toString().trim();
-    } else {
-      // Try to get selection from iframe
-      const iframes = document.querySelectorAll("iframe");
-      for (const iframe of iframes) {
-        try {
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (iframeDoc) {
-            const iframeSelection = iframeDoc.getSelection();
-            if (iframeSelection && iframeSelection.rangeCount > 0 && iframeSelection.toString().trim() !== "") {
-              currentSelectedText = iframeSelection.toString().trim();
-              selection = iframeSelection;
-              break;
-            }
-          }
-        } catch (e) {
-          // Cross-origin iframe, skip
-          continue;
-        }
-      }
-    }
+    const currentSelectedText = getSelectedText();
 
     if (!currentSelectedText) {
-      console.error("No text selected");
       return;
     }
 
@@ -212,7 +195,6 @@ export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest
     const position = getCurrentSelectionPosition(readingOrder, null);
     
     if (!position) {
-      console.error("Could not get current selection position");
       return;
     }
 
@@ -254,10 +236,6 @@ export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest
     // Add the selected text and instruction
     prompt += `Please explain the following selected text from the book:\n\n"${currentSelectedText}"\n\nProvide a clear and helpful explanation of this text in the context of the book.`;
 
-    // Log the entire prompt
-    console.log("=== Full Prompt to AI ===");
-    console.log(prompt);
-    console.log("=========================");
 
     // Add user message (just "Explain text" for display)
     const userMessage: AIMessage = {
@@ -296,53 +274,7 @@ export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest
         body: JSON.stringify({ messages: messagesForAPI }),
       });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.statusText}`);
-      }
-
-      if (!response.body) {
-        throw new Error("No response body");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") {
-              setIsLoading(false);
-              return;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? { ...msg, content: msg.content + parsed.content }
-                      : msg
-                  )
-                );
-              }
-            } catch (e) {
-              // Ignore JSON parse errors for incomplete chunks
-            }
-          }
-        }
-      }
-
-      setIsLoading(false);
+      await handleStreamingResponse(response, assistantMessageId);
     } catch (error) {
       console.error("Error calling chat API:", error);
       setMessages((prev) =>

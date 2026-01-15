@@ -1,5 +1,47 @@
 import { createClient } from "@/lib/supabase/client";
 
+// Utility function to get text selection from main document or iframe
+export function getTextSelection(): { selection: Selection | null; range: Range | null; targetDoc: Document } | null {
+  // Try to get selection from the main document first
+  let selection: Selection | null = window.getSelection();
+  let range: Range | null = null;
+  let targetDoc: Document = document;
+  
+  // Check if selection is valid in main document
+  if (selection && selection.rangeCount > 0 && selection.toString().trim() !== "") {
+    range = selection.getRangeAt(0);
+    return { selection, range, targetDoc };
+  }
+  
+  // Look for iframe that might contain the reader content
+  const iframes = document.querySelectorAll("iframe");
+  for (const iframe of iframes) {
+    try {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (iframeDoc) {
+        const iframeSelection = iframeDoc.getSelection();
+        if (iframeSelection && iframeSelection.rangeCount > 0 && iframeSelection.toString().trim() !== "") {
+          selection = iframeSelection;
+          range = iframeSelection.getRangeAt(0);
+          targetDoc = iframeDoc;
+          return { selection, range, targetDoc };
+        }
+      }
+        } catch {
+          // Cross-origin iframe, skip
+          continue;
+        }
+  }
+  
+  return null;
+}
+
+// Utility function to get selected text from main document or iframe
+export function getSelectedText(): string {
+  const result = getTextSelection();
+  return result?.selection?.toString().trim() || "";
+}
+
 export interface SelectionPosition {
   start: string;
   end: string;
@@ -116,42 +158,16 @@ function positionsIntersect(
 
 // Get current selection position
 export function getCurrentSelectionPosition(
-  readingOrder: any[],
-  store: any | null
+  readingOrder: Array<{ href?: string }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  store: { getState: () => any } | null
 ): SelectionPosition | null {
-  // Try to get selection from the main document first
-  let selection: Selection | null = window.getSelection();
-  let range: Range | null = null;
-  let targetDoc: Document = document;
-  
-  // Check if selection is valid in main document
-  if (selection && selection.rangeCount > 0 && selection.toString().trim() !== "") {
-    range = selection.getRangeAt(0);
-  } else {
-    // Look for iframe that might contain the reader content
-    const iframes = document.querySelectorAll("iframe");
-    for (const iframe of iframes) {
-      try {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (iframeDoc) {
-          const iframeSelection = iframeDoc.getSelection();
-          if (iframeSelection && iframeSelection.rangeCount > 0 && iframeSelection.toString().trim() !== "") {
-            selection = iframeSelection;
-            range = iframeSelection.getRangeAt(0);
-            targetDoc = iframeDoc;
-            break;
-          }
-        }
-      } catch (e) {
-        // Cross-origin iframe, skip
-        continue;
-      }
-    }
-  }
-
-  if (!selection || !range || selection.toString().trim() === "") {
+  const selectionResult = getTextSelection();
+  if (!selectionResult) {
     return null;
   }
+  
+  const { range, targetDoc } = selectionResult;
 
   // Try to get readingOrder index from Redux store
   let readingOrderIndexFromStore = -1;
@@ -160,10 +176,13 @@ export function getCurrentSelectionPosition(
       const state = store.getState();
       
       // Deep inspect the state to find current link
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const readerState = (state as any).reader;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const publicationState = (state as any).publication;
       
       // Try to find current link in various places
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let currentLink: any = null;
       let currentIndex: number = -1;
       
@@ -188,6 +207,7 @@ export function getCurrentSelectionPosition(
       }
       
       // Check if there's a navigator state
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const navigatorState = (state as any).navigator;
       if (!currentLink && navigatorState) {
         currentLink = navigatorState.currentLink || navigatorState.link || navigatorState.href;
@@ -196,6 +216,7 @@ export function getCurrentSelectionPosition(
       
       // Deep search in state for any link-related properties
       if (!currentLink) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const deepSearch = (obj: any, depth = 0): any => {
           if (depth > 3) return null; // Limit depth
           if (!obj || typeof obj !== 'object') return null;
@@ -249,9 +270,9 @@ export function getCurrentSelectionPosition(
         }
       }
     }
-  } catch (e) {
-    // Could not access Redux store
-  }
+    } catch {
+      // Could not access Redux store
+    }
 
   // If still couldn't find from store, try to match by inspecting the iframe document
   if (readingOrderIndexFromStore === -1) {
@@ -268,7 +289,8 @@ export function getCurrentSelectionPosition(
               const content = meta.getAttribute("content");
               if (content) {
                 for (let i = 0; i < readingOrder.length; i++) {
-                  if (content.includes(readingOrder[i].href) || readingOrder[i].href.includes(content)) {
+                  const itemHref = readingOrder[i]?.href;
+                  if (itemHref && (content.includes(itemHref) || itemHref.includes(content))) {
                     readingOrderIndexFromStore = i;
                     break;
                   }
@@ -281,28 +303,42 @@ export function getCurrentSelectionPosition(
             const baseTag = iframeDoc.querySelector("base");
             if (baseTag && baseTag.href) {
               for (let i = 0; i < readingOrder.length; i++) {
-                if (readingOrder[i].href.includes(baseTag.href) || baseTag.href.includes(readingOrder[i].href)) {
+                const itemHref = readingOrder[i]?.href;
+                if (itemHref && (itemHref.includes(baseTag.href) || baseTag.href.includes(itemHref))) {
                   readingOrderIndexFromStore = i;
                   break;
                 }
               }
             }
           }
-        } catch (e) {
+        } catch {
           // Cross-origin, can't access
         }
       }
-    } catch (e) {
+    } catch {
       // Error inspecting iframe
     }
   }
 
   // Calculate positions
+  if (!range) {
+    return null;
+  }
   const positions = calculatePositions(range, readingOrder, targetDoc, readingOrderIndexFromStore);
   return positions;
 }
 
-function calculatePositions(range: Range, readingOrder: any[], targetDoc: Document, readingOrderIndexFromStore: number = -1): SelectionPosition {
+// Export calculatePositions for use in other files
+export function calculateSelectionPositions(
+  range: Range,
+  readingOrder: Array<{ href?: string }>,
+  targetDoc: Document,
+  readingOrderIndexFromStore: number = -1
+): SelectionPosition {
+  return calculatePositions(range, readingOrder, targetDoc, readingOrderIndexFromStore);
+}
+
+function calculatePositions(range: Range, readingOrder: Array<{ href?: string }>, targetDoc: Document, readingOrderIndexFromStore: number = -1): SelectionPosition {
   const startContainer = range.startContainer;
   const endContainer = range.endContainer;
   const startOffset = range.startOffset;
@@ -310,7 +346,6 @@ function calculatePositions(range: Range, readingOrder: any[], targetDoc: Docume
 
   // Use the provided targetDoc (which might be from an iframe)
   const startDoc = targetDoc;
-  const endDoc = targetDoc;
 
   // Get the current document URL to find readingOrder index
   let currentUrl = "";
@@ -318,15 +353,15 @@ function calculatePositions(range: Range, readingOrder: any[], targetDoc: Docume
   // Try multiple ways to get the URL
   try {
     currentUrl = startDoc.URL || startDoc.defaultView?.location.href || "";
-  } catch (e) {
-    // Can't access location
-  }
+    } catch {
+      // Can't access location
+    }
   
   // Try baseURI as fallback
   if (!currentUrl) {
     try {
       currentUrl = startDoc.baseURI || "";
-    } catch (e) {
+    } catch {
       // Can't access baseURI
     }
   }
@@ -335,7 +370,7 @@ function calculatePositions(range: Range, readingOrder: any[], targetDoc: Docume
   if (!currentUrl && startDoc.defaultView) {
     try {
       currentUrl = startDoc.defaultView.location.href;
-    } catch (e) {
+    } catch {
       // Cross-origin, can't access
     }
   }
@@ -346,7 +381,7 @@ function calculatePositions(range: Range, readingOrder: any[], targetDoc: Docume
       // Remove query params and fragments
       const urlObj = new URL(url);
       return urlObj.pathname;
-    } catch (e) {
+    } catch {
       // If URL parsing fails, try manual cleanup
       return url.split("?")[0].split("#")[0];
     }
@@ -377,7 +412,7 @@ function calculatePositions(range: Range, readingOrder: any[], targetDoc: Docume
         } else {
           normalizedItemHref = normalizeUrl(itemHref);
         }
-      } catch (e) {
+      } catch {
         // Keep original if normalization fails
         normalizedItemHref = itemHref;
       }
@@ -436,7 +471,7 @@ function calculatePositions(range: Range, readingOrder: any[], targetDoc: Docume
             }
           }
           if (readingOrderIndex !== -1) break;
-        } catch (e) {
+        } catch {
           // Can't access iframe src
         }
       }
@@ -514,7 +549,7 @@ function getElementPath(container: Node, offset: number): string {
 
   // Traverse up to body
   while (current && current !== body) {
-    const parent = current.parentElement;
+    const parent: Element | null = current.parentElement;
     if (!parent) break;
 
     // Get index of current element among ALL siblings (not filtered by tag name)
@@ -581,7 +616,7 @@ function getFirstTextNode(element: Element): Text | null {
   return null;
 }
 
-function calculateViewPositions(targetDoc: Document, readingOrder: any[], readingOrderIndex: number): { viewStart: string; viewEnd: string } {
+function calculateViewPositions(targetDoc: Document, readingOrder: Array<{ href?: string }>, readingOrderIndex: number): { viewStart: string; viewEnd: string } {
   const viewport = targetDoc.defaultView || window;
   
   // Get viewport height (getBoundingClientRect returns coordinates relative to viewport, not scroll position)
@@ -589,7 +624,7 @@ function calculateViewPositions(targetDoc: Document, readingOrder: any[], readin
   
   try {
     viewportHeight = viewport.innerHeight || targetDoc.documentElement.clientHeight || 0;
-  } catch (e) {
+  } catch {
     // Fallback if we can't access viewport
     viewportHeight = targetDoc.documentElement.clientHeight || 0;
   }
@@ -644,7 +679,7 @@ function findFirstVisibleTextNode(doc: Document, viewportTop: number, viewportBo
           
           return { node: textNode, offset };
         }
-      } catch (e) {
+      } catch {
         // Skip if we can't get bounding rect
         continue;
       }
@@ -691,7 +726,7 @@ function findLastVisibleTextNode(doc: Document, viewportTop: number, viewportBot
           
           lastVisible = { node: textNode, offset };
         }
-      } catch (e) {
+      } catch {
         // Skip if we can't get bounding rect
         continue;
       }
