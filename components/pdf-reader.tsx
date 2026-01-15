@@ -113,19 +113,19 @@ export function PdfReader({ pdfUrl, fileName }: PdfReaderProps) {
 
   return (
     <div className="w-full h-screen flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-background">
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-background text-white">
         <div className="min-w-0">
           <Button
             variant="ghost"
             size="sm"
-            className="mb-2 -ml-2"
+            className="mb-2 -ml-2 text-white hover:text-white"
             onClick={() => router.back()}
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
           <h1 className="font-semibold truncate">{fileName || "PDF Document"}</h1>
-          <p className="text-xs text-muted-foreground">{pdfDoc.numPages} pages</p>
+          <p className="text-xs text-white/70">{pdfDoc.numPages} pages</p>
         </div>
         <Button className="opacity-50 cursor-not-allowed" size="icon" disabled>
           <Bot className="h-5 w-5" />

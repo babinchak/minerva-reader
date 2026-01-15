@@ -13,9 +13,9 @@ async function HomeContent() {
   if (!hasEnvVars) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
-        <BookOpen className="h-16 w-16 text-muted-foreground" />
-        <h1 className="text-4xl font-bold">Hyper Reader</h1>
-        <p className="text-lg text-muted-foreground max-w-md">
+        <BookOpen className="h-16 w-16 text-white/70" />
+        <h1 className="text-4xl font-bold text-white">Hyper Reader</h1>
+        <p className="text-lg text-white/70 max-w-md">
           Your personal EPUB and PDF library. Upload and read your books in one place.
         </p>
         <Suspense>
@@ -33,8 +33,8 @@ async function HomeContent() {
     return (
       <div className="w-full max-w-2xl space-y-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2">My Library</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold mb-2 text-white">My Library</h1>
+          <p className="text-white/70">
             Upload EPUB or PDF books to your personal library
           </p>
         </div>
@@ -47,9 +47,9 @@ async function HomeContent() {
   // User is not logged in - show landing page
   return (
     <div className="flex flex-col items-center gap-4 text-center">
-      <BookOpen className="h-16 w-16 text-muted-foreground" />
-      <h1 className="text-4xl font-bold">Hyper Reader</h1>
-      <p className="text-lg text-muted-foreground max-w-md">
+      <BookOpen className="h-16 w-16 text-white/70" />
+      <h1 className="text-4xl font-bold text-white">Hyper Reader</h1>
+      <p className="text-lg text-white/70 max-w-md">
         Your personal EPUB and PDF library. Upload and read your books in one place.
       </p>
       <Suspense>
@@ -61,12 +61,12 @@ async function HomeContent() {
 
 export default function Home() {
   return (
-    <main className="min-h-screen flex flex-col items-center">
+    <main className="min-h-screen flex flex-col items-center text-white">
       <div className="flex-1 w-full flex flex-col gap-20 items-center">
         <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
           <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
             <div className="flex gap-5 items-center font-semibold">
-              <Link href={"/"} className="flex items-center gap-2">
+              <Link href={"/"} className="flex items-center gap-2 text-white">
                 <BookOpen className="h-5 w-5" />
                 Hyper Reader
               </Link>
