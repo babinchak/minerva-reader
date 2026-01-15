@@ -48,41 +48,44 @@ export function BookReader({ rawManifest, selfHref }: BookReaderProps) {
   }
 
   return (
-    <div className="w-full h-screen flex relative">
-      {/* Reader Section */}
-      <div className={`h-full transition-all duration-300 ${isAIPaneOpen ? "w-[calc(100%-24rem)]" : "w-full"}`}>
-        <ThStoreProvider>
-          <StatefulPreferencesProvider>
-            <ThI18nProvider>
-              <StatefulReader
+    <ThStoreProvider>
+      <StatefulPreferencesProvider>
+        <ThI18nProvider>
+          <div className="w-full h-screen flex flex-col">
+            <div className="flex flex-1 relative min-h-0">
+              {/* Reader Section */}
+              <div className={`h-full transition-all duration-300 ${isAIPaneOpen ? "w-[calc(100%-24rem)]" : "w-full"}`}>
+                <StatefulReader
+                  rawManifest={rawManifest}
+                  selfHref={selfHref}
+                />
+              </div>
+
+              {/* AI Agent Pane */}
+              <AIAgentPane
+                isOpen={isAIPaneOpen}
+                onClose={() => setIsAIPaneOpen(false)}
+                selectedText={selectedText}
+                bookId={bookId}
                 rawManifest={rawManifest}
-                selfHref={selfHref}
               />
-              <TextSelectionHandler rawManifest={rawManifest} bookId={bookId} />
-            </ThI18nProvider>
-          </StatefulPreferencesProvider>
-        </ThStoreProvider>
-      </div>
 
-      {/* AI Agent Pane */}
-      <AIAgentPane
-        isOpen={isAIPaneOpen}
-        onClose={() => setIsAIPaneOpen(false)}
-        selectedText={selectedText}
-        bookId={bookId}
-        rawManifest={rawManifest}
-      />
+              {/* Toggle Button */}
+              {!isAIPaneOpen && (
+                <Button
+                  onClick={() => setIsAIPaneOpen(true)}
+                  className="fixed top-4 right-4 z-40 shadow-lg"
+                  size="icon"
+                >
+                  <Bot className="h-5 w-5" />
+                </Button>
+              )}
+            </div>
 
-      {/* Toggle Button */}
-      {!isAIPaneOpen && (
-        <Button
-          onClick={() => setIsAIPaneOpen(true)}
-          className="fixed top-4 right-4 z-40 shadow-lg"
-          size="icon"
-        >
-          <Bot className="h-5 w-5" />
-        </Button>
-      )}
-    </div>
+            <TextSelectionHandler rawManifest={rawManifest} bookId={bookId} />
+          </div>
+        </ThI18nProvider>
+      </StatefulPreferencesProvider>
+    </ThStoreProvider>
   );
 }
