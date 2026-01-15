@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
-import { Bot } from "lucide-react";
+import { Bot, ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 GlobalWorkerOptions.workerSrc = workerSrc;
@@ -63,6 +64,7 @@ export function PdfReader({ pdfUrl, fileName }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +115,15 @@ export function PdfReader({ pdfUrl, fileName }: PdfReaderProps) {
     <div className="w-full h-screen flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b bg-background">
         <div className="min-w-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mb-2 -ml-2"
+            onClick={() => router.back()}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
           <h1 className="font-semibold truncate">{fileName || "PDF Document"}</h1>
           <p className="text-xs text-muted-foreground">{pdfDoc.numPages} pages</p>
         </div>

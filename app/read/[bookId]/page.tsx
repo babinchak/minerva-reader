@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { BookReader } from "@/components/book-reader";
 import { PdfReader } from "@/components/pdf-reader";
@@ -10,6 +10,7 @@ interface PageProps {
 export default async function ReadBookPage({ params }: PageProps) {
   const { bookId } = await params;
   const supabase = await createClient();
+  const serviceSupabase = createServiceClient();
 
   // Get authenticated user
   const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -68,7 +69,7 @@ export default async function ReadBookPage({ params }: PageProps) {
       );
     }
 
-    const { data: signedUrl, error: signedError } = await supabase.storage
+    const { data: signedUrl, error: signedError } = await serviceSupabase.storage
       .from("pdfs")
       .createSignedUrl(book.storage_path, 60 * 10);
 
