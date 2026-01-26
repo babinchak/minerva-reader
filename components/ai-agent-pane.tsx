@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import { X, Send, Bot } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentSelectionPosition, querySummariesForPosition, getSelectedText } from "@/lib/book-position-utils";
+import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
+import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 
 interface AIMessage {
   id: string;
@@ -21,9 +23,23 @@ interface AIAgentPaneProps {
   selectedText?: string;
   bookId?: string;
   rawManifest?: { readingOrder?: Array<{ href?: string }> };
+  bookType?: "epub" | "pdf";
 }
 
-export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest }: AIAgentPaneProps) {
+interface SummaryContext {
+  toc_title: string;
+  chapter_path: string;
+  summary_text: string | null;
+}
+
+export function AIAgentPane({
+  isOpen,
+  onClose,
+  selectedText,
+  bookId,
+  rawManifest,
+  bookType = "epub",
+}: AIAgentPaneProps) {
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       id: "1",
@@ -181,7 +197,10 @@ export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest
   };
 
   const handleExplainSelection = async () => {
-    if (!bookId || !rawManifest || isLoading) return;
+    if (!bookId || isLoading) return;
+
+    const isPdf = bookType === "pdf";
+    if (!rawManifest && !isPdf) return;
 
     // Get current selection text directly (don't rely on prop which might be stale)
     const currentSelectedText = getSelectedText();
@@ -191,17 +210,37 @@ export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest
     }
 
     // Get current selection position
-    const readingOrder = rawManifest?.readingOrder || [];
-    const position = getCurrentSelectionPosition(readingOrder, null);
-    
-    if (!position) {
-      return;
-    }
-
     setIsLoading(true);
 
-    // Query summaries for the current position
-    const summaries = await querySummariesForPosition(bookId, position.start, position.end);
+    let summaries: SummaryContext[] = [];
+    if (isPdf) {
+      const position = getCurrentPdfSelectionPosition();
+      if (!position) {
+        setIsLoading(false);
+        return;
+      }
+      summaries = (await queryPdfSummariesForPosition(bookId, position.start, position.end)).map(
+        ({ toc_title, chapter_path, summary_text }) => ({
+          toc_title,
+          chapter_path,
+          summary_text,
+        })
+      );
+    } else {
+      const readingOrder = rawManifest?.readingOrder || [];
+      const position = getCurrentSelectionPosition(readingOrder, null);
+      if (!position) {
+        setIsLoading(false);
+        return;
+      }
+      summaries = (await querySummariesForPosition(bookId, position.start, position.end)).map(
+        ({ toc_title, chapter_path, summary_text }) => ({
+          toc_title,
+          chapter_path,
+          summary_text,
+        })
+      );
+    }
 
     // Build the prompt with context
     let prompt = "";
@@ -360,7 +399,7 @@ export function AIAgentPane({ isOpen, onClose, selectedText, bookId, rawManifest
       {/* Input */}
       <div className="p-4 border-t border-border">
         {/* Explain Selection Button */}
-        {selectedText && bookId && rawManifest && (
+        {selectedText && bookId && (rawManifest || bookType === "pdf") && (
           <Button
             onClick={handleExplainSelection}
             disabled={isLoading || !selectedText.trim()}
