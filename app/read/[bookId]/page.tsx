@@ -84,7 +84,13 @@ export default async function ReadBookPage({ params }: PageProps) {
       );
     }
 
-    return <PdfReader pdfUrl={signedUrl.signedUrl} fileName={book.file_name || book.title} />;
+    return (
+      <PdfReader
+        pdfUrl={signedUrl.signedUrl}
+        fileName={book.file_name || book.title}
+        bookId={bookId}
+      />
+    );
   }
 
   // Construct the manifest path: books_{user_id}_{book_id}/manifest.json

@@ -12,7 +12,7 @@ interface PdfSpanInfo {
 const SPAN_SELECTOR = "[data-item-index][data-page-number]";
 
 function formatPdfPosition(info: PdfSpanInfo): string {
-  return `${info.pageNumber}:${info.itemIndex}:${info.charOffset}`;
+  return `${info.pageNumber}/${info.itemIndex}/${info.charOffset}`;
 }
 
 function getSpanInfo(container: Node, offset: number): PdfSpanInfo | null {

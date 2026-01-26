@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Bot, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
+import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 
 const workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 GlobalWorkerOptions.workerSrc = workerSrc;
@@ -19,9 +20,10 @@ GlobalWorkerOptions.workerSrc = workerSrc;
 interface PdfReaderProps {
   pdfUrl: string;
   fileName?: string | null;
+  bookId: string;
 }
 
-export function PdfReader({ pdfUrl, fileName }: PdfReaderProps) {
+export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,12 +119,20 @@ export function PdfReader({ pdfUrl, fileName }: PdfReaderProps) {
         >
           <div className="px-4 py-3">
             <Button
-              onClick={() => {
+              onClick={async () => {
                 const positions = getCurrentPdfSelectionPosition();
                 if (!positions) return;
                 console.log("Selection start position:", positions.start);
                 console.log("Selection end position:", positions.end);
                 console.log("Selected text:", window.getSelection()?.toString().trim() || "");
+
+                const summaries = await queryPdfSummariesForPosition(
+                  bookId,
+                  positions.start,
+                  positions.end
+                );
+
+                console.log("Matching summaries:", summaries);
               }}
               variant="default"
               className="w-full"
