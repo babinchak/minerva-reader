@@ -10,7 +10,6 @@ import {
   getCurrentSelectionPosition,
   querySummariesForPosition,
   getSelectedText,
-  restoreLastSelection,
 } from "@/lib/book-position-utils";
 import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
 import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
@@ -201,18 +200,6 @@ export function AIAgentPane({
     }
   };
 
-  const handleInputFocus = () => {
-    setTimeout(() => {
-      restoreLastSelection();
-    }, 0);
-  };
-
-  const handlePaneMouseDown = () => {
-    setTimeout(() => {
-      restoreLastSelection();
-    }, 0);
-  };
-
   const handleExplainSelection = async () => {
     if (!bookId || isLoading) return;
 
@@ -352,8 +339,8 @@ export function AIAgentPane({
 
   return (
     <div
+      data-ai-pane="true"
       className="fixed right-0 top-0 h-full w-96 bg-background border-l border-border shadow-lg flex flex-col z-50"
-      onMouseDown={handlePaneMouseDown}
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-border">
@@ -436,7 +423,6 @@ export function AIAgentPane({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            onFocus={handleInputFocus}
             placeholder="Ask a question about the book..."
             disabled={isLoading}
             className="flex-1"

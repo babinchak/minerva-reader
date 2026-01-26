@@ -7,6 +7,12 @@ interface StoredSelection {
 
 let lastSelection: StoredSelection | null = null;
 
+function isInAIPane(node: Node | null): boolean {
+  if (!node) return false;
+  const element = node instanceof Element ? node : node.parentElement;
+  return Boolean(element?.closest("[data-ai-pane='true']"));
+}
+
 // Utility function to get text selection from main document or iframe
 export function getTextSelection(): TextSelectionResult | null {
   // Try to get selection from the main document first
@@ -16,8 +22,12 @@ export function getTextSelection(): TextSelectionResult | null {
 
   // Check if selection is valid in main document
   if (selection && selection.rangeCount > 0 && selection.toString().trim() !== "") {
+    if (isInAIPane(selection.anchorNode) || isInAIPane(selection.focusNode)) {
+      selection = null;
+    } else {
     range = selection.getRangeAt(0);
     return { selection, range, targetDoc };
+    }
   }
 
   // Look for iframe that might contain the reader content
