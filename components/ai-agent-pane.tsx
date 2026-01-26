@@ -359,7 +359,7 @@ export function AIAgentPane({
       <div className="flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-2">
           <Bot className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold text-lg">AI Assistant</h2>
+          <h2 className="font-semibold text-lg text-foreground">AI Assistant</h2>
         </div>
         <Button
           variant="ghost"
@@ -375,7 +375,9 @@ export function AIAgentPane({
       {selectedText && (
         <div className="p-3 bg-muted border-b border-border">
           <p className="text-sm text-muted-foreground mb-1">Selected text:</p>
-          <p className="text-sm italic line-clamp-2">{selectedText}</p>
+          <p className="text-sm italic text-foreground line-clamp-2">
+            {selectedText}
+          </p>
         </div>
       )}
 
@@ -423,7 +425,7 @@ export function AIAgentPane({
           <Button
             onClick={handleExplainSelection}
             disabled={isLoading || !selectedText.trim()}
-            className="w-full mb-2"
+            className="w-full mb-2 text-foreground"
             variant="outline"
           >
             Explain selection

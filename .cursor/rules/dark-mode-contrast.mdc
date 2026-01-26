@@ -1,0 +1,25 @@
+---
+description: Enforce readable text colors in dark mode
+alwaysApply: true
+---
+
+# Dark Mode Text Contrast
+
+When styling in dark mode, never use black (or near-black) text on black (or near-black) backgrounds.
+
+- Avoid `text-black`, `#000`, `rgb(0,0,0)`, or similar on dark backgrounds.
+- Ensure text colors maintain clear contrast against dark surfaces.
+
+```css
+/* ❌ BAD */
+.title {
+  color: #000;
+  background: #000;
+}
+
+/* ✅ GOOD */
+.title {
+  color: #e6e6e6;
+  background: #0a0a0a;
+}
+```
