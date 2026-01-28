@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/client";
 
 interface PdfSummary {
+  summary_type: "book" | "chapter" | "subchapter";
   toc_title: string;
   chapter_path: string;
-  start_position: string;
+  start_position: string | null;
   end_position: string | null;
   summary_text: string | null;
 }
@@ -14,7 +15,8 @@ interface PdfPosition {
   charOffset: number;
 }
 
-function parsePdfPosition(position: string): PdfPosition | null {
+function parsePdfPosition(position: string | null | undefined): PdfPosition | null {
+  if (!position) return null;
   const parts = position.split(/[/:]/).map((part) => parseInt(part, 10));
   if (parts.length < 3 || parts.some((value) => Number.isNaN(value))) {
     return null;
@@ -36,7 +38,7 @@ function comparePdfPositions(a: PdfPosition, b: PdfPosition): number {
 function positionsIntersect(
   selectionStart: string,
   selectionEnd: string,
-  summaryStart: string,
+  summaryStart: string | null,
   summaryEnd: string | null
 ): boolean {
   const selStart = parsePdfPosition(selectionStart);
@@ -64,7 +66,9 @@ export async function queryPdfSummariesForPosition(
   try {
     const { data, error } = await supabase
       .from("summaries")
-      .select("toc_title, chapter_path, start_position, end_position, summary_text")
+      .select(
+        "summary_type, toc_title, chapter_path, start_position, end_position, summary_text"
+      )
       .eq("book_id", bookId);
 
     if (error) {
@@ -77,18 +81,23 @@ export async function queryPdfSummariesForPosition(
       return [];
     }
 
-    const matchingSummaries = data.filter((summary) =>
-      positionsIntersect(
+    const matchingSummaries = data.filter((summary) => {
+      if (summary.summary_type === "book") {
+        return true;
+      }
+      return positionsIntersect(
         startPosition,
         endPosition,
         summary.start_position,
         summary.end_position
-      )
-    );
+      );
+    });
 
-    matchingSummaries.sort((a, b) =>
-      (a.chapter_path || "").localeCompare(b.chapter_path || "")
-    );
+    matchingSummaries.sort((a, b) => {
+      if (a.summary_type === "book" && b.summary_type !== "book") return -1;
+      if (a.summary_type !== "book" && b.summary_type === "book") return 1;
+      return (a.chapter_path || "").localeCompare(b.chapter_path || "");
+    });
 
     return matchingSummaries;
   } catch (error) {

@@ -31,6 +31,7 @@ interface AIAgentPaneProps {
 }
 
 interface SummaryContext {
+  summary_type?: "book" | "chapter" | "subchapter";
   toc_title: string;
   chapter_path: string;
   summary_text: string | null;
@@ -224,7 +225,8 @@ export function AIAgentPane({
         return;
       }
       summaries = (await queryPdfSummariesForPosition(bookId, position.start, position.end)).map(
-        ({ toc_title, chapter_path, summary_text }) => ({
+        ({ summary_type, toc_title, chapter_path, summary_text }) => ({
+          summary_type,
           toc_title,
           chapter_path,
           summary_text,
@@ -239,6 +241,7 @@ export function AIAgentPane({
       }
       summaries = (await querySummariesForPosition(bookId, position.start, position.end)).map(
         ({ toc_title, chapter_path, summary_text }) => ({
+          summary_type: "chapter",
           toc_title,
           chapter_path,
           summary_text,
@@ -260,10 +263,25 @@ export function AIAgentPane({
       prompt += "\n";
     }
 
+    const bookSummaries = summaries.filter((summary) => summary.summary_type === "book");
+    const chapterSummaries = summaries.filter((summary) => summary.summary_type !== "book");
+
+    if (bookSummaries.length > 0) {
+      prompt += "Book Summary:\n";
+      bookSummaries.forEach((summary) => {
+        if (summary.summary_text) {
+          prompt += `${summary.summary_text}\n`;
+        } else {
+          prompt += `(No summary text available)\n`;
+        }
+      });
+      prompt += "\n";
+    }
+
     // Add chapter summaries (if any)
-    if (summaries.length > 0) {
+    if (chapterSummaries.length > 0) {
       prompt += "Chapter Summaries:\n";
-      summaries.forEach((summary) => {
+      chapterSummaries.forEach((summary) => {
         const chapterTitle = summary.toc_title || "Untitled";
         const chapterPath = summary.chapter_path || "Unknown";
         prompt += `\n${chapterPath} - ${chapterTitle}:\n`;
