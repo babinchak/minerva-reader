@@ -131,65 +131,8 @@ export async function POST(request: NextRequest) {
       file_name: bookData.file_name,
       book_type: bookData.book_type,
     });
-    
-    const { error: bookError } = await supabase
-      .from("books")
-      .insert(bookData);
 
-    if (bookError) {
-      console.error("[UPLOAD] Error creating book record:", {
-        message: bookError.message,
-        code: bookError.code,
-        details: bookError.details,
-        hint: bookError.hint,
-      });
-      
-      // Handle unique constraint violation (duplicate checksum)
-      // This can happen in race conditions where two uploads happen simultaneously
-      if (bookError.code === "23505") { // PostgreSQL unique violation
-        console.log("[UPLOAD] Duplicate checksum detected (race condition), checking for existing book...");
-        
-        // Re-check for the book (it might have been created by another request)
-        const { data: raceConditionBook } = await supabase
-          .from("books")
-          .select("id, title")
-          .eq("file_checksum", hashHex)
-          .single();
-        
-        if (raceConditionBook) {
-          // Link to user_books
-          const { data: existingLink } = await supabase
-            .from("user_books")
-            .select("id")
-            .eq("user_id", user.id)
-            .eq("book_id", raceConditionBook.id)
-            .single();
-          
-          if (!existingLink) {
-            await supabase.from("user_books").insert({
-              user_id: user.id,
-              book_id: raceConditionBook.id,
-            });
-          }
-          
-          return NextResponse.json({ 
-            book_id: raceConditionBook.id,
-            duplicate: true,
-            message: "Book already exists and has been added to your library"
-          });
-        }
-      }
-      
-      return NextResponse.json({ 
-        error: "Failed to create book record",
-        details: bookError.message,
-        code: bookError.code,
-        hint: bookError.hint,
-      }, { status: 500 });
-    }
-    console.log("[UPLOAD] Book record created successfully");
-
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage FIRST (so DB/webhooks only happen after storage has the file)
     console.log("[UPLOAD] Uploading to storage:", storagePath);
     const { error: uploadError } = await serviceSupabase.storage
       .from(bucketName)
@@ -200,15 +143,80 @@ export async function POST(request: NextRequest) {
 
     if (uploadError) {
       console.error("[UPLOAD] Storage upload error:", uploadError);
-      // Clean up book record if upload fails
-      await supabase.from("books").delete().eq("id", bookId);
-      
-      return NextResponse.json({ 
-        error: "Failed to upload file to storage",
-        details: uploadError.message 
-      }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: "Failed to upload file to storage",
+          details: uploadError.message,
+        },
+        { status: 500 },
+      );
     }
     console.log("[UPLOAD] File uploaded to storage successfully");
+
+    // Create book record AFTER storage upload completes
+    const { error: bookError } = await supabase.from("books").insert(bookData);
+
+    if (bookError) {
+      console.error("[UPLOAD] Error creating book record:", {
+        message: bookError.message,
+        code: bookError.code,
+        details: bookError.details,
+        hint: bookError.hint,
+      });
+
+      // Clean up storage object if DB write fails (best effort)
+      await serviceSupabase.storage.from(bucketName).remove([storagePath]);
+
+      // Handle unique constraint violation (duplicate checksum)
+      // This can happen in race conditions where two uploads happen simultaneously
+      if (bookError.code === "23505") {
+        // PostgreSQL unique violation
+        console.log(
+          "[UPLOAD] Duplicate checksum detected (race condition), checking for existing book...",
+        );
+
+        // Re-check for the book (it might have been created by another request)
+        const { data: raceConditionBook } = await supabase
+          .from("books")
+          .select("id, title")
+          .eq("file_checksum", hashHex)
+          .single();
+
+        if (raceConditionBook) {
+          // Link to user_books
+          const { data: existingLink } = await supabase
+            .from("user_books")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("book_id", raceConditionBook.id)
+            .single();
+
+          if (!existingLink) {
+            await supabase.from("user_books").insert({
+              user_id: user.id,
+              book_id: raceConditionBook.id,
+            });
+          }
+
+          return NextResponse.json({
+            book_id: raceConditionBook.id,
+            duplicate: true,
+            message: "Book already exists and has been added to your library",
+          });
+        }
+      }
+
+      return NextResponse.json(
+        {
+          error: "Failed to create book record",
+          details: bookError.message,
+          code: bookError.code,
+          hint: bookError.hint,
+        },
+        { status: 500 },
+      );
+    }
+    console.log("[UPLOAD] Book record created successfully");
 
     // Link book to user
     console.log("[UPLOAD] Linking book to user...");
