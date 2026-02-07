@@ -5,6 +5,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+type IncomingChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.OPENAI_API_KEY) {
@@ -17,7 +22,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { messages } = await req.json();
+    const { messages } = (await req.json()) as { messages?: unknown };
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(
@@ -30,9 +35,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Convert messages to OpenAI format
-    const openaiMessages = messages.map((msg: { role: string; content: string }) => ({
-      role: msg.role === "assistant" ? "assistant" : "user",
-      content: msg.content,
+    const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = (
+      messages as IncomingChatMessage[]
+    ).map((msg) => ({
+      role:
+        msg.role === "assistant"
+          ? "assistant"
+          : msg.role === "system"
+            ? "system"
+            : "user",
+      content: String(msg.content ?? ""),
     }));
 
     // Get model from environment variable, default to gpt-4o-mini

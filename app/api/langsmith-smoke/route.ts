@@ -67,10 +67,10 @@ export async function GET() {
 
   const runId = crypto.randomUUID();
 
-  const finalState = await app.invoke(
+  const finalState = (await app.invoke(
     { messages: [new HumanMessage("what is the weather in sf")] },
     { configurable: { thread_id: runId } }
-  );
+  )) as unknown as AgentState;
 
   const last = finalState.messages[finalState.messages.length - 1];
   return Response.json({ runId, answer: last.content });

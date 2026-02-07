@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { BookReader } from "@/components/book-reader";
 import { PdfReader } from "@/components/pdf-reader";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface PageProps {
   params: Promise<{ bookId: string }>;
 }

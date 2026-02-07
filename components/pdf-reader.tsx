@@ -100,7 +100,7 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
               </div>
             </div>
             <div className="flex-1 overflow-auto bg-muted/20">
-              <div className="max-w-4xl mx-auto py-6 space-y-6">
+              <div className="pdfViewer max-w-4xl mx-auto py-6 space-y-6">
                 {Array.from({ length: pdfDoc.numPages }, (_, idx) => (
                   <PdfPage key={idx + 1} pdf={pdfDoc} pageNumber={idx + 1} />
                 ))}
@@ -184,8 +184,11 @@ function PdfPage({ pdf, pageNumber, scale = 1.25 }: PdfPageProps) {
 
   useEffect(() => {
     let cancelled = false;
-    let renderTask: { cancel?: () => void } | null = null;
-    let textLayerBuilder: { cancel?: () => void } | null = null;
+    let renderTask: { cancel?: () => void; promise: Promise<unknown> } | null =
+      null;
+    let textLayerBuilder:
+      | { cancel?: () => void; render: (...args: any[]) => Promise<any> }
+      | null = null;
 
     const render = async () => {
       const page = await pdf.getPage(pageNumber);
@@ -214,7 +217,7 @@ function PdfPage({ pdf, pageNumber, scale = 1.25 }: PdfPageProps) {
       canvas.style.height = `${viewport.height}px`;
 
       const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
-      renderTask = page.render({ canvasContext: context, viewport, transform });
+      renderTask = page.render({ canvas, canvasContext: context, viewport, transform });
       await renderTask.promise;
 
       const { TextLayerBuilder } = await import("pdfjs-dist/web/pdf_viewer.mjs");
@@ -237,7 +240,7 @@ function PdfPage({ pdf, pageNumber, scale = 1.25 }: PdfPageProps) {
         },
       });
 
-      await textLayerBuilder.render(viewport);
+      await textLayerBuilder.render({ viewport });
     };
 
     render().catch(() => {
@@ -253,8 +256,10 @@ function PdfPage({ pdf, pageNumber, scale = 1.25 }: PdfPageProps) {
 
   return (
     <div className="w-full flex justify-center">
-      <div ref={pageContainerRef} className="relative shadow-sm border bg-white">
-        <canvas ref={canvasRef} className="pointer-events-none block" />
+      <div ref={pageContainerRef} className="page relative shadow-sm border bg-white">
+        <div className="canvasWrapper">
+          <canvas ref={canvasRef} className="pointer-events-none block" />
+        </div>
         <div ref={textLayerHostRef} className="absolute inset-0" />
       </div>
     </div>

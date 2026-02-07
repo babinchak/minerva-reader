@@ -4,6 +4,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "postinstall": "node scripts/fix-pdfjs-assets.cjs",
     "lint": "eslint ."
   },
   "dependencies": {
