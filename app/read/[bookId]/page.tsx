@@ -1,7 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { BookReader } from "@/components/book-reader";
-import { PdfReader } from "@/components/pdf-reader";
+import PdfReaderClient from "@/components/pdf-reader-client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -90,7 +90,7 @@ export default async function ReadBookPage({ params }: PageProps) {
     }
 
     return (
-      <PdfReader
+      <PdfReaderClient
         pdfUrl={signedUrl.signedUrl}
         fileName={book.file_name || book.title}
         bookId={bookId}

@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  GlobalWorkerOptions,
-  PixelsPerInch,
-  getDocument,
-  setLayerDimensions,
-  type PDFDocumentProxy,
-} from "pdfjs-dist";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -16,8 +10,10 @@ import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 import { AIAssistant } from "@/components/ai-assistant";
 import { useSelectedText } from "@/lib/use-selected-text";
 
-const workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-GlobalWorkerOptions.workerSrc = workerSrc;
+type PDFDocumentLoadingTask = {
+  promise: Promise<PDFDocumentProxy>;
+  destroy: () => void;
+};
 
 interface PdfReaderProps {
   pdfUrl: string;
@@ -35,17 +31,45 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
 
   useEffect(() => {
     let cancelled = false;
+    let loadingTask: PDFDocumentLoadingTask | null = null;
     setLoading(true);
     setError(null);
 
-    const loadingTask = getDocument({ url: pdfUrl });
-    loadingTask.promise
-      .then((pdf) => {
-        if (cancelled) return;
-        setPdfDoc(pdf);
-        setLoading(false);
-      })
-      .catch((err) => {
+    (async () => {
+      // IMPORTANT: `pdfjs-dist` must be imported only in the browser.
+      // Importing it on the server (SSR) can crash with `DOMMatrix is not defined`.
+      const pdfjs = await import("pdfjs-dist");
+
+      const workerSrc = new URL(
+        "pdfjs-dist/build/pdf.worker.min.mjs",
+        import.meta.url,
+      ).toString();
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+
+      const baseParams: Record<string, unknown> = { url: pdfUrl };
+
+      // Some mobile browsers can be flaky with module workers; fall back to main-thread parsing.
+      const canUseWorker =
+        typeof Worker !== "undefined" &&
+        // iOS Safari is the most common trouble spot; be conservative.
+        !/iPad|iPhone|iPod/.test(navigator.userAgent);
+
+      const tryLoad = async (params: Record<string, unknown>) => {
+        loadingTask = pdfjs.getDocument(params) as unknown as PDFDocumentLoadingTask;
+        return await loadingTask.promise;
+      };
+
+      let pdf: PDFDocumentProxy;
+      try {
+        pdf = await tryLoad({ ...baseParams, disableWorker: !canUseWorker });
+      } catch (e) {
+        // Retry once without worker as a safety net.
+        pdf = await tryLoad({ ...baseParams, disableWorker: true });
+      }
+      if (cancelled) return;
+      setPdfDoc(pdf);
+      setLoading(false);
+    })().catch((err) => {
         if (cancelled) return;
         setError(err?.message || "Failed to load PDF");
         setLoading(false);
@@ -53,7 +77,11 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
 
     return () => {
       cancelled = true;
-      loadingTask.destroy();
+      try {
+        loadingTask?.destroy?.();
+      } catch {
+        // ignore
+      }
     };
   }, [pdfUrl]);
 
@@ -100,7 +128,7 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
           <div className="flex-1 overflow-auto bg-muted/20">
             <div className="pdfViewer max-w-4xl mx-auto py-6 space-y-6">
               {Array.from({ length: pdfDoc.numPages }, (_, idx) => (
-                <PdfPage key={idx + 1} pdf={pdfDoc} pageNumber={idx + 1} />
+                <LazyPdfPage key={idx + 1} pdf={pdfDoc} pageNumber={idx + 1} />
               ))}
             </div>
           </div>
@@ -164,6 +192,46 @@ interface PdfPageProps {
   scale?: number;
 }
 
+function LazyPdfPage({ pdf, pageNumber, scale }: PdfPageProps) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
+
+  useEffect(() => {
+    if (shouldRender) return;
+    const el = hostRef.current;
+    if (!el) return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting) {
+          setShouldRender(true);
+          obs.disconnect();
+        }
+      },
+      // Start rendering before it scrolls into view.
+      { root: null, rootMargin: "1200px 0px", threshold: 0.01 },
+    );
+
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [shouldRender]);
+
+  return (
+    <div ref={hostRef}>
+      {shouldRender ? (
+        <PdfPage pdf={pdf} pageNumber={pageNumber} scale={scale} />
+      ) : (
+        <div className="w-full flex justify-center">
+          <div className="page relative shadow-sm border bg-white w-full max-w-4xl">
+            <div className="w-full" style={{ aspectRatio: "1 / 1.4142" }} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PdfPage({ pdf, pageNumber, scale = 1.25 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerHostRef = useRef<HTMLDivElement | null>(null);
@@ -173,11 +241,15 @@ function PdfPage({ pdf, pageNumber, scale = 1.25 }: PdfPageProps) {
     let cancelled = false;
     let renderTask: { cancel?: () => void; promise: Promise<unknown> } | null =
       null;
-    let textLayerBuilder:
-      | { cancel?: () => void; render: (...args: unknown[]) => Promise<unknown> }
-      | null = null;
+    // pdfjs' TextLayerBuilder types vary across versions; keep this loose.
+    // Cast at the assignment site to avoid TypeScript variance issues across versions.
+    let textLayerBuilder: {
+      cancel?: () => void;
+      render?: (opts: any) => Promise<any>;
+    } | null = null;
 
     const render = async () => {
+      const { PixelsPerInch, setLayerDimensions } = await import("pdfjs-dist");
       const page = await pdf.getPage(pageNumber);
       if (
         cancelled ||
@@ -225,9 +297,9 @@ function PdfPage({ pdf, pageNumber, scale = 1.25 }: PdfPageProps) {
           });
           textLayerHost.appendChild(div);
         },
-      });
+      }) as any;
 
-      await textLayerBuilder.render({ viewport });
+      await textLayerBuilder?.render?.({ viewport });
     };
 
     render().catch(() => {
