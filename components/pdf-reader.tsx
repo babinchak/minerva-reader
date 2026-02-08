@@ -41,7 +41,10 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
 
   // Global PDF zoom (applies to ALL pages by re-rendering at a larger viewport scale).
   // This avoids per-page transforms that can cause "chopped" edges and makes scroll work naturally.
-  const MIN_RENDER_SCALE = 0.7;
+  // On mobile, keep the minimum zoom close to fit-to-width so pages don't feel "shrunk" with big gutters.
+  const MIN_RENDER_SCALE_DESKTOP = 0.7;
+  const MIN_RENDER_SCALE_MOBILE = 0.95;
+  const MIN_RENDER_SCALE = isMobile ? MIN_RENDER_SCALE_MOBILE : MIN_RENDER_SCALE_DESKTOP;
   const MAX_RENDER_SCALE = 4;
   const [renderScale, setRenderScale] = useState(1);
   const [gesture, setGesture] = useState<{ active: boolean; scale: number; tx: number; ty: number }>({
@@ -87,6 +90,12 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
     // Keep debug panel closed on mobile unless explicitly opened.
     if (isMobile) setIsDebugPanelOpen(false);
   }, [isMobile]);
+
+  useEffect(() => {
+    // If the user transitions into mobile layout (or we adjust the threshold),
+    // clamp the current scale to the new min/max range.
+    setRenderScale((s) => clamp(s, MIN_RENDER_SCALE, MAX_RENDER_SCALE));
+  }, [MIN_RENDER_SCALE]);
 
   // iOS safe-area can be zero in some contexts; keep a sensible fallback.
   // Lower fallback = slightly higher top bar when `env()` reports 0.
