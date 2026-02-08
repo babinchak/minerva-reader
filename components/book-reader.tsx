@@ -3,9 +3,7 @@
 import { StatefulReader, StatefulPreferencesProvider, ThStoreProvider, ThI18nProvider } from "@edrlab/thorium-web/epub";
 import { useEffect, useState } from "react";
 import { TextSelectionHandler } from "@/components/text-selection-handler";
-import { AIAgentPane } from "@/components/ai-agent-pane";
-import { Button } from "@/components/ui/button";
-import { Bot } from "lucide-react";
+import { AIAssistant } from "@/components/ai-assistant";
 import { useParams } from "next/navigation";
 import { useSelectedText } from "@/lib/use-selected-text";
 
@@ -16,7 +14,6 @@ interface BookReaderProps {
 
 export function BookReader({ rawManifest, selfHref }: BookReaderProps) {
   const [mounted, setMounted] = useState(false);
-  const [isAIPaneOpen, setIsAIPaneOpen] = useState(false);
   const selectedText = useSelectedText();
   const params = useParams();
   const bookId = params?.bookId as string;
@@ -41,33 +38,15 @@ export function BookReader({ rawManifest, selfHref }: BookReaderProps) {
         <ThI18nProvider>
           <div className="w-full h-screen flex flex-col">
             <div className="flex flex-1 relative min-h-0">
-              {/* Reader Section */}
-              <div className={`h-full transition-all duration-300 ${isAIPaneOpen ? "w-[calc(100%-24rem)]" : "w-full"}`}>
-                <StatefulReader
-                  rawManifest={rawManifest}
-                  selfHref={selfHref}
-                />
+              <div className="h-full w-full">
+                <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
               </div>
-
-              {/* AI Agent Pane */}
-              <AIAgentPane
-                isOpen={isAIPaneOpen}
-                onClose={() => setIsAIPaneOpen(false)}
+              <AIAssistant
                 selectedText={selectedText}
                 bookId={bookId}
                 rawManifest={rawManifest}
+                bookType="epub"
               />
-
-              {/* Toggle Button */}
-              {!isAIPaneOpen && (
-                <Button
-                  onClick={() => setIsAIPaneOpen(true)}
-                  className="fixed top-4 right-4 z-40 shadow-lg"
-                  size="icon"
-                >
-                  <Bot className="h-5 w-5" />
-                </Button>
-              )}
             </div>
 
             <TextSelectionHandler rawManifest={rawManifest} bookId={bookId} />

@@ -6,7 +6,7 @@
  * This script runs in `postinstall` and creates the missing asset in
  * `node_modules` so Next.js (Turbopack) can resolve the CSS url().
  */
-/* eslint-disable no-console */
+/* eslint-disable @typescript-eslint/no-require-imports */
 
 const fs = require("fs");
 const path = require("path");
@@ -34,7 +34,7 @@ function ensurePdfjsViewerAssets() {
   let pdfjsPkgJsonPath;
   try {
     pdfjsPkgJsonPath = require.resolve("pdfjs-dist/package.json");
-  } catch (e) {
+  } catch {
     // pdfjs-dist not installed; nothing to do.
     return;
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-pos
 import { getCurrentPdfPageContext } from "@/lib/pdf-position/page-context";
 import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 import { getPdfLocalContextAroundCurrentSelection } from "@/lib/pdf-position/local-context";
+import { getEpubVisibleContext } from "@/lib/epub-visible-context";
 
 const DEFAULT_MAX_EXPLAIN_SELECTION_CHARS = 4000;
 const MAX_EXPLAIN_SELECTION_CHARS = (() => {
@@ -35,13 +36,47 @@ interface AIMessage {
   selectionPositionTitle?: string;
 }
 
-interface AIAgentPaneProps {
-  isOpen: boolean;
-  onClose: () => void;
+export interface AIAgentPanelProps {
   selectedText?: string;
   bookId?: string;
   rawManifest?: { readingOrder?: Array<{ href?: string }> };
   bookType?: "epub" | "pdf";
+  autoRun?: { nonce: number; action: "page" | "selection" } | null;
+  /**
+   * If true, hide the free-form chat input until after the first assistant response completes.
+   * Useful when opening via an “explain” affordance so the assistant feels like a reading tool first.
+   */
+  hideInputUntilFirstResponse?: boolean;
+  /**
+   * If true, when sending a typed question we will include the currently selected text as context.
+   * Intended for mobile quick-action UX.
+   */
+  includeSelectionContextOnSend?: boolean;
+  /**
+   * UI visibility controls for embedding the panel in compact shells (e.g. mobile quick state).
+   */
+  showHeader?: boolean;
+  showMessages?: boolean;
+  showSelectedTextBanner?: boolean;
+  showExplainAction?: boolean;
+  showSelectionChip?: boolean;
+  /**
+   * Notified when a user-triggered action starts (send/explain).
+   * Useful for shells (e.g. mobile quick state) to expand UI to show the response.
+   */
+  onActionStart?: () => void;
+  /**
+   * Notified when the assistant finishes responding (success or error).
+   */
+  onActionComplete?: () => void;
+  /**
+   * Container class for layout shell (docked/overlay/bottom sheet).
+   */
+  className?: string;
+  /**
+   * If provided, show a close button in the header.
+   */
+  onClose?: () => void;
 }
 
 interface SummaryContext {
@@ -51,14 +86,53 @@ interface SummaryContext {
   summary_text: string | null;
 }
 
-export function AIAgentPane({
-  isOpen,
-  onClose,
+function formatSelectionPositionLabel(
+  start: string,
+  end: string
+): { label: string; title: string } {
+  const parseThreePart = (pos: string): { a: number; b: number; c: number } | null => {
+    const parts = pos.split(/[/:]/).map((p) => parseInt(p, 10));
+    if (parts.length < 3 || parts.some((v) => Number.isNaN(v))) return null;
+    return { a: parts[0], b: parts[1], c: parts[2] };
+  };
+
+  // PDF positions look like: page/itemIndex/charOffset (we display page:itemIndex).
+  const start3 = parseThreePart(start);
+  const end3 = parseThreePart(end);
+  if (start3 && end3) {
+    const label = `(${start3.a}:${start3.b}-${end3.a}:${end3.b})`;
+    const title = `start=${start} end=${end}`;
+    return { label, title };
+  }
+
+  // EPUB positions look like: readingOrderIndex/path/charOffset (we keep it, but make it compact-ish).
+  const compact = (pos: string) => pos.replaceAll("/", ":");
+  const label = `(${compact(start)}-${compact(end)})`;
+  const title = `start=${start} end=${end}`;
+  return { label, title };
+}
+
+export function AIAgentPanel({
   selectedText,
   bookId,
   rawManifest,
   bookType = "epub",
-}: AIAgentPaneProps) {
+  autoRun = null,
+  hideInputUntilFirstResponse = false,
+  includeSelectionContextOnSend = false,
+  showHeader = true,
+  showMessages = true,
+  showSelectedTextBanner = true,
+  showExplainAction = true,
+  showSelectionChip = false,
+  onActionStart,
+  onActionComplete,
+  className,
+  onClose,
+}: AIAgentPanelProps) {
+  const [showInput, setShowInput] = useState(!hideInputUntilFirstResponse);
+  const lastAutoRunNonceRef = useRef<number | null>(null);
+
   const normalizedSelectedText = selectedText ?? "";
   const trimmedSelectedText = normalizedSelectedText.trim();
   const selectedCharCount = trimmedSelectedText ? normalizedSelectedText.length : 0;
@@ -84,31 +158,8 @@ export function AIAgentPane({
   const [bookAuthor, setBookAuthor] = useState<string>("");
   const supabase = createClient();
 
-  const formatSelectionPositionLabel = (start: string, end: string): { label: string; title: string } => {
-    const parseThreePart = (pos: string): { a: number; b: number; c: number } | null => {
-      const parts = pos.split(/[/:]/).map((p) => parseInt(p, 10));
-      if (parts.length < 3 || parts.some((v) => Number.isNaN(v))) return null;
-      return { a: parts[0], b: parts[1], c: parts[2] };
-    };
-
-    // PDF positions look like: page/itemIndex/charOffset (we display page:itemIndex).
-    const start3 = parseThreePart(start);
-    const end3 = parseThreePart(end);
-    if (start3 && end3) {
-      const label = `(${start3.a}:${start3.b}-${end3.a}:${end3.b})`;
-      const title = `start=${start} end=${end}`;
-      return { label, title };
-    }
-
-    // EPUB positions look like: readingOrderIndex/path/charOffset (we keep it, but make it compact-ish).
-    const compact = (pos: string) => pos.replaceAll("/", ":");
-    const label = `(${compact(start)}-${compact(end)})`;
-    const title = `start=${start} end=${end}`;
-    return { label, title };
-  };
-
   // Helper function to handle streaming response
-  const handleStreamingResponse = async (
+  const handleStreamingResponse = useCallback(async (
     response: Response,
     assistantMessageId: string
   ) => {
@@ -137,6 +188,8 @@ export function AIAgentPane({
           const data = line.slice(6);
           if (data === "[DONE]") {
             setIsLoading(false);
+            setShowInput(true);
+            onActionComplete?.();
             return;
           }
 
@@ -159,7 +212,9 @@ export function AIAgentPane({
     }
 
     setIsLoading(false);
-  };
+    setShowInput(true);
+    onActionComplete?.();
+  }, [onActionComplete]);
 
   // Fetch book metadata when bookId is available
   useEffect(() => {
@@ -183,6 +238,7 @@ export function AIAgentPane({
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
+    onActionStart?.();
 
     const userMessage: AIMessage = {
       id: Date.now().toString(),
@@ -208,12 +264,22 @@ export function AIAgentPane({
 
     try {
       // Prepare messages for API (exclude the empty assistant message we just added)
+      const selectionForSend =
+        includeSelectionContextOnSend && getSelectedText()
+          ? getSelectedText()
+          : "";
       const messagesForAPI = [
         ...messages.map((msg) => ({
           role: msg.role,
           content: msg.content,
         })),
-        { role: "user" as const, content: userInput },
+        {
+          role: "user" as const,
+          content:
+            selectionForSend && selectionForSend.trim().length > 0
+              ? `User question:\n${userInput}\n\nSelected text (use as context):\n"${selectionForSend}"`
+              : userInput,
+        },
       ];
 
       const response = await fetch("/api/chat", {
@@ -239,6 +305,8 @@ export function AIAgentPane({
         )
       );
       setIsLoading(false);
+      setShowInput(true);
+      onActionComplete?.();
     }
   };
 
@@ -249,8 +317,9 @@ export function AIAgentPane({
     }
   };
 
-  const handleExplainSelection = async () => {
+  const handleExplain = useCallback(async (action: "page" | "selection") => {
     if (!bookId || isLoading) return;
+    onActionStart?.();
 
     const isPdf = bookType === "pdf";
     if (!rawManifest && !isPdf) return;
@@ -265,29 +334,33 @@ export function AIAgentPane({
       return;
     }
 
-    const isExplainPdfPage =
-      isPdf && (!currentSelectedText || currentSelectedText.trim().length === 0);
-
-    if (!currentSelectedText && !isExplainPdfPage) {
+    const selectionExists = Boolean(currentSelectedText && currentSelectedText.trim().length > 0);
+    const isExplainPage = action === "page";
+    const isExplainSelectionNow = action === "selection";
+    if (isExplainSelectionNow && !selectionExists) {
       return;
     }
 
+    // If action says "page", but we are in an EPUB, we do a best-effort visible-context extraction.
+    // For PDF we use the existing page-context logic.
+
     // Get current selection position
     setIsLoading(true);
+    if (hideInputUntilFirstResponse) setShowInput(false);
 
     let summaries: SummaryContext[] = [];
     let selectionPositionLabel: string | undefined;
     let selectionPositionTitle: string | undefined;
-    let explainUserMessage = "Explain text";
+    const explainUserMessage = isExplainPage ? "Explain page" : "Explain selection";
     let explainBodyText = currentSelectedText;
     if (isPdf) {
-      if (isExplainPdfPage) {
+      if (isExplainPage) {
         const page = getCurrentPdfPageContext({ maxChars: 30000 });
         if (!page || !page.text) {
           setIsLoading(false);
+          onActionComplete?.();
           return;
         }
-        explainUserMessage = "Explain page";
         explainBodyText = page.text;
         selectionPositionLabel = `(Page ${page.pageNumber})`;
         selectionPositionTitle = `start=${page.startPosition} end=${page.endPosition}`;
@@ -307,6 +380,7 @@ export function AIAgentPane({
         const position = getCurrentPdfSelectionPosition();
         if (!position) {
           setIsLoading(false);
+          onActionComplete?.();
           return;
         }
         const formatted = formatSelectionPositionLabel(
@@ -329,23 +403,39 @@ export function AIAgentPane({
         }));
       }
     } else {
-      const readingOrder = rawManifest?.readingOrder || [];
-      const position = getCurrentSelectionPosition(readingOrder, null);
-      if (!position) {
-        setIsLoading(false);
-        return;
+      if (isExplainPage) {
+        const visible = getEpubVisibleContext({ maxChars: 30000 });
+        if (!visible?.text) {
+          setIsLoading(false);
+          setShowInput(true);
+          onActionComplete?.();
+          return;
+        }
+        explainBodyText = visible.text;
+        selectionPositionLabel = `(View)`;
+        selectionPositionTitle = "EPUB visible context";
+        // No reliable position → we skip summary lookup here (best-effort).
+        summaries = [];
+      } else {
+        const readingOrder = rawManifest?.readingOrder || [];
+        const position = getCurrentSelectionPosition(readingOrder, null);
+        if (!position) {
+          setIsLoading(false);
+          onActionComplete?.();
+          return;
+        }
+        const formatted = formatSelectionPositionLabel(position.start, position.end);
+        selectionPositionLabel = formatted.label;
+        selectionPositionTitle = formatted.title;
+        summaries = (await querySummariesForPosition(bookId, position.start, position.end)).map(
+          ({ toc_title, chapter_path, summary_text }) => ({
+            summary_type: "chapter",
+            toc_title,
+            chapter_path,
+            summary_text,
+          })
+        );
       }
-      const formatted = formatSelectionPositionLabel(position.start, position.end);
-      selectionPositionLabel = formatted.label;
-      selectionPositionTitle = formatted.title;
-      summaries = (await querySummariesForPosition(bookId, position.start, position.end)).map(
-        ({ toc_title, chapter_path, summary_text }) => ({
-          summary_type: "chapter",
-          toc_title,
-          chapter_path,
-          summary_text,
-        })
-      );
     }
 
     // Build the prompt with context
@@ -386,7 +476,7 @@ export function AIAgentPane({
     appendSummaries("More specific summary (narrow context)", narrowSummaries);
 
     // Add local PDF context window around selection (best-effort)
-    if (isPdf && !isExplainPdfPage) {
+    if (isPdf && !isExplainPage) {
       const local = getPdfLocalContextAroundCurrentSelection({
         beforeChars: 800,
         afterChars: 800,
@@ -406,7 +496,7 @@ export function AIAgentPane({
 
     // Add the selected text and instruction
     prompt += `Please explain the following ${
-      isExplainPdfPage ? "page" : "selected text"
+      isExplainPage ? "page" : "selected text"
     } from the book:\n\n"${explainBodyText}"\n\nProvide a clear and helpful explanation in the context of the book.`;
 
 
@@ -464,34 +554,63 @@ export function AIAgentPane({
         )
       );
       setIsLoading(false);
+      setShowInput(true);
+      onActionComplete?.();
     }
-  };
+  }, [
+    bookAuthor,
+    bookId,
+    bookTitle,
+    bookType,
+    handleStreamingResponse,
+    hideInputUntilFirstResponse,
+    isLoading,
+    messages,
+    rawManifest,
+    onActionComplete,
+    onActionStart,
+  ]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!autoRun) return;
+    if (autoRun.nonce === lastAutoRunNonceRef.current) return;
+    lastAutoRunNonceRef.current = autoRun.nonce;
+    handleExplain(autoRun.action).catch(() => {
+      // best-effort
+    });
+  }, [autoRun, handleExplain]);
 
   return (
     <div
       data-ai-pane="true"
-      className="fixed right-0 top-0 h-full w-96 bg-background border-l border-border shadow-lg flex flex-col z-50 select-text"
+      className={
+        className ??
+        "bg-background border-l border-border shadow-lg flex flex-col select-text"
+      }
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Bot className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold text-lg text-foreground">AI Assistant</h2>
+      {showHeader && (
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Bot className="h-5 w-5 text-primary" />
+            <h2 className="font-semibold text-lg text-foreground">AI Assistant</h2>
+          </div>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="h-8 w-8"
+              aria-label="Close AI assistant"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          className="h-8 w-8"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
+      )}
 
       {/* Selected Text Banner */}
-      {selectedText && (
+      {showSelectedTextBanner && selectedText && (
         <div className="p-3 bg-muted border-b border-border">
           <p className="text-sm text-muted-foreground mb-1">Selected text:</p>
           <p className="text-sm italic text-foreground line-clamp-2">
@@ -501,63 +620,65 @@ export function AIAgentPane({
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <Card
-              className={`max-w-[80%] p-3 ${
-                message.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-foreground select-text"
-              }`}
+      {showMessages && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              {message.role === "assistant" ? (
-                <Markdown content={message.content} />
-              ) : (
-                <p className="text-sm whitespace-pre-wrap break-words">
-                  {message.content}
-                </p>
-              )}
-              {message.selectionPositionLabel && (
-                <div className="mt-2">
-                  <span
-                    title={message.selectionPositionTitle}
-                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
-                      message.role === "user"
-                        ? "text-primary-foreground/80"
-                        : "text-foreground/80"
-                    } border-blue-500/40 bg-blue-500/10 dark:border-blue-400/40 dark:bg-blue-400/10`}
-                  >
-                    {message.selectionPositionLabel}
-                  </span>
+              <Card
+                className={`max-w-[80%] p-3 ${
+                  message.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-foreground select-text"
+                }`}
+              >
+                {message.role === "assistant" ? (
+                  <Markdown content={message.content} />
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap break-words">
+                    {message.content}
+                  </p>
+                )}
+                {message.selectionPositionLabel && (
+                  <div className="mt-2">
+                    <span
+                      title={message.selectionPositionTitle}
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+                        message.role === "user"
+                          ? "text-primary-foreground/80"
+                          : "text-foreground/80"
+                      } border-blue-500/40 bg-blue-500/10 dark:border-blue-400/40 dark:bg-blue-400/10`}
+                    >
+                      {message.selectionPositionLabel}
+                    </span>
+                  </div>
+                )}
+              </Card>
+            </div>
+          ))}
+          {isLoading && (
+            <div className="flex justify-start">
+              <Card className="bg-muted p-3">
+                <div className="flex gap-1">
+                  <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
+                  <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
+                  <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
                 </div>
-              )}
-            </Card>
-          </div>
-        ))}
-        {isLoading && (
-          <div className="flex justify-start">
-            <Card className="bg-muted p-3">
-              <div className="flex gap-1">
-                <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
-                <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
-                <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
-              </div>
-            </Card>
-          </div>
-        )}
-      </div>
+              </Card>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Input */}
       <div className="p-4 border-t border-border">
         {/* Explain Selection Button */}
-        {bookId && (rawManifest || bookType === "pdf") && (
+        {showExplainAction && bookId && (rawManifest || bookType === "pdf") && (
           <div className="mb-2">
             <Button
-              onClick={handleExplainSelection}
+              onClick={() => handleExplain(trimmedSelectedText.length === 0 ? "page" : "selection")}
               disabled={
                 isLoading ||
                 isSelectionTooLong ||
@@ -571,9 +692,7 @@ export function AIAgentPane({
                   : undefined
               }
             >
-              {bookType === "pdf" && trimmedSelectedText.length === 0
-                ? "Explain page"
-                : "Explain selection"}
+              {trimmedSelectedText.length === 0 ? "Explain page" : "Explain selection"}
             </Button>
             {isSelectionTooLong && (
               <div className="mt-2 rounded-md border border-border bg-muted px-3 py-2 text-xs text-foreground">
@@ -587,24 +706,47 @@ export function AIAgentPane({
             )}
           </div>
         )}
-        <div className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask a question about the book..."
-            disabled={isLoading}
-            className="flex-1"
-          />
-          <Button
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading}
-            size="icon"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
+        {showSelectionChip && (
+          <div className="mb-2">
+            <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-foreground">
+              Using selected text
+            </span>
+          </div>
+        )}
+        {showInput && (
+          <div className="flex gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask a question about the book..."
+              disabled={isLoading}
+              className="flex-1"
+            />
+            <Button
+              onClick={handleSend}
+              disabled={!input.trim() || isLoading}
+              size="icon"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+interface AIAgentPaneProps extends AIAgentPanelProps {
+  isOpen: boolean;
+}
+
+export function AIAgentPane({ isOpen, ...rest }: AIAgentPaneProps) {
+  if (!isOpen) return null;
+  return (
+    <AIAgentPanel
+      {...rest}
+      className="fixed right-0 top-0 h-full w-96 bg-background border-l border-border shadow-lg flex flex-col z-50 select-text"
+    />
   );
 }
