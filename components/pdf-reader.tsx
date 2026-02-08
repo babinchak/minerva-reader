@@ -16,6 +16,10 @@ type PDFDocumentLoadingTask = {
   destroy: () => void;
 };
 
+const PDF_DEBUG_ENABLED =
+  process.env.NEXT_PUBLIC_PDF_DEBUG === "1" ||
+  process.env.NEXT_PUBLIC_PDF_DEBUG === "true";
+
 interface PdfReaderProps {
   pdfUrl: string;
   fileName?: string | null;
@@ -28,6 +32,7 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
   const [error, setError] = useState<string | null>(null);
   const [isDebugPanelOpen, setIsDebugPanelOpen] = useState(false);
   const selectedText = useSelectedText();
+  const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
   const router = useRouter();
   const isMobile = useMediaQuery("(max-width: 767px)");
   const [chromeVisible, setChromeVisible] = useState(true);
@@ -198,7 +203,7 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
               ))}
             </div>
           </div>
-          {(!isMobile || chromeVisible) && (
+          {PDF_DEBUG_ENABLED && (!isMobile || chromeVisible) && (
             <div className="bg-background border-t border-border shadow-lg">
               <button
                 onClick={() => setIsDebugPanelOpen(!isDebugPanelOpen)}
@@ -244,12 +249,15 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
       </div>
 
       <div className="relative h-full flex-none">
-        <AIAssistant
-          selectedText={selectedText}
-          bookId={bookId}
-          bookType="pdf"
-          mobileDrawerMinMode="quick"
-        />
+        {/* Mobile: AI drawer follows the same chrome/menu toggle as the top bar. */}
+        {(!isMobile || chromeVisible) && (
+          <AIAssistant
+            selectedText={selectedText}
+            bookId={bookId}
+            bookType="pdf"
+            mobileDrawerMinMode={selectionExists ? "quick" : "closed"}
+          />
+        )}
       </div>
     </div>
   );
