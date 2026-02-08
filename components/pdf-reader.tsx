@@ -97,9 +97,10 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
     setRenderScale((s) => clamp(s, MIN_RENDER_SCALE, MAX_RENDER_SCALE));
   }, [MIN_RENDER_SCALE]);
 
-  // iOS safe-area can be zero in some contexts; keep a sensible fallback.
-  // Lower fallback = slightly higher top bar when `env()` reports 0.
-  const mobileSafeTop = "max(env(safe-area-inset-top), 0px)";
+  // iOS safe-area support is surprisingly inconsistent across Safari vs in-app webviews.
+  // Avoid CSS `max()` here: if unsupported, the whole value becomes invalid and `top` falls back,
+  // which can put the bar under the notch. `env(..., 0px)` is widely supported and safe.
+  const mobileSafeTop = "env(safe-area-inset-top, 0px)";
 
   useEffect(() => {
     let cancelled = false;
