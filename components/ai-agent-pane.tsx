@@ -17,6 +17,15 @@ import { getCurrentPdfPageContext } from "@/lib/pdf-position/page-context";
 import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 import { getPdfLocalContextAroundCurrentSelection } from "@/lib/pdf-position/local-context";
 
+const DEFAULT_MAX_EXPLAIN_SELECTION_CHARS = 4000;
+const MAX_EXPLAIN_SELECTION_CHARS = (() => {
+  const raw = process.env.NEXT_PUBLIC_MAX_EXPLAIN_SELECTION_CHARS;
+  if (!raw) return DEFAULT_MAX_EXPLAIN_SELECTION_CHARS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_MAX_EXPLAIN_SELECTION_CHARS;
+  return Math.max(0, parsed);
+})();
+
 interface AIMessage {
   id: string;
   role: "user" | "assistant";
@@ -50,6 +59,17 @@ export function AIAgentPane({
   rawManifest,
   bookType = "epub",
 }: AIAgentPaneProps) {
+  const normalizedSelectedText = selectedText ?? "";
+  const trimmedSelectedText = normalizedSelectedText.trim();
+  const selectedCharCount = trimmedSelectedText ? normalizedSelectedText.length : 0;
+  const isPdfExplainPage = bookType === "pdf" && trimmedSelectedText.length === 0;
+  const isExplainSelection = !isPdfExplainPage;
+  const isSelectionTooLong =
+    isExplainSelection &&
+    trimmedSelectedText.length > 0 &&
+    selectedCharCount > MAX_EXPLAIN_SELECTION_CHARS;
+  const overLimitBy = Math.max(0, selectedCharCount - MAX_EXPLAIN_SELECTION_CHARS);
+
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       id: "1",
@@ -237,6 +257,13 @@ export function AIAgentPane({
 
     // Get current selection text directly (don't rely on prop which might be stale)
     const currentSelectedText = getSelectedText();
+    if (
+      currentSelectedText &&
+      currentSelectedText.trim().length > 0 &&
+      currentSelectedText.length > MAX_EXPLAIN_SELECTION_CHARS
+    ) {
+      return;
+    }
 
     const isExplainPdfPage =
       isPdf && (!currentSelectedText || currentSelectedText.trim().length === 0);
@@ -528,19 +555,37 @@ export function AIAgentPane({
       <div className="p-4 border-t border-border">
         {/* Explain Selection Button */}
         {bookId && (rawManifest || bookType === "pdf") && (
-          <Button
-            onClick={handleExplainSelection}
-            disabled={
-              isLoading ||
-              (bookType !== "pdf" && (!selectedText || !selectedText.trim()))
-            }
-            className="w-full mb-2 text-foreground"
-            variant="outline"
-          >
-            {bookType === "pdf" && (!selectedText || !selectedText.trim())
-              ? "Explain page"
-              : "Explain selection"}
-          </Button>
+          <div className="mb-2">
+            <Button
+              onClick={handleExplainSelection}
+              disabled={
+                isLoading ||
+                isSelectionTooLong ||
+                (bookType !== "pdf" && trimmedSelectedText.length === 0)
+              }
+              className="w-full text-foreground"
+              variant="outline"
+              title={
+                isSelectionTooLong
+                  ? `Selection too long: ${selectedCharCount.toLocaleString()} / ${MAX_EXPLAIN_SELECTION_CHARS.toLocaleString()} characters`
+                  : undefined
+              }
+            >
+              {bookType === "pdf" && trimmedSelectedText.length === 0
+                ? "Explain page"
+                : "Explain selection"}
+            </Button>
+            {isSelectionTooLong && (
+              <div className="mt-2 rounded-md border border-border bg-muted px-3 py-2 text-xs text-foreground">
+                <p className="font-medium">Selection is too long.</p>
+                <p className="text-muted-foreground">
+                  {selectedCharCount.toLocaleString()} /{" "}
+                  {MAX_EXPLAIN_SELECTION_CHARS.toLocaleString()} characters selected
+                  {overLimitBy > 0 ? ` (${overLimitBy.toLocaleString()} over)` : ""}.
+                </p>
+              </div>
+            )}
+          </div>
         )}
         <div className="flex gap-2">
           <Input
