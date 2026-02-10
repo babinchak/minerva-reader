@@ -98,8 +98,9 @@ export default async function ReadBookPage({ params }: PageProps) {
     );
   }
 
-  // Construct the manifest path: books_{user_id}_{book_id}/manifest.json
-  const manifestPath = `books_${book.uploaded_by}_${book.id}/manifest.json`;
+  // EPUB manifest lives at:
+  // readium-manifests/books/{book_id}/manifest.json
+  const manifestPath = `books/${book.id}/manifest.json`;
 
   // Fetch the manifest from readium-manifests bucket
   const { data: manifestData, error: manifestError } = await supabase.storage
