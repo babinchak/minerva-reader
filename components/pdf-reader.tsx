@@ -354,7 +354,7 @@ export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
               <div
                 ref={toolbarRef}
                 className={[
-                  "relative flex items-center justify-between px-4 border-b bg-background text-foreground pointer-events-auto",
+                  "relative grid grid-cols-[1fr_auto_1fr] items-center px-4 border-b bg-background text-foreground pointer-events-auto",
                   // On mobile, overlay instead of docking (avoid reflow/layout shift).
                   isMobile
                     ? "absolute left-0 right-0 z-50 border-b/60 bg-background/90 backdrop-blur py-2"
@@ -362,7 +362,7 @@ export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
                 ].join(" ")}
                 style={isMobile ? { top: mobileSafeTop } : undefined}
               >
-                <div className="min-w-0 flex items-center gap-2">
+                <div className="min-w-0 flex items-center gap-2 justify-self-start">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -372,18 +372,30 @@ export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsSearchOpen((v) => !v)}
-                    aria-label="Search"
-                    title="Search"
-                  >
-                    <Search className="h-5 w-5" />
-                  </Button>
                 </div>
 
-                <div className="flex items-center justify-center gap-2 min-w-0">
+                <div className="flex items-center justify-center gap-2 min-w-0 justify-self-center">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => zoomBy(-ZOOM_STEP)}
+                      aria-label="Zoom out"
+                      title="Zoom out"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => zoomBy(ZOOM_STEP)}
+                      aria-label="Zoom in"
+                      title="Zoom in"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
                   <Input
                     value={pageInput}
                     onChange={(e) => setPageInput(e.target.value)}
@@ -411,27 +423,17 @@ export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => zoomBy(-ZOOM_STEP)}
-                      aria-label="Zoom out"
-                      title="Zoom out"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => zoomBy(ZOOM_STEP)}
-                      aria-label="Zoom in"
-                      title="Zoom in"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
+                <div className="flex items-center gap-2 shrink-0 justify-self-end">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsSearchOpen((v) => !v)}
+                    aria-label="Search"
+                    title="Search"
+                    className="shrink-0"
+                  >
+                    <Search className="h-5 w-5" />
+                  </Button>
 
                   <Button
                     variant="outline"
@@ -448,17 +450,17 @@ export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
                   <Button
                     variant="outline"
                     onClick={() => requestAiRun("page")}
-                    aria-label="Explain section"
-                    title="Explain section"
+                    aria-label="Explain page"
+                    title="Explain page"
                     className="hidden md:inline-flex"
                   >
                     <BookOpenText className="h-4 w-4 mr-2" />
-                    Explain section
+                    Explain page
                   </Button>
                 </div>
 
                 {isSearchOpen && (
-                  <div className="absolute left-4 top-full mt-2 z-50 w-[min(520px,calc(100vw-2rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-3">
+                  <div className="absolute right-4 top-full mt-2 z-50 w-[min(520px,calc(100vw-2rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-3">
                     <div className="flex items-center gap-2">
                       <Button
                         type="button"
