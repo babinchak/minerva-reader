@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  ArrowLeft,
+  BookOpenText,
+  Highlighter,
+  Minus,
+  Plus,
+  Search,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
 import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
@@ -26,7 +34,7 @@ interface PdfReaderProps {
   bookId: string;
 }
 
-export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
+export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +46,20 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
   const [chromeVisible, setChromeVisible] = useState(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
+  const [isEditingPage, setIsEditingPage] = useState(false);
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchMode, setSearchMode] = useState<"normal" | "semantic">("normal");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const aiNonceRef = useRef(0);
+  const [aiRequest, setAiRequest] = useState<{ nonce: number; action: "page" | "selection" } | null>(
+    null,
+  );
 
   // Global PDF zoom (applies to ALL pages by re-rendering at a larger viewport scale).
   // This avoids per-page transforms that can cause "chopped" edges and makes scroll work naturally.
@@ -90,6 +112,108 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
     // Keep debug panel closed on mobile unless explicitly opened.
     if (isMobile) setIsDebugPanelOpen(false);
   }, [isMobile]);
+
+  const getCurrentPageNumberFromViewport = () => {
+    const scroller = scrollRef.current;
+    const viewer = viewerRef.current;
+    if (!scroller || !viewer) return null;
+
+    const pages = Array.from(viewer.querySelectorAll<HTMLElement>(".page"));
+    if (pages.length === 0) return null;
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const centerY = scrollerRect.top + scrollerRect.height / 2;
+
+    let bestIdx = 0;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < pages.length; i += 1) {
+      const rect = pages[i].getBoundingClientRect();
+      const intersectsCenter = rect.top <= centerY && rect.bottom >= centerY;
+      const dist = intersectsCenter ? 0 : Math.min(Math.abs(rect.top - centerY), Math.abs(rect.bottom - centerY));
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+        if (dist === 0) break;
+      }
+    }
+    return bestIdx + 1;
+  };
+
+  const syncCurrentPage = () => {
+    const n = getCurrentPageNumberFromViewport();
+    if (!n) return;
+    setCurrentPage((prev) => (prev === n ? prev : n));
+    if (!isEditingPage) setPageInput(String(n));
+  };
+
+  useEffect(() => {
+    // Keep current page in sync as we scroll.
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    let raf: number | null = null;
+    const onScroll = () => {
+      if (raf != null) return;
+      raf = requestAnimationFrame(() => {
+        raf = null;
+        syncCurrentPage();
+      });
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    // Initial sync after mount/doc load.
+    syncCurrentPage();
+    return () => {
+      if (raf != null) cancelAnimationFrame(raf);
+      scroller.removeEventListener("scroll", onScroll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfDoc, isEditingPage]);
+
+  useEffect(() => {
+    if (!isSearchOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (toolbarRef.current?.contains(t)) return;
+      setIsSearchOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isSearchOpen]);
+
+  const requestAiRun = (action: "page" | "selection") => {
+    aiNonceRef.current += 1;
+    setAiRequest({ nonce: aiNonceRef.current, action });
+  };
+
+  const goToPage = (pageNumber: number) => {
+    const viewer = viewerRef.current;
+    const scroller = scrollRef.current;
+    if (!viewer || !scroller) return;
+    const pages = Array.from(viewer.querySelectorAll<HTMLElement>(".page"));
+    if (pages.length === 0) return;
+    const clamped = Math.max(1, Math.min(pageNumber, pages.length));
+    const el = pages[clamped - 1];
+    const scrollerRect = scroller.getBoundingClientRect();
+    const pageRect = el.getBoundingClientRect();
+    const deltaY = pageRect.top - scrollerRect.top;
+    scroller.scrollTop = scroller.scrollTop + deltaY - 12;
+    setCurrentPage(clamped);
+    setPageInput(String(clamped));
+  };
+
+  const commitPageInput = () => {
+    const parsed = Number.parseInt(pageInput, 10);
+    if (!Number.isFinite(parsed)) {
+      setPageInput(String(currentPage));
+      return;
+    }
+    goToPage(parsed);
+  };
+
+  const ZOOM_STEP = 0.25;
+  const zoomBy = (delta: number) => {
+    setRenderScale((s) => clamp(s + delta, MIN_RENDER_SCALE, MAX_RENDER_SCALE));
+  };
 
   useEffect(() => {
     // If the user transitions into mobile layout (or we adjust the threshold),
@@ -228,8 +352,9 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
                 />
               )}
               <div
+                ref={toolbarRef}
                 className={[
-                  "flex items-center justify-between px-4 border-b bg-background text-white pointer-events-auto",
+                  "relative flex items-center justify-between px-4 border-b bg-background text-foreground pointer-events-auto",
                   // On mobile, overlay instead of docking (avoid reflow/layout shift).
                   isMobile
                     ? "absolute left-0 right-0 z-50 border-b/60 bg-background/90 backdrop-blur py-2"
@@ -241,19 +366,144 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="-ml-2 text-white hover:text-white shrink-0"
+                    className="-ml-2 shrink-0"
                     onClick={() => router.back()}
                     aria-label="Back"
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </Button>
-                  <div className="min-w-0">
-                    <h1 className="font-semibold truncate leading-tight">
-                      {fileName || "PDF Document"}
-                    </h1>
-                    <p className="text-xs text-white/70 leading-tight">{pdfDoc.numPages} pages</p>
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsSearchOpen((v) => !v)}
+                    aria-label="Search"
+                    title="Search"
+                  >
+                    <Search className="h-5 w-5" />
+                  </Button>
                 </div>
+
+                <div className="flex items-center justify-center gap-2 min-w-0">
+                  <Input
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onFocus={() => setIsEditingPage(true)}
+                    onBlur={() => {
+                      setIsEditingPage(false);
+                      commitPageInput();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (e.currentTarget as HTMLInputElement).blur();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setPageInput(String(currentPage));
+                        (e.currentTarget as HTMLInputElement).blur();
+                      }
+                    }}
+                    inputMode="numeric"
+                    aria-label="Current page"
+                    className="h-8 w-16 text-center"
+                  />
+                  <span className="text-sm text-muted-foreground select-none">
+                    / {pdfDoc.numPages}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => zoomBy(-ZOOM_STEP)}
+                      aria-label="Zoom out"
+                      title="Zoom out"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => zoomBy(ZOOM_STEP)}
+                      aria-label="Zoom in"
+                      title="Zoom in"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => requestAiRun("selection")}
+                    disabled={!selectionExists}
+                    aria-label="Explain selection"
+                    title={selectionExists ? "Explain selection" : "Select text to explain"}
+                    className="hidden md:inline-flex"
+                  >
+                    <Highlighter className="h-4 w-4 mr-2" />
+                    Explain selection
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => requestAiRun("page")}
+                    aria-label="Explain section"
+                    title="Explain section"
+                    className="hidden md:inline-flex"
+                  >
+                    <BookOpenText className="h-4 w-4 mr-2" />
+                    Explain section
+                  </Button>
+                </div>
+
+                {isSearchOpen && (
+                  <div className="absolute left-4 top-full mt-2 z-50 w-[min(520px,calc(100vw-2rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant={searchMode === "normal" ? "default" : "outline"}
+                        onClick={() => setSearchMode("normal")}
+                        className="h-8"
+                      >
+                        Normal
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={searchMode === "semantic" ? "default" : "outline"}
+                        onClick={() => setSearchMode("semantic")}
+                        className="h-8"
+                        title="Semantic search (vector matches) - not implemented yet"
+                      >
+                        Semantic
+                      </Button>
+                      <div className="flex-1" />
+                      <Button type="button" variant="ghost" size="icon" onClick={() => setIsSearchOpen(false)} aria-label="Close search">
+                        <span className="text-lg leading-none">×</span>
+                      </Button>
+                    </div>
+
+                    <div className="mt-3 flex gap-2">
+                      <Input
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={searchMode === "semantic" ? "Search by meaning..." : "Search text..."}
+                        className="h-9 flex-1"
+                      />
+                      <Button type="button" disabled={!searchQuery.trim()} title="Search (not implemented yet)">
+                        Search
+                      </Button>
+                    </div>
+
+                    <div className="mt-3 text-sm text-muted-foreground">
+                      {searchMode === "semantic" ? (
+                        <p>Semantic search results will appear here (top vector matches). Not implemented yet.</p>
+                      ) : (
+                        <p>Text search results will appear here. Not implemented yet.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -476,6 +726,7 @@ export function PdfReader({ pdfUrl, fileName, bookId }: PdfReaderProps) {
             bookId={bookId}
             bookType="pdf"
             mobileDrawerMinMode={selectionExists ? "quick" : "closed"}
+              requestRun={aiRequest}
           />
         )}
       </div>

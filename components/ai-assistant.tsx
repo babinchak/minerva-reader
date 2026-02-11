@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AIRail } from "@/components/ai-rail";
 import { AIBottomDrawer } from "@/components/ai-bottom-drawer";
 import { AIAgentPanel } from "@/components/ai-agent-pane";
@@ -12,6 +12,11 @@ export interface AIAssistantProps {
   rawManifest?: { readingOrder?: Array<{ href?: string }> };
   bookType: "epub" | "pdf";
   mobileDrawerMinMode?: "closed" | "quick";
+  /**
+   * Optional external trigger to open the desktop AI pane and run an action.
+   * Used by reader toolbars (e.g. PDF) to drive "Explain selection/section".
+   */
+  requestRun?: { nonce: number; action: "page" | "selection" } | null;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -34,18 +39,32 @@ export function AIAssistant(props: AIAssistantProps) {
   return <DesktopAIAssistant {...props} />;
 }
 
-function DesktopAIAssistant({ selectedText, bookId, rawManifest, bookType }: AIAssistantProps) {
+function DesktopAIAssistant({
+  selectedText,
+  bookId,
+  rawManifest,
+  bookType,
+  requestRun = null,
+}: AIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [autoRun, setAutoRun] = useState<{ nonce: number; action: "page" | "selection" } | null>(
     null
   );
   const nonceRef = useRef(0);
+  const lastExternalNonceRef = useRef<number | null>(null);
 
   const openAndRun = (action: "page" | "selection") => {
     setIsOpen(true);
     nonceRef.current += 1;
     setAutoRun({ nonce: nonceRef.current, action });
   };
+
+  useEffect(() => {
+    if (!requestRun) return;
+    if (requestRun.nonce === lastExternalNonceRef.current) return;
+    lastExternalNonceRef.current = requestRun.nonce;
+    openAndRun(requestRun.action);
+  }, [requestRun]);
 
   // PDF: docked + resizable width. EPUB: overlay fixed drawer.
   const isPdf = bookType === "pdf";
