@@ -17,6 +17,15 @@ export interface AIAssistantProps {
    * Used by reader toolbars (e.g. PDF) to drive "Explain selection/section".
    */
   requestRun?: { nonce: number; action: "page" | "selection" } | null;
+  /**
+   * Optional external trigger to open the desktop AI pane without auto-running.
+   * Used by reader toolbars (e.g. PDF) "Ask Minerva" button.
+   */
+  requestOpen?: { nonce: number } | null;
+  /**
+   * Called when the desktop AI pane opens or closes. Used to hide toolbar buttons (e.g. "Ask Minerva") when the pane is open.
+   */
+  onOpenChange?: (open: boolean) => void;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -45,13 +54,20 @@ function DesktopAIAssistant({
   rawManifest,
   bookType,
   requestRun = null,
+  requestOpen = null,
+  onOpenChange,
 }: AIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
   const [autoRun, setAutoRun] = useState<{ nonce: number; action: "page" | "selection" } | null>(
     null
   );
   const nonceRef = useRef(0);
   const lastExternalNonceRef = useRef<number | null>(null);
+  const lastOpenNonceRef = useRef<number | null>(null);
 
   const openAndRun = (action: "page" | "selection") => {
     setIsOpen(true);
@@ -65,6 +81,13 @@ function DesktopAIAssistant({
     lastExternalNonceRef.current = requestRun.nonce;
     openAndRun(requestRun.action);
   }, [requestRun]);
+
+  useEffect(() => {
+    if (!requestOpen) return;
+    if (requestOpen.nonce === lastOpenNonceRef.current) return;
+    lastOpenNonceRef.current = requestOpen.nonce;
+    setIsOpen(true);
+  }, [requestOpen]);
 
   // PDF: docked + resizable width. EPUB: overlay fixed drawer.
   const isPdf = bookType === "pdf";
@@ -104,7 +127,7 @@ function DesktopAIAssistant({
 
   return (
     <>
-      {!isOpen && (
+      {!isOpen && bookType !== "pdf" && (
         <AIRail
           selectedText={selectedText}
           onActivate={(action) => openAndRun(action)}

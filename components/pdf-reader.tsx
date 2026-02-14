@@ -62,6 +62,9 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
   const [aiRequest, setAiRequest] = useState<{ nonce: number; action: "page" | "selection" } | null>(
     null,
   );
+  const openAiNonceRef = useRef(0);
+  const [openAiRequest, setOpenAiRequest] = useState<{ nonce: number } | null>(null);
+  const [isAiPaneOpen, setIsAiPaneOpen] = useState(false);
 
   // Global PDF zoom (applies to ALL pages by re-rendering at a larger viewport scale).
   // This avoids per-page transforms that can cause "chopped" edges and makes scroll work naturally.
@@ -511,6 +514,21 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
                     <BookOpenText className="h-4 w-4 mr-2" />
                     Explain page
                   </Button>
+
+                  {!isAiPaneOpen && (
+                    <Button
+                      variant="default"
+                      onClick={() => {
+                        openAiNonceRef.current += 1;
+                        setOpenAiRequest({ nonce: openAiNonceRef.current });
+                      }}
+                      aria-label="Ask Minerva"
+                      title="Ask Minerva"
+                      className="hidden md:inline-flex"
+                    >
+                      Ask Minerva
+                    </Button>
+                  )}
                 </div>
 
                 {isSearchOpen && (
@@ -782,7 +800,9 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
             bookId={bookId}
             bookType="pdf"
             mobileDrawerMinMode={selectionExists ? "quick" : "closed"}
-              requestRun={aiRequest}
+            requestRun={aiRequest}
+            requestOpen={openAiRequest}
+            onOpenChange={setIsAiPaneOpen}
           />
         )}
       </div>

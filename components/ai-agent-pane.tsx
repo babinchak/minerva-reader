@@ -4,10 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Send, Bot, Plus, MessageSquare } from "lucide-react";
-import { ThemeSwitcher } from "@/components/theme-switcher";
+import { X, Send, Plus, Clock, MessageSquare } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   getCurrentSelectionPosition,
   querySummariesForPosition,
@@ -848,49 +853,62 @@ export function AIAgentPanel({
       {showHeader && (
         <div className="flex flex-col border-b border-border">
           <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-2">
-              <Bot className="h-5 w-5 text-primary" />
-            </div>
             <div className="flex items-center gap-1">
-              <ThemeSwitcher />
-              {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleNewChat}
+                className="h-8 w-8 text-foreground"
+                aria-label="New chat"
+                title="New chat"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-foreground"
+                    aria-label="Recent chats"
+                    title="Recent chats"
+                  >
+                    <Clock className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+                  {chats.length === 0 ? (
+                    <div className="px-2 py-4 text-sm text-muted-foreground">
+                      No recent chats
+                    </div>
+                  ) : (
+                    chats.map((chat) => (
+                      <DropdownMenuItem
+                        key={chat.id}
+                        onClick={() => handleSelectChat(chat.id)}
+                        className="flex items-center gap-2"
+                      >
+                        <MessageSquare className="h-4 w-4 shrink-0" />
+                        <span className="truncate">
+                          {new Date(chat.created_at).toLocaleDateString()}
+                        </span>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            {onClose && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="h-8 w-8"
+                className="h-8 w-8 text-foreground"
                 aria-label="Close AI assistant"
               >
                 <X className="h-4 w-4" />
               </Button>
-              )}
-            </div>
-          </div>
-          {/* Chat list */}
-          <div className="px-2 pb-2 flex flex-col gap-1 max-h-32 overflow-y-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start gap-2 text-muted-foreground hover:text-foreground"
-              onClick={handleNewChat}
-            >
-              <Plus className="h-4 w-4" />
-              New chat
-            </Button>
-            {chats.map((chat) => (
-              <Button
-                key={chat.id}
-                variant={activeChatId === chat.id ? "secondary" : "ghost"}
-                size="sm"
-                className="justify-start gap-2 text-muted-foreground hover:text-foreground"
-                onClick={() => handleSelectChat(chat.id)}
-              >
-                <MessageSquare className="h-4 w-4 shrink-0" />
-                <span className="truncate">
-                  {new Date(chat.created_at).toLocaleDateString()}
-                </span>
-              </Button>
-            ))}
+            )}
           </div>
         </div>
       )}
