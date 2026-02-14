@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Send, Bot } from "lucide-react";
+import { X, Send, Bot, Plus, MessageSquare } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -144,77 +144,98 @@ export function AIAgentPanel({
     selectedCharCount > MAX_EXPLAIN_SELECTION_CHARS;
   const overLimitBy = Math.max(0, selectedCharCount - MAX_EXPLAIN_SELECTION_CHARS);
 
-  const [messages, setMessages] = useState<AIMessage[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: "Hello! I'm your reading assistant. I can help you understand the book, answer questions, summarize sections, and more. What would you like to know?",
-      timestamp: new Date(),
-    },
-  ]);
+  const INITIAL_GREETING: AIMessage = {
+    id: "greeting",
+    role: "assistant",
+    content:
+      "Hello! I'm your reading assistant. I can help you understand the book, answer questions, summarize sections, and more. What would you like to know?",
+    timestamp: new Date(),
+  };
+
+  const [messages, setMessages] = useState<AIMessage[]>([INITIAL_GREETING]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [bookTitle, setBookTitle] = useState<string>("");
   const [bookAuthor, setBookAuthor] = useState<string>("");
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [chats, setChats] = useState<{ id: string; book_id: string | null; created_at: string }[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
   const supabase = createClient();
 
   // Helper function to handle streaming response
-  const handleStreamingResponse = useCallback(async (
-    response: Response,
-    assistantMessageId: string
-  ) => {
-    if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
-    }
+  const handleStreamingResponse = useCallback(
+    async (
+      response: Response,
+      assistantMessageId: string,
+      onStreamComplete?: (content: string) => void | Promise<void>
+    ) => {
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
 
-    if (!response.body) {
-      throw new Error("No response body");
-    }
+      if (!response.body) {
+        throw new Error("No response body");
+      }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullContent = "";
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6);
-          if (data === "[DONE]") {
-            setIsLoading(false);
-            setShowInput(true);
-            onActionComplete?.();
-            return;
-          }
-
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.content) {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMessageId
-                    ? { ...msg, content: msg.content + parsed.content }
-                    : msg
-                )
-              );
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data === "[DONE]") {
+              setIsLoading(false);
+              setShowInput(true);
+              await onStreamComplete?.(fullContent);
+              onActionComplete?.();
+              return;
             }
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                fullContent += parsed.content;
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: msg.content + parsed.content }
+                      : msg
+                  )
+                );
+              }
             } catch {
               // Ignore JSON parse errors for incomplete chunks
             }
+          }
         }
       }
-    }
 
-    setIsLoading(false);
-    setShowInput(true);
-    onActionComplete?.();
-  }, [onActionComplete]);
+      setIsLoading(false);
+      setShowInput(true);
+      await onStreamComplete?.(fullContent);
+      onActionComplete?.();
+    },
+    [onActionComplete]
+  );
+
+  // Fetch current user
+  useEffect(() => {
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUserId(user?.id ?? null);
+    };
+    init();
+  }, [supabase]);
 
   // Fetch book metadata when bookId is available
   useEffect(() => {
@@ -225,34 +246,186 @@ export function AIAgentPanel({
           .select("title, author")
           .eq("id", bookId)
           .single();
-        
+
         if (!error && data) {
           setBookTitle(data.title || "");
           setBookAuthor(data.author || "");
         }
       };
-      
+
       fetchBookMetadata();
     }
   }, [bookId, supabase]);
+
+  // Fetch chats for user (filter by bookId when in a book)
+  useEffect(() => {
+    if (!userId) {
+      setChats([]);
+      return;
+    }
+    const fetchChats = async () => {
+      let q = supabase
+        .from("chats")
+        .select("id, book_id, created_at")
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false });
+      if (bookId) {
+        q = q.or(`book_id.eq.${bookId},book_id.is.null`);
+      }
+      const { data } = await q;
+      setChats(data ?? []);
+    };
+    fetchChats();
+  }, [userId, bookId, supabase]);
+
+  // Load messages when selecting a chat
+  useEffect(() => {
+    if (!activeChatId) {
+      setMessages([INITIAL_GREETING]);
+      return;
+    }
+    const loadMessages = async () => {
+      const { data } = await supabase
+        .from("chat_messages")
+        .select("id, role, content, selection_position_label, selection_position_title, created_at")
+        .eq("chat_id", activeChatId)
+        .order("message_index", { ascending: true });
+      if (data && data.length > 0) {
+        setMessages(
+          data.map((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            timestamp: new Date(m.created_at),
+            selectionPositionLabel: m.selection_position_label ?? undefined,
+            selectionPositionTitle: m.selection_position_title ?? undefined,
+          }))
+        );
+      } else {
+        setMessages([INITIAL_GREETING]);
+      }
+    };
+    loadMessages();
+  }, [activeChatId, supabase]);
+
+  const handleNewChat = () => {
+    setActiveChatId(null);
+    setMessages([INITIAL_GREETING]);
+  };
+
+  const handleSelectChat = (chatId: string) => {
+    setActiveChatId(chatId);
+  };
+
+  const persistUserMessage = async (
+    chatId: string,
+    content: string,
+    messageIndex: number,
+    selectionPositionLabel?: string,
+    selectionPositionTitle?: string
+  ) => {
+    await supabase.from("chat_messages").insert({
+      chat_id: chatId,
+      role: "user",
+      content,
+      message_index: messageIndex,
+      selection_position_label: selectionPositionLabel ?? null,
+      selection_position_title: selectionPositionTitle ?? null,
+    });
+  };
+
+  const persistAssistantMessage = async (
+    chatId: string,
+    content: string,
+    messageIndex: number
+  ) => {
+    await supabase.from("chat_messages").insert({
+      chat_id: chatId,
+      role: "assistant",
+      content,
+      message_index: messageIndex,
+    });
+  };
+
+  const ensureChat = useCallback(
+    async (
+      forBookId: string | null
+    ): Promise<{ chatId: string; isExisting: boolean } | null> => {
+      if (!userId) return null;
+
+      // If we have an active chat, check if it's for this book (from local list or DB)
+      if (activeChatId) {
+        const fromList = chats.find((c) => c.id === activeChatId);
+        if (fromList && fromList.book_id === forBookId) {
+          return { chatId: activeChatId, isExisting: true };
+        }
+        // Not in list or wrong book - fetch from DB to be sure
+        const { data: chatRow } = await supabase
+          .from("chats")
+          .select("book_id")
+          .eq("id", activeChatId)
+          .single();
+        if (chatRow && chatRow.book_id === forBookId) {
+          return { chatId: activeChatId, isExisting: true };
+        }
+      }
+
+      // No suitable active chat - try to use the most recent chat for this book
+      let existingQuery = supabase
+        .from("chats")
+        .select("id, book_id, created_at")
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (forBookId === null) {
+        existingQuery = existingQuery.is("book_id", null);
+      } else {
+        existingQuery = existingQuery.eq("book_id", forBookId);
+      }
+      const { data: existingChats } = await existingQuery;
+      if (existingChats && existingChats.length > 0) {
+        const chat = existingChats[0];
+        setActiveChatId(chat.id);
+        setChats((prev) => {
+          if (prev.some((c) => c.id === chat.id)) return prev;
+          return [{ id: chat.id, book_id: chat.book_id, created_at: chat.created_at }, ...prev];
+        });
+        return { chatId: chat.id, isExisting: true };
+      }
+
+      // Create new chat
+      const { data, error } = await supabase
+        .from("chats")
+        .insert({
+          user_id: userId,
+          book_id: forBookId,
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      if (!data?.id) throw new Error("Failed to create chat");
+      setActiveChatId(data.id);
+      setChats((prev) => [
+        { id: data.id, book_id: forBookId, created_at: new Date().toISOString() },
+        ...prev,
+      ]);
+      return { chatId: data.id, isExisting: false };
+    },
+    [activeChatId, chats, userId, supabase]
+  );
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
     onActionStart?.();
 
+    const userInput = input;
     const userMessage: AIMessage = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: userInput,
       timestamp: new Date(),
     };
 
-    const userInput = input;
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
-
-    // Create assistant message placeholder
     const assistantMessageId = (Date.now() + 1).toString();
     const assistantMessage: AIMessage = {
       id: assistantMessageId,
@@ -260,19 +433,55 @@ export function AIAgentPanel({
       content: "",
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, assistantMessage]);
+
+    setInput("");
+    setIsLoading(true);
 
     try {
-      // Prepare messages for API (exclude the empty assistant message we just added)
+      let chatId: string | null = null;
+      let msgCount = 0;
+      let historyForAPI: { role: "user" | "assistant"; content: string }[] = [];
+
+      if (userId) {
+        const result = await ensureChat(bookId ?? null);
+        if (result) {
+          chatId = result.chatId;
+          if (result.isExisting) {
+            const { data: existingMsgs } = await supabase
+              .from("chat_messages")
+              .select("id, role, content, selection_position_label, selection_position_title, created_at")
+              .eq("chat_id", result.chatId)
+              .order("message_index", { ascending: true });
+            msgCount = existingMsgs?.length ?? 0;
+            const existingAsAIMessages: AIMessage[] = (existingMsgs ?? []).map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              timestamp: new Date(m.created_at),
+              selectionPositionLabel: m.selection_position_label ?? undefined,
+              selectionPositionTitle: m.selection_position_title ?? undefined,
+            }));
+            historyForAPI = existingAsAIMessages.map((m) => ({ role: m.role, content: m.content }));
+            setMessages([...existingAsAIMessages, userMessage, assistantMessage]);
+          } else {
+            setMessages([userMessage, assistantMessage]);
+          }
+          await persistUserMessage(chatId, userInput, msgCount);
+        }
+      } else {
+        historyForAPI = messages.map((m) => ({ role: m.role, content: m.content }));
+        setMessages((prev) => [...prev, userMessage, assistantMessage]);
+      }
+
+      const userMsgIndex = msgCount;
+      const assistantMsgIndex = msgCount + 1;
+
       const selectionForSend =
         includeSelectionContextOnSend && getSelectedText()
           ? getSelectedText()
           : "";
       const messagesForAPI = [
-        ...messages.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
+        ...historyForAPI,
         {
           role: "user" as const,
           content:
@@ -290,7 +499,11 @@ export function AIAgentPanel({
         body: JSON.stringify({ messages: messagesForAPI }),
       });
 
-      await handleStreamingResponse(response, assistantMessageId);
+      await handleStreamingResponse(response, assistantMessageId, async (content) => {
+        if (chatId) {
+          await persistAssistantMessage(chatId, content, assistantMsgIndex);
+        }
+      });
     } catch (error) {
       console.error("Error calling chat API:", error);
       setMessages((prev) =>
@@ -500,7 +713,6 @@ export function AIAgentPanel({
     } from the book:\n\n"${explainBodyText}"\n\nProvide a clear and helpful explanation in the context of the book.`;
 
 
-    // Add user message (just "Explain text" for display)
     const userMessage: AIMessage = {
       id: Date.now().toString(),
       role: "user",
@@ -509,9 +721,7 @@ export function AIAgentPanel({
       selectionPositionLabel,
       selectionPositionTitle,
     };
-    setMessages((prev) => [...prev, userMessage]);
 
-    // Create assistant message placeholder
     const assistantMessageId = (Date.now() + 1).toString();
     const assistantMessage: AIMessage = {
       id: assistantMessageId,
@@ -519,15 +729,54 @@ export function AIAgentPanel({
       content: "",
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, assistantMessage]);
 
     try {
-      // Prepare messages for API - include the full prompt as the user message
+      let chatId: string | null = null;
+      let msgCount = 0;
+      let historyForAPI: { role: "user" | "assistant"; content: string }[] = [];
+
+      if (userId) {
+        const result = await ensureChat(bookId ?? null);
+        if (result) {
+          chatId = result.chatId;
+          if (result.isExisting) {
+            const { data: existingMsgs } = await supabase
+              .from("chat_messages")
+              .select("id, role, content, selection_position_label, selection_position_title, created_at")
+              .eq("chat_id", result.chatId)
+              .order("message_index", { ascending: true });
+            msgCount = existingMsgs?.length ?? 0;
+            const existingAsAIMessages: AIMessage[] = (existingMsgs ?? []).map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              timestamp: new Date(m.created_at),
+              selectionPositionLabel: m.selection_position_label ?? undefined,
+              selectionPositionTitle: m.selection_position_title ?? undefined,
+            }));
+            historyForAPI = existingAsAIMessages.map((m) => ({ role: m.role, content: m.content }));
+            setMessages([...existingAsAIMessages, userMessage, assistantMessage]);
+          } else {
+            setMessages([userMessage, assistantMessage]);
+          }
+          await persistUserMessage(
+            chatId,
+            explainUserMessage,
+            msgCount,
+            selectionPositionLabel,
+            selectionPositionTitle
+          );
+        }
+      } else {
+        historyForAPI = messages.map((m) => ({ role: m.role, content: m.content }));
+        setMessages((prev) => [...prev, userMessage, assistantMessage]);
+      }
+
+      const userMsgIndex = msgCount;
+      const assistantMsgIndex = msgCount + 1;
+
       const messagesForAPI = [
-        ...messages.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
+        ...historyForAPI,
         { role: "user" as const, content: prompt },
       ];
 
@@ -539,7 +788,11 @@ export function AIAgentPanel({
         body: JSON.stringify({ messages: messagesForAPI }),
       });
 
-      await handleStreamingResponse(response, assistantMessageId);
+      await handleStreamingResponse(response, assistantMessageId, async (content) => {
+        if (chatId) {
+          await persistAssistantMessage(chatId, content, assistantMsgIndex);
+        }
+      });
     } catch (error) {
       console.error("Error calling chat API:", error);
       setMessages((prev) =>
@@ -569,6 +822,7 @@ export function AIAgentPanel({
     rawManifest,
     onActionComplete,
     onActionStart,
+    ensureChat,
   ]);
 
   useEffect(() => {
@@ -591,21 +845,49 @@ export function AIAgentPanel({
     >
       {/* Header */}
       {showHeader && (
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" />
+        <div className="flex flex-col border-b border-border">
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+            </div>
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                className="h-8 w-8"
+                aria-label="Close AI assistant"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
-          {onClose && (
+          {/* Chat list */}
+          <div className="px-2 pb-2 flex flex-col gap-1 max-h-32 overflow-y-auto">
             <Button
               variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-8 w-8"
-              aria-label="Close AI assistant"
+              size="sm"
+              className="justify-start gap-2 text-muted-foreground hover:text-foreground"
+              onClick={handleNewChat}
             >
-              <X className="h-4 w-4" />
+              <Plus className="h-4 w-4" />
+              New chat
             </Button>
-          )}
+            {chats.map((chat) => (
+              <Button
+                key={chat.id}
+                variant={activeChatId === chat.id ? "secondary" : "ghost"}
+                size="sm"
+                className="justify-start gap-2 text-muted-foreground hover:text-foreground"
+                onClick={() => handleSelectChat(chat.id)}
+              >
+                <MessageSquare className="h-4 w-4 shrink-0" />
+                <span className="truncate">
+                  {new Date(chat.created_at).toLocaleDateString()}
+                </span>
+              </Button>
+            ))}
+          </div>
         </div>
       )}
 
