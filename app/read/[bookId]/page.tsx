@@ -41,10 +41,10 @@ export default async function ReadBookPage({ params }: PageProps) {
     );
   }
 
-  // Verify user has access to this book
+  // Verify user has access and fetch reading position
   const { data: userBook } = await supabase
     .from("user_books")
-    .select("id")
+    .select("id, current_page, reading_position")
     .eq("user_id", user.id)
     .eq("book_id", bookId)
     .single();
@@ -94,6 +94,7 @@ export default async function ReadBookPage({ params }: PageProps) {
         pdfUrl={signedUrl.signedUrl}
         fileName={book.file_name || book.title}
         bookId={bookId}
+        initialPage={userBook.current_page ?? undefined}
       />
     );
   }
@@ -151,5 +152,11 @@ export default async function ReadBookPage({ params }: PageProps) {
     selfHref = `${supabaseUrl}/storage/v1/object/public/readium-manifests/${manifestPath}`;
   }
 
-  return <BookReader rawManifest={manifest} selfHref={selfHref} />;
+  return (
+    <BookReader
+      rawManifest={manifest}
+      selfHref={selfHref}
+      initialReadingPosition={userBook.reading_position ?? undefined}
+    />
+  );
 }

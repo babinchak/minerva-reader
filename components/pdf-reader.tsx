@@ -32,9 +32,10 @@ interface PdfReaderProps {
   pdfUrl: string;
   fileName?: string | null;
   bookId: string;
+  initialPage?: number;
 }
 
-export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
+export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,8 +49,8 @@ export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageInput, setPageInput] = useState("1");
+  const [currentPage, setCurrentPage] = useState(initialPage ?? 1);
+  const [pageInput, setPageInput] = useState(String(initialPage ?? 1));
   const [isEditingPage, setIsEditingPage] = useState(false);
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -180,6 +181,24 @@ export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
     return () => document.removeEventListener("mousedown", onDown);
   }, [isSearchOpen]);
 
+  // Debounced save of reading position
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!bookId || currentPage < 1) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
+      fetch(`/api/books/${bookId}/reading-position`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPage }),
+      }).catch(() => {});
+    }, 1000);
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [bookId, currentPage]);
+
   const requestAiRun = (action: "page" | "selection") => {
     aiNonceRef.current += 1;
     setAiRequest({ nonce: aiNonceRef.current, action });
@@ -281,6 +300,39 @@ export function PdfReader({ pdfUrl, bookId }: PdfReaderProps) {
       }
     };
   }, [pdfUrl]);
+
+  // Scroll to initial page when PDF loads (pages may render async)
+  const initialPageScrolledRef = useRef(false);
+  useEffect(() => {
+    if (!pdfDoc || !initialPage || initialPage < 1 || initialPageScrolledRef.current) return;
+    let attempts = 0;
+    const maxAttempts = 10;
+    const tryScroll = () => {
+      attempts += 1;
+      const viewer = viewerRef.current;
+      const scroller = scrollRef.current;
+      if (!viewer || !scroller) {
+        if (attempts < maxAttempts) setTimeout(tryScroll, 50);
+        return;
+      }
+      const pages = Array.from(viewer.querySelectorAll<HTMLElement>(".page"));
+      if (pages.length === 0) {
+        if (attempts < maxAttempts) setTimeout(tryScroll, 50);
+        return;
+      }
+      initialPageScrolledRef.current = true;
+      const clamped = Math.max(1, Math.min(initialPage, pages.length));
+      const el = pages[clamped - 1];
+      const scrollerRect = scroller.getBoundingClientRect();
+      const pageRect = el.getBoundingClientRect();
+      const deltaY = pageRect.top - scrollerRect.top;
+      scroller.scrollTop = scroller.scrollTop + deltaY - 12;
+      setCurrentPage(clamped);
+      setPageInput(String(clamped));
+    };
+    const id = setTimeout(tryScroll, 50);
+    return () => clearTimeout(id);
+  }, [pdfDoc, initialPage]);
 
   useEffect(() => {
     // iOS Safari emits non-standard gesture events for pinch.
