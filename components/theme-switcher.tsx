@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 
 const ThemeSwitcher = () => {
   const [mounted, setMounted] = useState(false);
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
 
   // useEffect only runs on the client, so now we can safely show the UI
   useEffect(() => {
@@ -27,25 +27,22 @@ const ThemeSwitcher = () => {
 
   const ICON_SIZE = 16;
 
+  // Show sun/moon based on actual resolved theme (what user sees), not the system icon
+  const isDark = resolvedTheme === "dark";
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size={"sm"}>
-          {theme === "light" ? (
-            <Sun
-              key="light"
-              size={ICON_SIZE}
-              className={"text-muted-foreground"}
-            />
-          ) : theme === "dark" ? (
+          {isDark ? (
             <Moon
               key="dark"
               size={ICON_SIZE}
               className={"text-muted-foreground"}
             />
           ) : (
-            <Laptop
-              key="system"
+            <Sun
+              key="light"
               size={ICON_SIZE}
               className={"text-muted-foreground"}
             />
