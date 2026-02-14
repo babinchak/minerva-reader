@@ -1,7 +1,14 @@
+import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookOpen, User, Calendar } from "lucide-react";
 import Link from "next/link";
+
+/** Format author string for display: split by pipe, join with ", " */
+function formatAuthorDisplay(author: string | null): string {
+  if (!author) return "";
+  return author.split(AUTHOR_DELIMITER).map((a) => a.trim()).filter(Boolean).join(", ");
+}
 
 export async function BooksList() {
   const supabase = await createClient();
@@ -167,7 +174,7 @@ export async function BooksList() {
                 {book.author && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                     <User className="h-4 w-4" />
-                    <span className="truncate">{book.author}</span>
+                    <span className="truncate">{formatAuthorDisplay(book.author)}</span>
                   </div>
                 )}
                 <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">

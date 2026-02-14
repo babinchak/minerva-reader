@@ -1,3 +1,4 @@
+import { extractPdfMetadata } from "@/lib/pdf-metadata";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -107,11 +108,30 @@ export async function POST(request: NextRequest) {
     const bookId = crypto.randomUUID();
     const extension = bookType === "pdf" ? "pdf" : "epub";
     const storagePath = `books/${user.id}/${bookId}.${extension}`;
-    
-    // Create book record
-    const bookData = {
+
+    // For PDFs: extract metadata (title, author, published_at) and first page as cover
+    let pdfMetadata: Awaited<ReturnType<typeof extractPdfMetadata>> | null = null;
+    let coverPng: Buffer | null = null;
+    if (isPdf) {
+      try {
+        pdfMetadata = await extractPdfMetadata(arrayBuffer);
+        // Dynamic import to avoid pdf-to-img path resolution issues at build time
+        const { extractPdfFirstPageAsPng } = await import("@/lib/pdf-cover");
+        coverPng = await extractPdfFirstPageAsPng(arrayBuffer);
+        if (coverPng) {
+          console.log("[UPLOAD] PDF cover extracted:", coverPng.length, "bytes");
+        } else {
+          console.warn("[UPLOAD] PDF cover extraction returned null");
+        }
+      } catch (err) {
+        console.warn("[UPLOAD] PDF metadata/cover extraction failed (non-fatal):", err);
+      }
+    }
+
+    const fallbackTitle = file.name.replace(/\.(epub|pdf)$/i, "");
+    const bookData: Record<string, unknown> = {
       id: bookId,
-      title: file.name.replace(/\.(epub|pdf)$/i, ""),
+      title: pdfMetadata?.title || fallbackTitle,
       file_size: file.size,
       file_checksum: hashHex,
       uploaded_by: user.id,
@@ -120,10 +140,37 @@ export async function POST(request: NextRequest) {
       book_type: bookType,
       mime_type: mimeType,
     };
-    
+    if (pdfMetadata?.author != null) bookData.author = pdfMetadata.author;
+    if (pdfMetadata?.authorSortName != null) bookData.author_sort_name = pdfMetadata.authorSortName;
+    if (pdfMetadata?.publishedAt != null) bookData.published_at = pdfMetadata.publishedAt;
+
+    // Upload cover to storage before insert (for PDFs), so we can include cover_path in the row
+    let coverPath: string | null = null;
+    if (isPdf && coverPng && coverPng.length > 0) {
+      try {
+        coverPath = `covers/${bookId}.png`;
+        const { error: coverUploadError } = await serviceSupabase.storage
+          .from("covers")
+          .upload(coverPath, coverPng, {
+            contentType: "image/png",
+            upsert: true,
+          });
+        if (!coverUploadError) {
+          bookData.cover_path = coverPath;
+          console.log("[UPLOAD] Cover uploaded:", coverPath);
+        } else {
+          console.warn("[UPLOAD] Cover upload failed:", coverUploadError);
+          coverPath = null;
+        }
+      } catch (coverErr) {
+        console.warn("[UPLOAD] Cover upload failed (non-fatal):", coverErr);
+      }
+    }
+
     console.log("[UPLOAD] Inserting book with data:", {
       id: bookId,
       title: bookData.title,
+      author: bookData.author,
       file_size: bookData.file_size,
       has_checksum: !!bookData.file_checksum,
       uploaded_by: bookData.uploaded_by,
@@ -164,8 +211,11 @@ export async function POST(request: NextRequest) {
         hint: bookError.hint,
       });
 
-      // Clean up storage object if DB write fails (best effort)
+      // Clean up storage objects if DB write fails (best effort)
       await serviceSupabase.storage.from(bucketName).remove([storagePath]);
+      if (coverPath) {
+        await serviceSupabase.storage.from("covers").remove([coverPath]);
+      }
 
       // Handle unique constraint violation (duplicate checksum)
       // This can happen in race conditions where two uploads happen simultaneously
