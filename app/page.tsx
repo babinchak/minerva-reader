@@ -13,9 +13,9 @@ async function HomeContent() {
   if (!hasEnvVars) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
-        <BookOpen className="h-16 w-16 text-white/70" />
-        <h1 className="text-4xl font-bold text-white">Hyper Reader</h1>
-        <p className="text-lg text-white/70 max-w-md">
+        <BookOpen className="h-16 w-16 text-muted-foreground" />
+        <h1 className="text-4xl font-bold text-foreground">Hyper Reader</h1>
+        <p className="text-lg text-muted-foreground max-w-md">
           Your personal EPUB and PDF library. Upload and read your books in one place.
         </p>
         <Suspense>
@@ -33,8 +33,8 @@ async function HomeContent() {
     return (
       <div className="w-full max-w-2xl space-y-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2 text-white">My Library</h1>
-          <p className="text-white/70">
+          <h1 className="text-3xl font-bold mb-2 text-foreground">My Library</h1>
+          <p className="text-muted-foreground">
             Upload EPUB or PDF books to your personal library
           </p>
         </div>
@@ -47,9 +47,9 @@ async function HomeContent() {
   // User is not logged in - show landing page
   return (
     <div className="flex flex-col items-center gap-4 text-center">
-      <BookOpen className="h-16 w-16 text-white/70" />
-      <h1 className="text-4xl font-bold text-white">Hyper Reader</h1>
-      <p className="text-lg text-white/70 max-w-md">
+      <BookOpen className="h-16 w-16 text-muted-foreground" />
+      <h1 className="text-4xl font-bold text-foreground">Hyper Reader</h1>
+      <p className="text-lg text-muted-foreground max-w-md">
         Your personal EPUB and PDF library. Upload and read your books in one place.
       </p>
       <Suspense>
@@ -61,23 +61,26 @@ async function HomeContent() {
 
 export default function Home() {
   return (
-    <main className="min-h-screen flex flex-col items-center text-white">
+    <main className="min-h-screen flex flex-col items-center text-foreground">
       <div className="flex-1 w-full flex flex-col gap-20 items-center">
-        <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
+        <nav className="w-full flex justify-center border-b border-border h-16">
           <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
             <div className="flex gap-5 items-center font-semibold">
-              <Link href={"/"} className="flex items-center gap-2 text-white">
+              <Link href={"/"} className="flex items-center gap-2 text-foreground">
                 <BookOpen className="h-5 w-5" />
                 Hyper Reader
               </Link>
             </div>
-            {!hasEnvVars ? (
-              <EnvVarWarning />
-            ) : (
-              <Suspense>
-                <AuthButton />
-              </Suspense>
-            )}
+            <div className="flex items-center gap-2">
+              {!hasEnvVars ? (
+                <EnvVarWarning />
+              ) : (
+                <Suspense>
+                  <AuthButton />
+                </Suspense>
+              )}
+              <ThemeSwitcher />
+            </div>
           </div>
         </nav>
         <div className="flex-1 flex flex-col gap-12 max-w-5xl p-5 items-center justify-center">
@@ -86,8 +89,8 @@ export default function Home() {
           </Suspense>
         </div>
 
-        <footer className="w-full flex items-center justify-center border-t mx-auto text-center text-xs gap-8 py-16">
-          <ThemeSwitcher />
+        <footer className="w-full flex items-center justify-center border-t border-border mx-auto text-center text-xs gap-8 py-16 text-muted-foreground">
+          Hyper Reader
         </footer>
       </div>
     </main>

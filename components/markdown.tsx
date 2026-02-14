@@ -31,7 +31,7 @@ export function Markdown({ content, className }: MarkdownProps) {
               {...props}
               target="_blank"
               rel="noreferrer"
-              className="underline underline-offset-2 text-blue-700 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 break-words"
+              className="underline underline-offset-2 text-primary hover:text-primary/90 break-words"
             >
               {children}
             </a>
@@ -61,7 +61,7 @@ export function Markdown({ content, className }: MarkdownProps) {
           pre: ({ children, ...props }) => (
             <pre
               {...props}
-              className="my-2 overflow-x-auto rounded-md bg-zinc-950 p-3 text-xs text-zinc-100"
+              className="my-2 overflow-x-auto rounded-md bg-muted p-3 text-xs text-foreground"
             >
               {children}
             </pre>
@@ -79,7 +79,7 @@ export function Markdown({ content, className }: MarkdownProps) {
               return (
                 <code
                   {...props}
-                  className="rounded bg-zinc-200 px-1 py-0.5 font-mono text-[0.85em] text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                  className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
                 >
                   {children}
                 </code>

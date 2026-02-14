@@ -2,6 +2,7 @@
 
 import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export interface AIRailProps {
   selectedText?: string;
@@ -14,7 +15,8 @@ export function AIRail({ selectedText, onActivate }: AIRailProps) {
   const title = selectionExists ? "Explain selection" : "Explain page";
 
   return (
-    <div className="fixed right-0 top-1/2 z-50 -translate-y-1/2">
+    <div className="fixed right-0 top-1/2 z-50 -translate-y-1/2 flex flex-col items-end gap-2">
+      <ThemeSwitcher />
       <Button
         type="button"
         variant="outline"

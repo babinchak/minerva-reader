@@ -34,7 +34,7 @@ export async function BooksList() {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          <p className="text-sm text-red-600 dark:text-red-400">
+          <p className="text-sm text-destructive">
             Error loading books: {linksError.message}
           </p>
         </CardContent>
@@ -82,7 +82,7 @@ export async function BooksList() {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          <p className="text-sm text-red-600 dark:text-red-400">
+          <p className="text-sm text-destructive">
             Error loading books: {booksError.message}
           </p>
         </CardContent>

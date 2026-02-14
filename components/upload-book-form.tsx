@@ -104,14 +104,14 @@ export function UploadBookForm() {
           </Button>
 
           {message && (
-            <div className="flex items-center gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 text-green-800 dark:text-green-200">
+            <div className="flex items-center gap-2 p-3 rounded-md bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary">
               <CheckCircle2 className="h-4 w-4" />
               <p className="text-sm">{message}</p>
             </div>
           )}
           
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-md bg-red-50 dark:bg-red-950 text-red-800 dark:text-red-200">
+            <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive">
               <XCircle className="h-4 w-4" />
               <p className="text-sm">{error}</p>
             </div>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { X, Send, Bot, Plus, MessageSquare } from "lucide-react";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Markdown } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -850,7 +851,9 @@ export function AIAgentPanel({
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-primary" />
             </div>
-            {onClose && (
+            <div className="flex items-center gap-1">
+              <ThemeSwitcher />
+              {onClose && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -860,7 +863,8 @@ export function AIAgentPanel({
               >
                 <X className="h-4 w-4" />
               </Button>
-            )}
+              )}
+            </div>
           </div>
           {/* Chat list */}
           <div className="px-2 pb-2 flex flex-col gap-1 max-h-32 overflow-y-auto">
@@ -934,7 +938,7 @@ export function AIAgentPanel({
                         message.role === "user"
                           ? "text-primary-foreground/80"
                           : "text-foreground/80"
-                      } border-blue-500/40 bg-blue-500/10 dark:border-blue-400/40 dark:bg-blue-400/10`}
+                      } border-primary/40 bg-primary/10`}
                     >
                       {message.selectionPositionLabel}
                     </span>

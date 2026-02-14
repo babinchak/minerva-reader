@@ -12,6 +12,7 @@ import {
   Plus,
   Search,
 } from "lucide-react";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useRouter } from "next/navigation";
 import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
 import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
@@ -476,6 +477,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 justify-self-end">
+                  <ThemeSwitcher />
                   <Button
                     variant="ghost"
                     size="icon"
