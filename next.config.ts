@@ -8,8 +8,6 @@ const nextConfig: NextConfig = {
   experimental: {
     proxyClientMaxBodySize: "50mb",
   },
-  // Prevent bundling pdfjs-dist/pdf-to-img so worker path resolves correctly in Node
-  serverExternalPackages: ["pdfjs-dist", "pdf-to-img"],
 };
 
 export default nextConfig;

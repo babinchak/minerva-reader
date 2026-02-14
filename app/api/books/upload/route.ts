@@ -148,11 +148,11 @@ export async function POST(request: NextRequest) {
     let coverPath: string | null = null;
     if (isPdf && coverPng && coverPng.length > 0) {
       try {
-        coverPath = `covers/${bookId}.png`;
+        coverPath = `covers/${bookId}.jpg`;
         const { error: coverUploadError } = await serviceSupabase.storage
           .from("covers")
           .upload(coverPath, coverPng, {
-            contentType: "image/png",
+            contentType: "image/jpeg",
             upsert: true,
           });
         if (!coverUploadError) {
