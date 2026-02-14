@@ -1,4 +1,5 @@
 {
+  "name": "minerva-reader",
   "private": true,
   "scripts": {
     "dev": "next dev",

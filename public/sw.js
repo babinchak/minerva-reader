@@ -1,6 +1,6 @@
 /* Minimal service worker: enough for installability + basic offline shell. */
 
-const CACHE_NAME = "hyper-reader-pwa-v1";
+const CACHE_NAME = "minerva-reader-pwa-v1";
 const CORE_ASSETS = [
   "/",
   "/manifest.webmanifest",

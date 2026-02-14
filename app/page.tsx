@@ -14,7 +14,7 @@ async function HomeContent() {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <BookOpen className="h-16 w-16 text-muted-foreground" />
-        <h1 className="text-4xl font-bold text-foreground">Hyper Reader</h1>
+        <h1 className="text-4xl font-bold text-foreground">Minerva Reader</h1>
         <p className="text-lg text-muted-foreground max-w-md">
           Your personal EPUB and PDF library. Upload and read your books in one place.
         </p>
@@ -48,7 +48,7 @@ async function HomeContent() {
   return (
     <div className="flex flex-col items-center gap-4 text-center">
       <BookOpen className="h-16 w-16 text-muted-foreground" />
-      <h1 className="text-4xl font-bold text-foreground">Hyper Reader</h1>
+      <h1 className="text-4xl font-bold text-foreground">Minerva Reader</h1>
       <p className="text-lg text-muted-foreground max-w-md">
         Your personal EPUB and PDF library. Upload and read your books in one place.
       </p>
@@ -68,7 +68,7 @@ export default function Home() {
             <div className="flex gap-5 items-center font-semibold">
               <Link href={"/"} className="flex items-center gap-2 text-foreground">
                 <BookOpen className="h-5 w-5" />
-                Hyper Reader
+                Minerva Reader
               </Link>
             </div>
             <div className="flex items-center gap-2">
@@ -90,7 +90,7 @@ export default function Home() {
         </div>
 
         <footer className="w-full flex items-center justify-center border-t border-border mx-auto text-center text-xs gap-8 py-16 text-muted-foreground">
-          Hyper Reader
+          Minerva Reader
         </footer>
       </div>
     </main>

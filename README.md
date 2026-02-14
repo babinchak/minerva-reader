@@ -1,6 +1,6 @@
-# Hyper Reader
+# Minerva Reader
 
-Hyper Reader is a personal EPUB library with an in-browser reader and a seamless AI assistant. All questions will be fed to the AI with location-specific summaries as context, using a character-specific positioning system. Explain current page or a text selection in a single click.
+Minerva Reader is a personal EPUB library with an in-browser reader and a seamless AI assistant. All questions will be fed to the AI with location-specific summaries as context, using a character-specific positioning system. Explain current page or a text selection in a single click.
 
 ## Features
 

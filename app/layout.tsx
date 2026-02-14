@@ -9,14 +9,14 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Hyper Reader",
+  title: "Minerva Reader",
   description:
     "Your personal EPUB and PDF library. Upload and read your books in one place.",
-  applicationName: "Hyper Reader",
+  applicationName: "Minerva Reader",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Hyper Reader",
+    title: "Minerva Reader",
     statusBarStyle: "default",
   },
   formatDetection: {
