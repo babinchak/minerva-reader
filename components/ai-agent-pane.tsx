@@ -905,16 +905,6 @@ export function AIAgentPanel({
         </div>
       )}
 
-      {/* Selected Text Banner */}
-      {showSelectedTextBanner && selectedText && (
-        <div className="p-3 bg-muted border-b border-border">
-          <p className="text-sm text-muted-foreground mb-1">Selected text:</p>
-          <p className="text-sm italic text-foreground line-clamp-2">
-            {selectedText}
-          </p>
-        </div>
-      )}
-
       {/* Messages */}
       {showMessages && (
         <div
