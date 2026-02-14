@@ -150,15 +150,7 @@ export function AIAgentPanel({
     selectedCharCount > MAX_EXPLAIN_SELECTION_CHARS;
   const overLimitBy = Math.max(0, selectedCharCount - MAX_EXPLAIN_SELECTION_CHARS);
 
-  const INITIAL_GREETING: AIMessage = {
-    id: "greeting",
-    role: "assistant",
-    content:
-      "Hello! I'm your reading assistant. I can help you understand the book, answer questions, summarize sections, and more. What would you like to know?",
-    timestamp: new Date(),
-  };
-
-  const [messages, setMessages] = useState<AIMessage[]>([INITIAL_GREETING]);
+  const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [bookTitle, setBookTitle] = useState<string>("");
@@ -287,7 +279,7 @@ export function AIAgentPanel({
   // Load messages when selecting a chat
   useEffect(() => {
     if (!activeChatId) {
-      setMessages([INITIAL_GREETING]);
+      setMessages([]);
       return;
     }
     const loadMessages = async () => {
@@ -308,7 +300,7 @@ export function AIAgentPanel({
           }))
         );
       } else {
-        setMessages([INITIAL_GREETING]);
+        setMessages([]);
       }
     };
     loadMessages();
@@ -316,7 +308,7 @@ export function AIAgentPanel({
 
   const handleNewChat = () => {
     setActiveChatId(null);
-    setMessages([INITIAL_GREETING]);
+    setMessages([]);
   };
 
   const handleSelectChat = (chatId: string) => {
