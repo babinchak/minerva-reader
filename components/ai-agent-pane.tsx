@@ -64,7 +64,6 @@ export interface AIAgentPanelProps {
   showHeader?: boolean;
   showMessages?: boolean;
   showSelectedTextBanner?: boolean;
-  showExplainAction?: boolean;
   showSelectionChip?: boolean;
   /**
    * Notified when a user-triggered action starts (send/explain).
@@ -129,7 +128,6 @@ export function AIAgentPanel({
   showHeader = true,
   showMessages = true,
   showSelectedTextBanner = true,
-  showExplainAction = true,
   showSelectionChip = false,
   onActionStart,
   onActionComplete,
@@ -141,14 +139,6 @@ export function AIAgentPanel({
 
   const normalizedSelectedText = selectedText ?? "";
   const trimmedSelectedText = normalizedSelectedText.trim();
-  const selectedCharCount = trimmedSelectedText ? normalizedSelectedText.length : 0;
-  const isPdfExplainPage = bookType === "pdf" && trimmedSelectedText.length === 0;
-  const isExplainSelection = !isPdfExplainPage;
-  const isSelectionTooLong =
-    isExplainSelection &&
-    trimmedSelectedText.length > 0 &&
-    selectedCharCount > MAX_EXPLAIN_SELECTION_CHARS;
-  const overLimitBy = Math.max(0, selectedCharCount - MAX_EXPLAIN_SELECTION_CHARS);
 
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState("");
@@ -963,38 +953,6 @@ export function AIAgentPanel({
 
       {/* Input */}
       <div className="p-4 border-t border-border">
-        {/* Explain Selection Button */}
-        {showExplainAction && bookId && (rawManifest || bookType === "pdf") && (
-          <div className="mb-2">
-            <Button
-              onClick={() => handleExplain(trimmedSelectedText.length === 0 ? "page" : "selection")}
-              disabled={
-                isLoading ||
-                isSelectionTooLong ||
-                (bookType !== "pdf" && trimmedSelectedText.length === 0)
-              }
-              className="w-full text-foreground"
-              variant="outline"
-              title={
-                isSelectionTooLong
-                  ? `Selection too long: ${selectedCharCount.toLocaleString()} / ${MAX_EXPLAIN_SELECTION_CHARS.toLocaleString()} characters`
-                  : undefined
-              }
-            >
-              {trimmedSelectedText.length === 0 ? "Explain page" : "Explain selection"}
-            </Button>
-            {isSelectionTooLong && (
-              <div className="mt-2 rounded-md border border-border bg-muted px-3 py-2 text-xs text-foreground">
-                <p className="font-medium">Selection is too long.</p>
-                <p className="text-muted-foreground">
-                  {selectedCharCount.toLocaleString()} /{" "}
-                  {MAX_EXPLAIN_SELECTION_CHARS.toLocaleString()} characters selected
-                  {overLimitBy > 0 ? ` (${overLimitBy.toLocaleString()} over)` : ""}.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
         {showSelectionChip && (
           <div className="mb-2">
             <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-foreground">
