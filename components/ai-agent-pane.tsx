@@ -364,27 +364,30 @@ export function AIAgentPanel({
         }
       }
 
-      // No suitable active chat - try to use the most recent chat for this book
-      let existingQuery = supabase
-        .from("chats")
-        .select("id, book_id, created_at")
-        .eq("user_id", userId)
-        .order("updated_at", { ascending: false })
-        .limit(1);
-      if (forBookId === null) {
-        existingQuery = existingQuery.is("book_id", null);
-      } else {
-        existingQuery = existingQuery.eq("book_id", forBookId);
-      }
-      const { data: existingChats } = await existingQuery;
-      if (existingChats && existingChats.length > 0) {
-        const chat = existingChats[0];
-        setActiveChatId(chat.id);
-        setChats((prev) => {
-          if (prev.some((c) => c.id === chat.id)) return prev;
-          return [{ id: chat.id, book_id: chat.book_id, created_at: chat.created_at }, ...prev];
-        });
-        return { chatId: chat.id, isExisting: true };
+      // When activeChatId is null (e.g. user clicked "New chat"), always create a new chat.
+      // Only try reusing the most recent chat when activeChatId was set but didn't match (e.g. wrong book).
+      if (activeChatId !== null) {
+        let existingQuery = supabase
+          .from("chats")
+          .select("id, book_id, created_at")
+          .eq("user_id", userId)
+          .order("updated_at", { ascending: false })
+          .limit(1);
+        if (forBookId === null) {
+          existingQuery = existingQuery.is("book_id", null);
+        } else {
+          existingQuery = existingQuery.eq("book_id", forBookId);
+        }
+        const { data: existingChats } = await existingQuery;
+        if (existingChats && existingChats.length > 0) {
+          const chat = existingChats[0];
+          setActiveChatId(chat.id);
+          setChats((prev) => {
+            if (prev.some((c) => c.id === chat.id)) return prev;
+            return [{ id: chat.id, book_id: chat.book_id, created_at: chat.created_at }, ...prev];
+          });
+          return { chatId: chat.id, isExisting: true };
+        }
       }
 
       // Create new chat
