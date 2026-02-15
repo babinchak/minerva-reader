@@ -895,8 +895,42 @@ export function AIAgentPanel({
         </div>
       )}
 
+      {/* Empty state: input near top (Cursor-style) */}
+      {showMessages && messages.length === 0 && (
+        <div className="flex-1 flex flex-col justify-start pt-4 px-4 min-h-0">
+          {showInput && (
+            <div className="space-y-4 max-w-full">
+              {showSelectionChip && (
+                <div className="flex justify-center">
+                  <span className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-foreground">
+                    Using selected text
+                  </span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask a question about the book..."
+                  disabled={isLoading}
+                  className="flex-1 bg-muted/50 shadow-md border-border dark:bg-muted dark:border-muted-foreground/30 dark:shadow-none"
+                />
+                <Button
+                  onClick={handleSend}
+                  disabled={!input.trim() || isLoading}
+                  size="icon"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Messages */}
-      {showMessages && (
+      {showMessages && messages.length > 0 && (
         <div
           className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 overscroll-contain"
           style={{ WebkitOverflowScrolling: "touch" }}
@@ -951,35 +985,37 @@ export function AIAgentPanel({
         </div>
       )}
 
-      {/* Input */}
-      <div className="p-4 border-t border-border">
-        {showSelectionChip && (
-          <div className="mb-2">
-            <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-foreground">
-              Using selected text
-            </span>
-          </div>
-        )}
-        {showInput && (
-          <div className="flex gap-2">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask a question about the book..."
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <Button
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              size="icon"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-      </div>
+      {/* Input (bottom: when chat has messages, or in compact mode when showMessages is false) */}
+      {((showMessages && messages.length > 0) || !showMessages) && (
+        <div className="p-4 border-t border-border shrink-0">
+          {showSelectionChip && (
+            <div className="mb-2">
+              <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-foreground">
+                Using selected text
+              </span>
+            </div>
+          )}
+          {showInput && (
+            <div className="flex gap-2">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask a question about the book..."
+                disabled={isLoading}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleSend}
+                disabled={!input.trim() || isLoading}
+                size="icon"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

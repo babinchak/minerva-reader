@@ -12,7 +12,6 @@ export interface AIBottomDrawerProps
     | "showHeader"
     | "showMessages"
     | "showSelectedTextBanner"
-    | "showExplainAction"
     | "showSelectionChip"
     | "onClose"
   > {
@@ -203,7 +202,6 @@ export function AIBottomDrawer({
               showHeader={panelVisibility.showHeader}
               showMessages={panelVisibility.showMessages}
               showSelectedTextBanner={false}
-              showExplainAction={true}
               showSelectionChip={panelVisibility.showChip}
               onClose={close}
               onActionStart={() => {
