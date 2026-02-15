@@ -27,6 +27,7 @@ import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 import { getPdfLocalContextAroundCurrentSelection } from "@/lib/pdf-position/local-context";
 import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context-from-document";
 import { getEpubVisibleContext } from "@/lib/epub-visible-context";
+import { getEpubLocalContextAroundCurrentSelection } from "@/lib/book-position/local-context";
 import { ContextPreviewDialog } from "@/components/context-preview-dialog";
 
 const DEFAULT_MAX_EXPLAIN_SELECTION_CHARS = 4000;
@@ -633,6 +634,7 @@ export function AIAgentPanel({
     let sendPositionTitle: string | undefined;
     let sendContextBlock = "";
     let sendBookContext: { title?: string | null; author?: string | null } | null = null;
+    let sendLocalContextBlock = "";
 
     const selectionSnapshot = includeSelectionContextOnSend ? getSelectionSnapshot() : null;
     const selectionForSend = includeSelectionContextOnSend
@@ -727,6 +729,55 @@ export function AIAgentPanel({
       }
     }
 
+    if (hasSelection) {
+      if (bookType === "pdf") {
+        const pos = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
+        let local: { beforeText: string; selectedText: string; afterText: string } | null = null;
+        if (pdfDocument && pos && selectionForSend) {
+          local = await getPdfLocalContextFromDocument(
+            pdfDocument,
+            pos.start,
+            pos.end,
+            selectionForSend,
+            { beforeChars: 1200, afterChars: 1200, pagesBefore: 2, pagesAfter: 2, maxTotalChars: 4000 }
+          );
+        }
+        if (!local) {
+          local = getPdfLocalContextAroundCurrentSelection({
+            beforeChars: 800,
+            afterChars: 800,
+            maxTotalChars: 2400,
+          });
+        }
+        if (local && (local.beforeText || local.afterText)) {
+          sendLocalContextBlock += "Local context around the selection (PDF text from surrounding pages):\n\n";
+          if (local.beforeText) {
+            sendLocalContextBlock += `Before:\n"${local.beforeText}"\n\n`;
+          }
+          sendLocalContextBlock += `Selected:\n"${local.selectedText}"\n\n`;
+          if (local.afterText) {
+            sendLocalContextBlock += `After:\n"${local.afterText}"\n\n`;
+          }
+        }
+      } else {
+        const local = getEpubLocalContextAroundCurrentSelection({
+          beforeChars: 900,
+          afterChars: 900,
+          maxTotalChars: 2800,
+        });
+        if (local && (local.beforeText || local.afterText)) {
+          sendLocalContextBlock += "Local context around the selection (EPUB nearby text):\n\n";
+          if (local.beforeText) {
+            sendLocalContextBlock += `Before:\n"${local.beforeText}"\n\n`;
+          }
+          sendLocalContextBlock += `Selected:\n"${local.selectedText}"\n\n`;
+          if (local.afterText) {
+            sendLocalContextBlock += `After:\n"${local.afterText}"\n\n`;
+          }
+        }
+      }
+    }
+
     const userMessage: AIMessage = {
       id: Date.now().toString(),
       role: "user",
@@ -807,7 +858,7 @@ export function AIAgentPanel({
         if (contextHeader) {
           contextHeader += "\n";
         }
-        userContent = `User question:\n${userInput}\n\n${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}Selected text (use as context):\n"${selectionForSend}"`;
+        userContent = `User question:\n${userInput}\n\n${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendLocalContextBlock ? `${sendLocalContextBlock}` : ""}Selected text (use as context):\n"${selectionForSend}"`;
       } else if (!selectionForSend && bookType === "pdf" && bookId) {
         const pageCtx = getCurrentPdfPageContext({ maxChars: 12000 });
         if (pageCtx?.text) {
