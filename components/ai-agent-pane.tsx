@@ -475,11 +475,53 @@ export function AIAgentPanel({
     onActionStart?.();
 
     const userInput = input;
+    let sendPositionLabel: string | undefined;
+    let sendPositionTitle: string | undefined;
+
+    const selectionForSend =
+      includeSelectionContextOnSend && getSelectedText()
+        ? getSelectedText()
+        : "";
+    const hasSelection = Boolean(selectionForSend?.trim());
+
+    if (bookType === "pdf") {
+      if (hasSelection) {
+        const pos = getCurrentPdfSelectionPosition();
+        if (pos) {
+          const formatted = formatSelectionPositionLabel(pos.start, pos.end);
+          sendPositionLabel = formatted.label;
+          sendPositionTitle = formatted.title;
+        }
+      } else if (currentPage && currentPage >= 1) {
+        sendPositionLabel = `(Page ${currentPage})`;
+        sendPositionTitle = `Page ${currentPage}`;
+      } else {
+        const pageCtx = getCurrentPdfPageContext({ maxChars: 1 });
+        if (pageCtx) {
+          sendPositionLabel = `(Page ${pageCtx.pageNumber})`;
+          sendPositionTitle = `start=${pageCtx.startPosition} end=${pageCtx.endPosition}`;
+        }
+      }
+    } else if (hasSelection) {
+      const readingOrder = rawManifest?.readingOrder || [];
+      const pos = getCurrentSelectionPosition(readingOrder, null);
+      if (pos) {
+        const formatted = formatSelectionPositionLabel(pos.start, pos.end);
+        sendPositionLabel = formatted.label;
+        sendPositionTitle = formatted.title;
+      }
+    } else {
+      sendPositionLabel = "(View)";
+      sendPositionTitle = "EPUB visible context";
+    }
+
     const userMessage: AIMessage = {
       id: Date.now().toString(),
       role: "user",
       content: userInput,
       timestamp: new Date(),
+      selectionPositionLabel: sendPositionLabel,
+      selectionPositionTitle: sendPositionTitle,
     };
 
     const assistantMessageId = (Date.now() + 1).toString();
@@ -522,7 +564,13 @@ export function AIAgentPanel({
           } else {
             setMessages([userMessage, assistantMessage]);
           }
-          await persistUserMessage(chatId, userInput, msgCount);
+          await persistUserMessage(
+            chatId,
+            userInput,
+            msgCount,
+            sendPositionLabel,
+            sendPositionTitle
+          );
         }
       } else {
         historyForAPI = messages.map((m) => ({ role: m.role, content: m.content }));
@@ -532,10 +580,6 @@ export function AIAgentPanel({
       const userMsgIndex = msgCount;
       const assistantMsgIndex = msgCount + 1;
 
-      const selectionForSend =
-        includeSelectionContextOnSend && getSelectedText()
-          ? getSelectedText()
-          : "";
       let userContent = userInput;
 
       if (selectionForSend && selectionForSend.trim().length > 0) {
