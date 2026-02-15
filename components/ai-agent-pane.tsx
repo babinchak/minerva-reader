@@ -263,12 +263,13 @@ export function AIAgentPanel({
     fetchChats();
   }, [userId, bookId, supabase]);
 
-  // Load messages when selecting a chat
+  // Load messages when selecting a chat (skip while sending/streaming to avoid overwriting optimistic messages)
   useEffect(() => {
     if (!activeChatId) {
       setMessages([]);
       return;
     }
+    if (isLoading) return;
     const loadMessages = async () => {
       const { data } = await supabase
         .from("chat_messages")
@@ -291,7 +292,7 @@ export function AIAgentPanel({
       }
     };
     loadMessages();
-  }, [activeChatId, supabase]);
+  }, [activeChatId, isLoading, supabase]);
 
   const handleNewChat = () => {
     setActiveChatId(null);
@@ -511,7 +512,6 @@ export function AIAgentPanel({
         )
       );
       setIsLoading(false);
-      setShowInput(true);
       onActionComplete?.();
     }
   };
@@ -936,7 +936,9 @@ export function AIAgentPanel({
           className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 overscroll-contain"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          {messages.map((message) => (
+          {messages
+            .filter((m) => m.role !== "assistant" || m.content.trim().length > 0)
+            .map((message) => (
             <div
               key={message.id}
               className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
