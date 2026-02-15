@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { X } from "lucide-react";
 import {
   getCurrentSelectionPosition,
-  getSelectedText,
+  getLiveSelectedText,
 } from "@/lib/book-position-utils";
 import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
 import { getCurrentPdfPageContext } from "@/lib/pdf-position/page-context";
@@ -104,7 +104,7 @@ export function ContextPreviewDialog({
           }
         }
       } else {
-        const selectionText = getSelectedText();
+        const selectionText = getLiveSelectedText();
         const hasSelection = Boolean(selectionText?.trim());
 
         if (isPdf) {
@@ -170,7 +170,7 @@ export function ContextPreviewDialog({
       }
 
       if (!capturedContext) {
-        const selectionText = getSelectedText();
+        const selectionText = getLiveSelectedText();
         const hasSelection = Boolean(selectionText?.trim());
         if (!hasSelection && !isPdf) {
           const visible = getEpubVisibleContext({ maxChars: 8000 });

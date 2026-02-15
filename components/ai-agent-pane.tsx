@@ -18,6 +18,7 @@ import {
   getCurrentSelectionPosition,
   querySummariesForPosition,
   getSelectedText,
+  getLiveSelectedText,
   isCurrentSelectionInAIPane,
 } from "@/lib/book-position-utils";
 import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
@@ -203,7 +204,7 @@ export function AIAgentPanel({
   const supabase = createClient();
 
   const getSelectionSnapshot = useCallback((): SelectionSnapshot | null => {
-    const liveText = getSelectedText().trim();
+    const liveText = getLiveSelectedText().trim();
     const remembered = selectionSnapshotRef.current;
     if (liveText) {
       const sameAsRemembered = remembered?.text === liveText;
@@ -228,7 +229,7 @@ export function AIAgentPanel({
       return snapshot;
     }
 
-    if (remembered?.text?.trim()) {
+    if (trimmedSelectedText && remembered?.text?.trim()) {
       return remembered;
     }
 
@@ -242,9 +243,15 @@ export function AIAgentPanel({
   }, [trimmedSelectedText, getSelectionSnapshot]);
 
   useEffect(() => {
+    if (!trimmedSelectedText) {
+      selectionSnapshotRef.current = null;
+    }
+  }, [trimmedSelectedText]);
+
+  useEffect(() => {
     const onSelectionChange = () => {
       if (isCurrentSelectionInAIPane()) return;
-      const liveText = getSelectedText().trim();
+      const liveText = getLiveSelectedText().trim();
       if (!liveText) return;
 
       const previous = selectionSnapshotRef.current;
@@ -1256,8 +1263,8 @@ export function AIAgentPanel({
                     type="button"
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      handleContextButtonPress();
                     }}
+                    onClick={handleContextButtonPress}
                     className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
                   >
                     {trimmedSelectedText
@@ -1354,8 +1361,8 @@ export function AIAgentPanel({
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  handleContextButtonPress();
                 }}
+                onClick={handleContextButtonPress}
                 className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
               >
                 {trimmedSelectedText

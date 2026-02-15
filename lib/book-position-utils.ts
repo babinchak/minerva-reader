@@ -1,5 +1,6 @@
 export {
   getSelectedText,
+  getLiveSelectedText,
   getTextSelection,
   captureSelection,
   restoreLastSelection,

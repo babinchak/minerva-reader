@@ -117,6 +117,13 @@ export function getSelectedText(): string {
   return normalizeExtractedText(raw);
 }
 
+// Live-only selected text (does not fall back to remembered range).
+export function getLiveSelectedText(): string {
+  const result = getLiveTextSelection();
+  const raw = result?.selection?.toString() || result?.range?.toString() || "";
+  return normalizeExtractedText(raw);
+}
+
 // Store the current selection so it can be restored later
 export function captureSelection(): string {
   // IMPORTANT: capture only *live* selection so selectionchange can clear
