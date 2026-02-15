@@ -799,6 +799,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
             selectedText={selectedText}
             bookId={bookId}
             bookType="pdf"
+            currentPage={currentPage}
             mobileDrawerMinMode={selectionExists ? "quick" : "closed"}
             requestRun={aiRequest}
             requestOpen={openAiRequest}

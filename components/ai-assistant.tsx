@@ -11,6 +11,8 @@ export interface AIAssistantProps {
   bookId?: string;
   rawManifest?: { readingOrder?: Array<{ href?: string }> };
   bookType: "epub" | "pdf";
+  /** Current PDF page number (1-based). Used for context hint and including page in typed questions. */
+  currentPage?: number;
   mobileDrawerMinMode?: "closed" | "quick";
   /**
    * Optional external trigger to open the desktop AI pane and run an action.
@@ -35,15 +37,16 @@ function clamp(n: number, min: number, max: number) {
 export function AIAssistant(props: AIAssistantProps) {
   const isMobile = useIsMobile();
   if (isMobile) {
-    return (
-      <AIBottomDrawer
-        selectedText={props.selectedText}
-        bookId={props.bookId}
-        rawManifest={props.rawManifest}
-        bookType={props.bookType}
-        minMode={props.mobileDrawerMinMode}
-      />
-    );
+  return (
+    <AIBottomDrawer
+      selectedText={props.selectedText}
+      bookId={props.bookId}
+      rawManifest={props.rawManifest}
+      bookType={props.bookType}
+      currentPage={props.currentPage}
+      minMode={props.mobileDrawerMinMode}
+    />
+  );
   }
   return <DesktopAIAssistant {...props} />;
 }
@@ -53,6 +56,7 @@ function DesktopAIAssistant({
   bookId,
   rawManifest,
   bookType,
+  currentPage,
   requestRun = null,
   requestOpen = null,
   onOpenChange,
@@ -118,11 +122,13 @@ function DesktopAIAssistant({
       bookId,
       rawManifest,
       bookType,
+      currentPage,
       autoRun,
       hideInputUntilFirstResponse: true,
+      includeSelectionContextOnSend: true,
       onClose: () => setIsOpen(false),
     }),
-    [autoRun, bookId, bookType, rawManifest, selectedText]
+    [autoRun, bookId, bookType, currentPage, rawManifest, selectedText]
   );
 
   return (

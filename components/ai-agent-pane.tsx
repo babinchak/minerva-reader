@@ -66,6 +66,11 @@ export interface AIAgentPanelProps {
   showSelectedTextBanner?: boolean;
   showSelectionChip?: boolean;
   /**
+   * Current PDF page number (1-based). When provided, shows "Using page X for context" when no selection.
+   * Enables page context to be included when user types a question.
+   */
+  currentPage?: number;
+  /**
    * Notified when a user-triggered action starts (send/explain).
    * Useful for shells (e.g. mobile quick state) to expand UI to show the response.
    */
@@ -129,6 +134,7 @@ export function AIAgentPanel({
   showMessages = true,
   showSelectedTextBanner = true,
   showSelectionChip = false,
+  currentPage,
   onActionStart,
   onActionComplete,
   className,
@@ -468,15 +474,20 @@ export function AIAgentPanel({
         includeSelectionContextOnSend && getSelectedText()
           ? getSelectedText()
           : "";
+      let userContent = userInput;
+
+      if (selectionForSend && selectionForSend.trim().length > 0) {
+        userContent = `User question:\n${userInput}\n\nSelected text (use as context):\n"${selectionForSend}"`;
+      } else if (!selectionForSend && bookType === "pdf" && bookId) {
+        const pageCtx = getCurrentPdfPageContext({ maxChars: 12000 });
+        if (pageCtx?.text) {
+          userContent = `User question:\n${userInput}\n\nCurrent page (page ${pageCtx.pageNumber}) text for context:\n\n"${pageCtx.text}"`;
+        }
+      }
+
       const messagesForAPI = [
         ...historyForAPI,
-        {
-          role: "user" as const,
-          content:
-            selectionForSend && selectionForSend.trim().length > 0
-              ? `User question:\n${userInput}\n\nSelected text (use as context):\n"${selectionForSend}"`
-              : userInput,
-        },
+        { role: "user" as const, content: userContent },
       ];
 
       const response = await fetch("/api/chat", {
@@ -900,10 +911,12 @@ export function AIAgentPanel({
         <div className="flex-1 flex flex-col justify-start pt-4 px-4 min-h-0">
           {showInput && (
             <div className="space-y-4 max-w-full">
-              {showSelectionChip && (
+              {(trimmedSelectedText || (currentPage && currentPage >= 1)) && (
                 <div className="flex justify-center">
-                  <span className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-foreground">
-                    Using selected text
+                  <span className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    {trimmedSelectedText
+                      ? "Using selected text for context"
+                      : `Using page ${currentPage} for context`}
                   </span>
                 </div>
               )}
@@ -988,10 +1001,12 @@ export function AIAgentPanel({
       {/* Input (bottom: when chat has messages, or in compact mode when showMessages is false) */}
       {((showMessages && messages.length > 0) || !showMessages) && (
         <div className="p-4 border-t border-border shrink-0">
-          {showSelectionChip && (
+          {(trimmedSelectedText || (currentPage && currentPage >= 1)) && (
             <div className="mb-2">
-              <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-foreground">
-                Using selected text
+              <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {trimmedSelectedText
+                  ? "Using selected text for context"
+                  : `Using page ${currentPage} for context`}
               </span>
             </div>
           )}
