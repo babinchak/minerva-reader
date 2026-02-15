@@ -1,3 +1,5 @@
+import { normalizeExtractedText } from "@/lib/text/normalize-extracted-text";
+
 export interface PdfPageContext {
   pageNumber: number;
   text: string;
@@ -9,7 +11,21 @@ const PAGE_SELECTOR = ".pdfViewer .page";
 const SPAN_SELECTOR = "[data-item-index][data-page-number]";
 
 function normalizeWhitespace(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+  return normalizeExtractedText(text);
+}
+
+function appendFragment(acc: string, next: string): string {
+  if (!acc) return next;
+  if (!next) return acc;
+  const leftLast = acc[acc.length - 1];
+  const rightFirst = next[0];
+  if (!leftLast || !rightFirst) return acc + next;
+  if (/\s/.test(leftLast) || /\s/.test(rightFirst)) return acc + next;
+  if (leftLast === "-") return acc + next;
+  if (/[A-Za-z0-9]/.test(leftLast) && /[A-Za-z0-9]/.test(rightFirst)) {
+    return `${acc} ${next}`;
+  }
+  return acc + next;
 }
 
 function getMostRelevantPageElement(): HTMLElement | null {
@@ -65,7 +81,7 @@ export function getCurrentPdfPageContext(options?: {
 
   let raw = "";
   for (const span of spans) {
-    raw += span.textContent ?? "";
+    raw = appendFragment(raw, span.textContent ?? "");
   }
 
   let text = normalizeWhitespace(raw);

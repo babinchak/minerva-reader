@@ -1,4 +1,5 @@
 import { TextSelectionResult } from "@/lib/book-position/types";
+import { normalizeExtractedText } from "@/lib/text/normalize-extracted-text";
 
 interface StoredSelection {
   range: Range;
@@ -48,8 +49,7 @@ export function isCurrentSelectionInAIPane(): boolean {
   return isInAIPane(selection.anchorNode) || isInAIPane(selection.focusNode);
 }
 
-// Utility function to get text selection from main document or iframe
-export function getTextSelection(): TextSelectionResult | null {
+function getLiveTextSelection(): TextSelectionResult | null {
   // Try to get selection from the main document first
   let selection: Selection | null = window.getSelection();
   let range: Range | null = null;
@@ -88,16 +88,42 @@ export function getTextSelection(): TextSelectionResult | null {
   return null;
 }
 
+// Utility function to get text selection from main document or iframe
+export function getTextSelection(): TextSelectionResult | null {
+  const liveSelection = getLiveTextSelection();
+  if (liveSelection) return liveSelection;
+
+  // Fall back to the last captured selection snapshot when live DOM selection
+  // is gone (e.g. user clicked into AI input while persistent highlight remains).
+  if (lastSelection?.range) {
+    try {
+      const range = lastSelection.range.cloneRange();
+      const selectedText = range.toString().trim();
+      if (selectedText && !isInAIPane(range.commonAncestorContainer)) {
+        return { selection: null, range, targetDoc: lastSelection.targetDoc };
+      }
+    } catch {
+      // Stale/disconnected range; ignore and return null below.
+    }
+  }
+
+  return null;
+}
+
 // Utility function to get selected text from main document or iframe
 export function getSelectedText(): string {
   const result = getTextSelection();
-  return result?.selection?.toString().trim() || "";
+  const raw = result?.selection?.toString() || result?.range?.toString() || "";
+  return normalizeExtractedText(raw);
 }
 
 // Store the current selection so it can be restored later
 export function captureSelection(): string {
-  const result = getTextSelection();
-  const selectedText = result?.selection?.toString().trim() || "";
+  // IMPORTANT: capture only *live* selection so selectionchange can clear
+  // persistent highlight when user deselects outside the AI pane.
+  const result = getLiveTextSelection();
+  const raw = result?.selection?.toString() || result?.range?.toString() || "";
+  const selectedText = normalizeExtractedText(raw);
 
   if (result?.range && selectedText) {
     lastSelection = {

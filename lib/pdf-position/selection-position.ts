@@ -1,3 +1,5 @@
+import { getTextSelection } from "@/lib/book-position/selection";
+
 export interface PdfSelectionPosition {
   start: string;
   end: string;
@@ -61,16 +63,17 @@ function getCharOffsetWithinSpan(span: HTMLSpanElement, container: Node, offset:
 }
 
 export function getCurrentPdfSelectionPosition(): PdfSelectionPosition | null {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) {
+  const selectionResult = getTextSelection();
+  if (!selectionResult?.range) {
     return null;
   }
 
-  if (selection.toString().trim().length === 0) {
+  const selectedText = selectionResult.selection?.toString() ?? selectionResult.range.toString();
+  if (selectedText.trim().length === 0) {
     return null;
   }
 
-  const range = selection.getRangeAt(0);
+  const range = selectionResult.range;
   const startInfo = getSpanInfo(range.startContainer, range.startOffset);
   const endInfo = getSpanInfo(range.endContainer, range.endOffset);
 

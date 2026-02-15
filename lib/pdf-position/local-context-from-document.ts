@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { normalizeExtractedText } from "@/lib/text/normalize-extracted-text";
 
 export interface PdfLocalSelectionContext {
   beforeText: string;
@@ -13,7 +14,21 @@ function parsePosition(pos: string): { page: number; itemIndex: number; charOffs
 }
 
 function normalizeWhitespace(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+  return normalizeExtractedText(text);
+}
+
+function appendFragment(acc: string, next: string): string {
+  if (!acc) return next;
+  if (!next) return acc;
+  const leftLast = acc[acc.length - 1];
+  const rightFirst = next[0];
+  if (!leftLast || !rightFirst) return acc + next;
+  if (/\s/.test(leftLast) || /\s/.test(rightFirst)) return acc + next;
+  if (leftLast === "-") return acc + next;
+  if (/[A-Za-z0-9]/.test(leftLast) && /[A-Za-z0-9]/.test(rightFirst)) {
+    return `${acc} ${next}`;
+  }
+  return acc + next;
 }
 
 /**
@@ -60,7 +75,7 @@ export async function getPdfLocalContextFromDocument(
     let fullText = "";
     for (let i = 0; i < items.length; i++) {
       itemStarts.push(fullText.length);
-      fullText += items[i]?.str ?? "";
+      fullText = appendFragment(fullText, items[i]?.str ?? "");
     }
     pages.push({ pageNum: p, fullText, itemStarts });
   }

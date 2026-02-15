@@ -1,3 +1,5 @@
+import { normalizeExtractedText } from "@/lib/text/normalize-extracted-text";
+
 export interface PdfLocalSelectionContext {
   beforeText: string;
   selectedText: string;
@@ -13,7 +15,7 @@ interface PdfSpanInfo {
 const SPAN_SELECTOR = "[data-item-index][data-page-number]";
 
 function normalizeWhitespace(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+  return normalizeExtractedText(text);
 }
 
 function joinWithSpace(left: string, right: string): string {
@@ -21,6 +23,7 @@ function joinWithSpace(left: string, right: string): string {
   if (!right) return left;
   // If either side already has boundary whitespace, just concat.
   if (/\s$/.test(left) || /^\s/.test(right)) return left + right;
+  if (left.endsWith("-")) return left + right;
   return `${left} ${right}`;
 }
 
@@ -28,6 +31,7 @@ function prependWithSpace(acc: string, fragment: string): string {
   if (!fragment) return acc;
   if (!acc) return fragment;
   if (/\s$/.test(fragment) || /^\s/.test(acc)) return fragment + acc;
+  if (fragment.endsWith("-")) return fragment + acc;
   return `${fragment} ${acc}`;
 }
 

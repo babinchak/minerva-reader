@@ -18,7 +18,7 @@ import {
   getCurrentSelectionPosition,
   querySummariesForPosition,
   getSelectedText,
-  restoreLastSelection,
+  isCurrentSelectionInAIPane,
 } from "@/lib/book-position-utils";
 import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
 import { getCurrentPdfPageContext } from "@/lib/pdf-position/page-context";
@@ -97,6 +97,42 @@ interface SummaryContext {
   summary_text: string | null;
 }
 
+interface ContextApiSummary {
+  summary_type: "book" | "chapter" | "subchapter";
+  toc_title: string;
+  chapter_path: string;
+  start_position: string | null;
+  end_position: string | null;
+  summary_text: string | null;
+}
+
+interface SelectionSnapshot {
+  text: string;
+  pdfPosition?: { start: string; end: string };
+  epubPosition?: { start: string; end: string };
+}
+
+function isLikelyValidEpubPosition(pos: { start: string; end: string } | undefined): boolean {
+  if (!pos) return false;
+  const isValid = (value: string) => {
+    if (!value || value.includes("unknown")) return false;
+    const parts = value.split("/");
+    if (parts.length < 3) return false;
+    return parts.every((part) => /^\d+$/.test(part));
+  };
+  return isValid(pos.start) && isValid(pos.end);
+}
+
+function isLikelyValidPdfPosition(pos: { start: string; end: string } | undefined): boolean {
+  if (!pos) return false;
+  const isValid = (value: string) => {
+    const parts = value.split(/[/:]/);
+    if (parts.length < 3) return false;
+    return parts.every((part) => /^\d+$/.test(part));
+  };
+  return isValid(pos.start) && isValid(pos.end);
+}
+
 function formatSelectionPositionLabel(
   start: string,
   end: string
@@ -158,55 +194,124 @@ export function AIAgentPanel({
   const [userId, setUserId] = useState<string | null>(null);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [capturedContext, setCapturedContext] = useState<{
-    startPosition: string;
-    endPosition: string;
+    startPosition?: string;
+    endPosition?: string;
     localArea?: { beforeText?: string; selectedText?: string; afterText?: string };
     selectedText?: string;
   } | null>(null);
+  const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const supabase = createClient();
 
-  const handleContextButtonPress = useCallback(() => {
-    if (trimmedSelectedText) {
-      const isPdf = bookType === "pdf";
-      if (isPdf) {
-        const pos = getCurrentPdfSelectionPosition();
-        if (pos) {
-          let localArea: { beforeText?: string; selectedText?: string; afterText?: string } | undefined;
-          if (!pdfDocument) {
-            const local = getPdfLocalContextAroundCurrentSelection({
-              beforeChars: 800,
-              afterChars: 800,
-              maxTotalChars: 2400,
-            });
-            if (local) {
-              localArea = {
-                beforeText: local.beforeText || undefined,
-                selectedText: local.selectedText || undefined,
-                afterText: local.afterText || undefined,
-              };
-            }
-          }
-          setCapturedContext({
-            startPosition: pos.start,
-            endPosition: pos.end,
-            selectedText: trimmedSelectedText,
-            localArea,
-          });
-        } else {
-          setCapturedContext(null);
+  const getSelectionSnapshot = useCallback((): SelectionSnapshot | null => {
+    const liveText = getSelectedText().trim();
+    const remembered = selectionSnapshotRef.current;
+    if (liveText) {
+      const sameAsRemembered = remembered?.text === liveText;
+      const snapshot: SelectionSnapshot = {
+        text: liveText,
+        pdfPosition: sameAsRemembered ? remembered?.pdfPosition : undefined,
+        epubPosition: sameAsRemembered ? remembered?.epubPosition : undefined,
+      };
+      if (bookType === "pdf") {
+        const pos = getCurrentPdfSelectionPosition() ?? undefined;
+        if (isLikelyValidPdfPosition(pos)) {
+          snapshot.pdfPosition = pos;
         }
       } else {
         const readingOrder = rawManifest?.readingOrder || [];
-        const pos = getCurrentSelectionPosition(readingOrder, null);
-        if (pos) {
-          setCapturedContext({
-            startPosition: pos.start,
-            endPosition: pos.end,
-            selectedText: trimmedSelectedText,
-          });
-        } else {
-          setCapturedContext(null);
+        const pos = getCurrentSelectionPosition(readingOrder, null) ?? undefined;
+        if (isLikelyValidEpubPosition(pos)) {
+          snapshot.epubPosition = pos;
         }
+      }
+      selectionSnapshotRef.current = snapshot;
+      return snapshot;
+    }
+
+    if (remembered?.text?.trim()) {
+      return remembered;
+    }
+
+    if (!trimmedSelectedText) return null;
+    return { text: trimmedSelectedText };
+  }, [bookType, rawManifest?.readingOrder, trimmedSelectedText]);
+
+  useEffect(() => {
+    if (!trimmedSelectedText) return;
+    void getSelectionSnapshot();
+  }, [trimmedSelectedText, getSelectionSnapshot]);
+
+  useEffect(() => {
+    const onSelectionChange = () => {
+      if (isCurrentSelectionInAIPane()) return;
+      const liveText = getSelectedText().trim();
+      if (!liveText) return;
+
+      const previous = selectionSnapshotRef.current;
+      const sameAsPrevious = previous?.text === liveText;
+      const next: SelectionSnapshot = {
+        text: liveText,
+        pdfPosition: sameAsPrevious ? previous?.pdfPosition : undefined,
+        epubPosition: sameAsPrevious ? previous?.epubPosition : undefined,
+      };
+
+      if (bookType === "pdf") {
+        const pos = getCurrentPdfSelectionPosition() ?? undefined;
+        if (isLikelyValidPdfPosition(pos)) {
+          next.pdfPosition = pos;
+        }
+      } else {
+        const readingOrder = rawManifest?.readingOrder || [];
+        const pos = getCurrentSelectionPosition(readingOrder, null) ?? undefined;
+        if (isLikelyValidEpubPosition(pos)) {
+          next.epubPosition = pos;
+        }
+      }
+
+      selectionSnapshotRef.current = next;
+    };
+
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, [bookType, rawManifest?.readingOrder]);
+
+  const handleContextButtonPress = useCallback(() => {
+    if (trimmedSelectedText) {
+      const snapshot = getSelectionSnapshot();
+      const selectedTextForContext = snapshot?.text?.trim() || trimmedSelectedText;
+
+      const isPdf = bookType === "pdf";
+      if (isPdf) {
+        const pos = snapshot?.pdfPosition ?? getCurrentPdfSelectionPosition() ?? undefined;
+        let localArea: { beforeText?: string; selectedText?: string; afterText?: string } | undefined;
+        if (!pdfDocument) {
+          const local = getPdfLocalContextAroundCurrentSelection({
+            beforeChars: 800,
+            afterChars: 800,
+            maxTotalChars: 2400,
+          });
+          if (local) {
+            localArea = {
+              beforeText: local.beforeText || undefined,
+              selectedText: local.selectedText || undefined,
+              afterText: local.afterText || undefined,
+            };
+          }
+        }
+        setCapturedContext({
+          startPosition: pos?.start,
+          endPosition: pos?.end,
+          selectedText: selectedTextForContext.trim(),
+          localArea,
+        });
+      } else {
+        const readingOrder = rawManifest?.readingOrder || [];
+        const pos = snapshot?.epubPosition ?? getCurrentSelectionPosition(readingOrder, null) ?? undefined;
+        setCapturedContext({
+          startPosition: pos?.start,
+          endPosition: pos?.end,
+          selectedText: selectedTextForContext.trim(),
+        });
       }
     } else {
       setCapturedContext(null);
@@ -217,6 +322,7 @@ export function AIAgentPanel({
     bookType,
     rawManifest?.readingOrder,
     pdfDocument,
+    getSelectionSnapshot,
   ]);
 
   // Helper function to handle streaming response
@@ -518,21 +624,18 @@ export function AIAgentPanel({
     const userInput = input;
     let sendPositionLabel: string | undefined;
     let sendPositionTitle: string | undefined;
+    let sendContextBlock = "";
+    let sendBookContext: { title?: string | null; author?: string | null } | null = null;
 
-    let currentSelectionText = getSelectedText();
-    if (!currentSelectionText.trim() && trimmedSelectedText) {
-      restoreLastSelection();
-      currentSelectionText = getSelectedText();
-    }
-
+    const selectionSnapshot = includeSelectionContextOnSend ? getSelectionSnapshot() : null;
     const selectionForSend = includeSelectionContextOnSend
-      ? (currentSelectionText || trimmedSelectedText)
+      ? (selectionSnapshot?.text || trimmedSelectedText)
       : "";
     const hasSelection = Boolean(selectionForSend?.trim());
 
     if (bookType === "pdf") {
       if (hasSelection) {
-        const pos = getCurrentPdfSelectionPosition();
+        const pos = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
         if (pos) {
           const formatted = formatSelectionPositionLabel(pos.start, pos.end);
           sendPositionLabel = formatted.label;
@@ -550,7 +653,7 @@ export function AIAgentPanel({
       }
     } else if (hasSelection) {
       const readingOrder = rawManifest?.readingOrder || [];
-      const pos = getCurrentSelectionPosition(readingOrder, null);
+      const pos = selectionSnapshot?.epubPosition ?? getCurrentSelectionPosition(readingOrder, null);
       if (pos) {
         const formatted = formatSelectionPositionLabel(pos.start, pos.end);
         sendPositionLabel = formatted.label;
@@ -559,6 +662,62 @@ export function AIAgentPanel({
     } else {
       sendPositionLabel = "(View)";
       sendPositionTitle = "EPUB visible context";
+    }
+
+    if (hasSelection && bookId) {
+      let startPosition: string | undefined;
+      let endPosition: string | undefined;
+
+      if (bookType === "pdf") {
+        const pos = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
+        startPosition = pos?.start;
+        endPosition = pos?.end;
+      } else {
+        const readingOrder = rawManifest?.readingOrder || [];
+        const pos = selectionSnapshot?.epubPosition ?? getCurrentSelectionPosition(readingOrder, null);
+        startPosition = pos?.start;
+        endPosition = pos?.end;
+      }
+
+      if (startPosition && endPosition) {
+        try {
+          const contextRes = await fetch(`/api/books/${bookId}/context`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              bookType,
+              startPosition,
+              endPosition,
+            }),
+          });
+          if (contextRes.ok) {
+            const contextData = (await contextRes.json()) as {
+              book?: { title?: string | null; author?: string | null } | null;
+              summaries?: ContextApiSummary[];
+            };
+            sendBookContext = contextData.book ?? null;
+            const summaries = contextData.summaries ?? [];
+            const bookSummaries = summaries.filter((summary) => summary.summary_type === "book");
+            const broadSummaries = summaries.filter((summary) => summary.summary_type === "chapter");
+            const narrowSummaries = summaries.filter((summary) => summary.summary_type === "subchapter");
+
+            const appendSummaries = (label: string, items: ContextApiSummary[]) => {
+              if (items.length === 0) return;
+              sendContextBlock += `${label}:\n`;
+              items.forEach((summary) => {
+                sendContextBlock += `- ${summary.summary_text || "(No summary text available)"}\n`;
+              });
+              sendContextBlock += "\n";
+            };
+
+            appendSummaries("Book-level summary (highest-level context)", bookSummaries);
+            appendSummaries("Broader summary (wide context)", broadSummaries);
+            appendSummaries("More specific summary (narrow context)", narrowSummaries);
+          }
+        } catch {
+          // Best-effort context enrichment for typed sends.
+        }
+      }
     }
 
     const userMessage: AIMessage = {
@@ -629,7 +788,19 @@ export function AIAgentPanel({
       let userContent = userInput;
 
       if (selectionForSend && selectionForSend.trim().length > 0) {
-        userContent = `User question:\n${userInput}\n\nSelected text (use as context):\n"${selectionForSend}"`;
+        let contextHeader = "";
+        const finalBookTitle = sendBookContext?.title ?? bookTitle;
+        const finalBookAuthor = sendBookContext?.author ?? bookAuthor;
+        if (finalBookTitle) {
+          contextHeader += `Book: ${finalBookTitle}\n`;
+        }
+        if (finalBookAuthor) {
+          contextHeader += `Author: ${finalBookAuthor}\n`;
+        }
+        if (contextHeader) {
+          contextHeader += "\n";
+        }
+        userContent = `User question:\n${userInput}\n\n${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}Selected text (use as context):\n"${selectionForSend}"`;
       } else if (!selectionForSend && bookType === "pdf" && bookId) {
         const pageCtx = getCurrentPdfPageContext({ maxChars: 12000 });
         if (pageCtx?.text) {
@@ -691,12 +862,9 @@ export function AIAgentPanel({
     const isPdf = bookType === "pdf";
     if (!rawManifest && !isPdf) return;
 
-    // Get current selection text directly (don't rely on prop which might be stale)
-    let currentSelectedText = getSelectedText();
-    if (!currentSelectedText.trim() && trimmedSelectedText) {
-      restoreLastSelection();
-      currentSelectedText = getSelectedText() || trimmedSelectedText;
-    }
+    // Use remembered snapshot (text + optional position) when live selection is gone.
+    const selectionSnapshot = getSelectionSnapshot();
+    const currentSelectedText = selectionSnapshot?.text || trimmedSelectedText;
     if (
       currentSelectedText &&
       currentSelectedText.trim().length > 0 &&
@@ -747,30 +915,29 @@ export function AIAgentPanel({
           summary_text,
         }));
       } else {
-        const position = getCurrentPdfSelectionPosition();
-        if (!position) {
-          setIsLoading(false);
-          onActionComplete?.();
-          return;
-        }
-        const formatted = formatSelectionPositionLabel(
-          position.start,
-          position.end
-        );
-        selectionPositionLabel = formatted.label;
-        selectionPositionTitle = formatted.title;
-        summaries = (
-          await queryPdfSummariesForPosition(
-            bookId,
+        // Selection explain should still work from persisted selected text
+        // even when live DOM selection position cannot be recovered.
+        const position = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
+        if (position) {
+          const formatted = formatSelectionPositionLabel(
             position.start,
             position.end
-          )
-        ).map(({ summary_type, toc_title, chapter_path, summary_text }) => ({
-          summary_type,
-          toc_title,
-          chapter_path,
-          summary_text,
-        }));
+          );
+          selectionPositionLabel = formatted.label;
+          selectionPositionTitle = formatted.title;
+          summaries = (
+            await queryPdfSummariesForPosition(
+              bookId,
+              position.start,
+              position.end
+            )
+          ).map(({ summary_type, toc_title, chapter_path, summary_text }) => ({
+            summary_type,
+            toc_title,
+            chapter_path,
+            summary_text,
+          }));
+        }
       }
     } else {
       if (isExplainPage) {
@@ -787,23 +954,20 @@ export function AIAgentPanel({
         summaries = [];
       } else {
         const readingOrder = rawManifest?.readingOrder || [];
-        const position = getCurrentSelectionPosition(readingOrder, null);
-        if (!position) {
-          setIsLoading(false);
-          onActionComplete?.();
-          return;
+        const position = selectionSnapshot?.epubPosition ?? getCurrentSelectionPosition(readingOrder, null);
+        if (position) {
+          const formatted = formatSelectionPositionLabel(position.start, position.end);
+          selectionPositionLabel = formatted.label;
+          selectionPositionTitle = formatted.title;
+          summaries = (await querySummariesForPosition(bookId, position.start, position.end)).map(
+            ({ toc_title, chapter_path, summary_text }) => ({
+              summary_type: "chapter",
+              toc_title,
+              chapter_path,
+              summary_text,
+            })
+          );
         }
-        const formatted = formatSelectionPositionLabel(position.start, position.end);
-        selectionPositionLabel = formatted.label;
-        selectionPositionTitle = formatted.title;
-        summaries = (await querySummariesForPosition(bookId, position.start, position.end)).map(
-          ({ toc_title, chapter_path, summary_text }) => ({
-            summary_type: "chapter",
-            toc_title,
-            chapter_path,
-            summary_text,
-          })
-        );
       }
     }
 
@@ -846,7 +1010,7 @@ export function AIAgentPanel({
 
     // Add local PDF context window around selection (from document for cross-page context)
     if (isPdf && !isExplainPage) {
-      const position = getCurrentPdfSelectionPosition();
+      const position = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
       let local: { beforeText: string; selectedText: string; afterText: string } | null = null;
       if (pdfDocument && position && explainBodyText) {
         local = await getPdfLocalContextFromDocument(
@@ -994,6 +1158,7 @@ export function AIAgentPanel({
     messages,
     rawManifest,
     trimmedSelectedText,
+    getSelectionSnapshot,
     onActionComplete,
     onActionStart,
     ensureChat,

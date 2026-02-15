@@ -26,8 +26,8 @@ interface ContextPreviewDialogProps {
   bookAuthor?: string;
   /** Pre-captured position and local context (from mousedown before selection is lost) */
   capturedContext?: {
-    startPosition: string;
-    endPosition: string;
+    startPosition?: string;
+    endPosition?: string;
     localArea?: { beforeText?: string; selectedText?: string; afterText?: string };
     selectedText?: string;
   } | null;
@@ -79,11 +79,11 @@ export function ContextPreviewDialog({
         if (capturedContext.localArea) {
           setLocalArea(capturedContext.localArea);
         } else if (capturedContext.selectedText) {
-          if (pdfDocument && bookType === "pdf") {
+          if (pdfDocument && bookType === "pdf" && startPosition && endPosition) {
             getPdfLocalContextFromDocument(
               pdfDocument,
-              capturedContext.startPosition,
-              capturedContext.endPosition,
+              startPosition,
+              endPosition,
               capturedContext.selectedText,
               { beforeChars: 1200, afterChars: 1200, pagesBefore: 2, pagesAfter: 2, maxTotalChars: 4000 }
             )
@@ -165,7 +165,7 @@ export function ContextPreviewDialog({
         const data = await res.json();
         setBook(data.book);
         setSummaries(data.summaries || []);
-      } else if (!capturedContext) {
+      } else {
         setBook(bookTitle || bookAuthor ? { title: bookTitle || "", author: bookAuthor || "" } : null);
       }
 
@@ -190,7 +190,7 @@ export function ContextPreviewDialog({
     } finally {
       setLoading(false);
     }
-  }, [bookId, bookType, rawManifest, isOpen, bookTitle, bookAuthor, capturedContext]);
+  }, [bookId, bookType, rawManifest, isOpen, bookTitle, bookAuthor, capturedContext, pdfDocument]);
 
   useEffect(() => {
     if (isOpen) {
