@@ -18,6 +18,7 @@ import {
   getCurrentSelectionPosition,
   querySummariesForPosition,
   getSelectedText,
+  restoreLastSelection,
 } from "@/lib/book-position-utils";
 import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
 import { getCurrentPdfPageContext } from "@/lib/pdf-position/page-context";
@@ -518,10 +519,15 @@ export function AIAgentPanel({
     let sendPositionLabel: string | undefined;
     let sendPositionTitle: string | undefined;
 
-    const selectionForSend =
-      includeSelectionContextOnSend && getSelectedText()
-        ? getSelectedText()
-        : "";
+    let currentSelectionText = getSelectedText();
+    if (!currentSelectionText.trim() && trimmedSelectedText) {
+      restoreLastSelection();
+      currentSelectionText = getSelectedText();
+    }
+
+    const selectionForSend = includeSelectionContextOnSend
+      ? (currentSelectionText || trimmedSelectedText)
+      : "";
     const hasSelection = Boolean(selectionForSend?.trim());
 
     if (bookType === "pdf") {
@@ -686,7 +692,11 @@ export function AIAgentPanel({
     if (!rawManifest && !isPdf) return;
 
     // Get current selection text directly (don't rely on prop which might be stale)
-    const currentSelectedText = getSelectedText();
+    let currentSelectedText = getSelectedText();
+    if (!currentSelectedText.trim() && trimmedSelectedText) {
+      restoreLastSelection();
+      currentSelectedText = getSelectedText() || trimmedSelectedText;
+    }
     if (
       currentSelectedText &&
       currentSelectedText.trim().length > 0 &&
@@ -983,6 +993,7 @@ export function AIAgentPanel({
     isLoading,
     messages,
     rawManifest,
+    trimmedSelectedText,
     onActionComplete,
     onActionStart,
     ensureChat,

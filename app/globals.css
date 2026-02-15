@@ -81,4 +81,5 @@
     background: hsl(var(--primary) / 0.35);
     color: hsl(var(--primary-foreground));
   }
+
 }

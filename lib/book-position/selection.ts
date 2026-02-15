@@ -6,6 +6,35 @@ interface StoredSelection {
 }
 
 let lastSelection: StoredSelection | null = null;
+const PERSISTENT_SELECTION_HIGHLIGHT_KEY = "minerva-persistent-selection";
+const PERSISTENT_SELECTION_STYLE_ID = "minerva-persistent-selection-style";
+
+function getHighlightRegistry():
+  | { set: (name: string, highlight: unknown) => void; delete: (name: string) => void }
+  | null {
+  const cssWithHighlights = CSS as unknown as {
+    highlights?: { set: (name: string, highlight: unknown) => void; delete: (name: string) => void };
+  };
+  return cssWithHighlights.highlights ?? null;
+}
+
+function ensurePersistentHighlightStyle(): void {
+  if (typeof document === "undefined") return;
+  if (document.getElementById(PERSISTENT_SELECTION_STYLE_ID)) return;
+
+  const style = document.createElement("style");
+  style.id = PERSISTENT_SELECTION_STYLE_ID;
+  style.textContent = `
+::highlight(${PERSISTENT_SELECTION_HIGHLIGHT_KEY}) {
+  background-color: hsl(var(--primary) / 0.3);
+}
+
+.dark ::highlight(${PERSISTENT_SELECTION_HIGHLIGHT_KEY}) {
+  background-color: hsl(var(--primary) / 0.38);
+}
+`;
+  document.head.appendChild(style);
+}
 
 function isInAIPane(node: Node | null): boolean {
   if (!node) return false;
@@ -91,4 +120,26 @@ export function restoreLastSelection(): void {
     selection.removeAllRanges();
     selection.addRange(lastSelection.range.cloneRange());
   }
+}
+
+export function showPersistentSelectionHighlight(): void {
+  if (!lastSelection) return;
+  const registry = getHighlightRegistry();
+  const HighlightCtor = (window as unknown as { Highlight?: new (...ranges: Range[]) => unknown })
+    .Highlight;
+  if (!registry || !HighlightCtor) return;
+
+  try {
+    ensurePersistentHighlightStyle();
+    const highlight = new HighlightCtor(lastSelection.range.cloneRange());
+    registry.set(PERSISTENT_SELECTION_HIGHLIGHT_KEY, highlight);
+  } catch {
+    // No-op on unsupported browsers or stale ranges.
+  }
+}
+
+export function clearPersistentSelectionHighlight(): void {
+  const registry = getHighlightRegistry();
+  if (!registry) return;
+  registry.delete(PERSISTENT_SELECTION_HIGHLIGHT_KEY);
 }
