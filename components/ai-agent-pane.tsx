@@ -635,6 +635,7 @@ export function AIAgentPanel({
     let sendContextBlock = "";
     let sendBookContext: { title?: string | null; author?: string | null } | null = null;
     let sendLocalContextBlock = "";
+    let sendPageContextBlock = "";
 
     const selectionSnapshot = includeSelectionContextOnSend ? getSelectionSnapshot() : null;
     const selectionForSend = includeSelectionContextOnSend
@@ -673,6 +674,62 @@ export function AIAgentPanel({
       sendPositionTitle = "EPUB visible context";
     }
 
+    const appendContextSummaries = (summaries: ContextApiSummary[]) => {
+      const bookSummaries = summaries.filter((summary) => summary.summary_type === "book");
+      const broadSummaries = summaries.filter((summary) => summary.summary_type === "chapter");
+      const narrowSummaries = summaries.filter((summary) => summary.summary_type === "subchapter");
+
+      const appendSummaries = (label: string, items: ContextApiSummary[]) => {
+        if (items.length === 0) return;
+        sendContextBlock += `${label}:\n`;
+        items.forEach((summary) => {
+          sendContextBlock += `- ${summary.summary_text || "(No summary text available)"}\n`;
+        });
+        sendContextBlock += "\n";
+      };
+
+      appendSummaries("Book-level summary (highest-level context)", bookSummaries);
+      appendSummaries("Broader summary (wide context)", broadSummaries);
+      appendSummaries("More specific summary (narrow context)", narrowSummaries);
+    };
+
+    if (bookId) {
+      if (!hasSelection && bookType === "pdf") {
+        const page = getCurrentPdfPageContext({ maxChars: 30000 });
+        if (page?.text) {
+          sendPositionLabel = `(Page ${page.pageNumber})`;
+          sendPositionTitle = `start=${page.startPosition} end=${page.endPosition}`;
+          sendPageContextBlock = `Current page (page ${page.pageNumber}) text for context:\n\n"${page.text}"`;
+          try {
+            const contextRes = await fetch(`/api/books/${bookId}/context`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                bookType: "pdf",
+                startPosition: page.startPosition,
+                endPosition: page.endPosition,
+              }),
+            });
+            if (contextRes.ok) {
+              const contextData = (await contextRes.json()) as {
+                book?: { title?: string | null; author?: string | null } | null;
+                summaries?: ContextApiSummary[];
+              };
+              sendBookContext = contextData.book ?? null;
+              appendContextSummaries(contextData.summaries ?? []);
+            }
+          } catch {
+            // Best-effort context enrichment for typed sends.
+          }
+        }
+      } else if (!hasSelection && bookType === "epub") {
+        const visible = getEpubVisibleContext({ maxChars: 30000 });
+        if (visible?.text) {
+          sendPageContextBlock = `Current view text for context:\n\n"${visible.text}"`;
+        }
+      }
+    }
+
     if (hasSelection && bookId) {
       let startPosition: string | undefined;
       let endPosition: string | undefined;
@@ -705,23 +762,7 @@ export function AIAgentPanel({
               summaries?: ContextApiSummary[];
             };
             sendBookContext = contextData.book ?? null;
-            const summaries = contextData.summaries ?? [];
-            const bookSummaries = summaries.filter((summary) => summary.summary_type === "book");
-            const broadSummaries = summaries.filter((summary) => summary.summary_type === "chapter");
-            const narrowSummaries = summaries.filter((summary) => summary.summary_type === "subchapter");
-
-            const appendSummaries = (label: string, items: ContextApiSummary[]) => {
-              if (items.length === 0) return;
-              sendContextBlock += `${label}:\n`;
-              items.forEach((summary) => {
-                sendContextBlock += `- ${summary.summary_text || "(No summary text available)"}\n`;
-              });
-              sendContextBlock += "\n";
-            };
-
-            appendSummaries("Book-level summary (highest-level context)", bookSummaries);
-            appendSummaries("Broader summary (wide context)", broadSummaries);
-            appendSummaries("More specific summary (narrow context)", narrowSummaries);
+            appendContextSummaries(contextData.summaries ?? []);
           }
         } catch {
           // Best-effort context enrichment for typed sends.
@@ -859,10 +900,21 @@ export function AIAgentPanel({
           contextHeader += "\n";
         }
         userContent = `User question:\n${userInput}\n\n${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendLocalContextBlock ? `${sendLocalContextBlock}` : ""}Selected text (use as context):\n"${selectionForSend}"`;
-      } else if (!selectionForSend && bookType === "pdf" && bookId) {
-        const pageCtx = getCurrentPdfPageContext({ maxChars: 12000 });
-        if (pageCtx?.text) {
-          userContent = `User question:\n${userInput}\n\nCurrent page (page ${pageCtx.pageNumber}) text for context:\n\n"${pageCtx.text}"`;
+      } else if (!selectionForSend) {
+        let contextHeader = "";
+        const finalBookTitle = sendBookContext?.title ?? bookTitle;
+        const finalBookAuthor = sendBookContext?.author ?? bookAuthor;
+        if (finalBookTitle) {
+          contextHeader += `Book: ${finalBookTitle}\n`;
+        }
+        if (finalBookAuthor) {
+          contextHeader += `Author: ${finalBookAuthor}\n`;
+        }
+        if (contextHeader) {
+          contextHeader += "\n";
+        }
+        if (sendContextBlock || sendPageContextBlock || contextHeader) {
+          userContent = `User question:\n${userInput}\n\n${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendPageContextBlock ? `${sendPageContextBlock}` : ""}`;
         }
       }
 
