@@ -151,7 +151,9 @@ export function AIAgentPanel({
   const [bookTitle, setBookTitle] = useState<string>("");
   const [bookAuthor, setBookAuthor] = useState<string>("");
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [chats, setChats] = useState<{ id: string; book_id: string | null; created_at: string }[]>([]);
+  const [chats, setChats] = useState<
+    { id: string; book_id: string | null; created_at: string; title: string | null }[]
+  >([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [capturedContext, setCapturedContext] = useState<{
@@ -318,7 +320,7 @@ export function AIAgentPanel({
     const fetchChats = async () => {
       let q = supabase
         .from("chats")
-        .select("id, book_id, created_at")
+        .select("id, book_id, created_at, title")
         .eq("user_id", userId)
         .order("updated_at", { ascending: false });
       if (bookId) {
@@ -400,6 +402,31 @@ export function AIAgentPanel({
     });
   };
 
+  const generateAndUpdateChatTitle = useCallback(
+    async (chatId: string, userMessage: string, assistantContent: string) => {
+      try {
+        const res = await fetch("/api/chat/generate-title", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chatId,
+            userMessage,
+            assistantMessage: assistantContent,
+          }),
+        });
+        if (!res.ok) return;
+        const { title } = (await res.json()) as { title?: string };
+        if (!title?.trim()) return;
+        setChats((prev) =>
+          prev.map((c) => (c.id === chatId ? { ...c, title: title.trim() } : c))
+        );
+      } catch {
+        // Best-effort: ignore title generation failures
+      }
+    },
+    []
+  );
+
   const ensureChat = useCallback(
     async (
       forBookId: string | null
@@ -428,7 +455,7 @@ export function AIAgentPanel({
       if (activeChatId !== null) {
         let existingQuery = supabase
           .from("chats")
-          .select("id, book_id, created_at")
+          .select("id, book_id, created_at, title")
           .eq("user_id", userId)
           .order("updated_at", { ascending: false })
           .limit(1);
@@ -443,7 +470,15 @@ export function AIAgentPanel({
           setActiveChatId(chat.id);
           setChats((prev) => {
             if (prev.some((c) => c.id === chat.id)) return prev;
-            return [{ id: chat.id, book_id: chat.book_id, created_at: chat.created_at }, ...prev];
+            return [
+              {
+                id: chat.id,
+                book_id: chat.book_id,
+                created_at: chat.created_at,
+                title: (chat as { title?: string | null }).title ?? null,
+              },
+              ...prev,
+            ];
           });
           return { chatId: chat.id, isExisting: true };
         }
@@ -462,7 +497,12 @@ export function AIAgentPanel({
       if (!data?.id) throw new Error("Failed to create chat");
       setActiveChatId(data.id);
       setChats((prev) => [
-        { id: data.id, book_id: forBookId, created_at: new Date().toISOString() },
+        {
+          id: data.id,
+          book_id: forBookId,
+          created_at: new Date().toISOString(),
+          title: null,
+        },
         ...prev,
       ]);
       return { chatId: data.id, isExisting: false };
@@ -604,9 +644,13 @@ export function AIAgentPanel({
         body: JSON.stringify({ messages: messagesForAPI }),
       });
 
+      const isNewChat = chatId && msgCount === 0;
       await handleStreamingResponse(response, assistantMessageId, async (content) => {
         if (chatId) {
           await persistAssistantMessage(chatId, content, assistantMsgIndex);
+          if (isNewChat) {
+            generateAndUpdateChatTitle(chatId, userInput, content).catch(() => {});
+          }
         }
       });
     } catch (error) {
@@ -903,9 +947,13 @@ export function AIAgentPanel({
         body: JSON.stringify({ messages: messagesForAPI }),
       });
 
+      const isNewChat = chatId && msgCount === 0;
       await handleStreamingResponse(response, assistantMessageId, async (content) => {
         if (chatId) {
           await persistAssistantMessage(chatId, content, assistantMsgIndex);
+          if (isNewChat) {
+            generateAndUpdateChatTitle(chatId, explainUserMessage, content).catch(() => {});
+          }
         }
       });
     } catch (error) {
@@ -931,6 +979,7 @@ export function AIAgentPanel({
     bookType,
     pdfDocument,
     handleStreamingResponse,
+    generateAndUpdateChatTitle,
     isLoading,
     messages,
     rawManifest,
@@ -997,8 +1046,8 @@ export function AIAgentPanel({
                         className="flex items-center gap-2"
                       >
                         <MessageSquare className="h-4 w-4 shrink-0" />
-                        <span className="truncate">
-                          {new Date(chat.created_at).toLocaleDateString()}
+                        <span className="truncate min-w-0">
+                          {chat.title?.trim() || new Date(chat.created_at).toLocaleDateString()}
                         </span>
                       </DropdownMenuItem>
                     ))

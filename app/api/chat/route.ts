@@ -74,8 +74,8 @@ export async function POST(req: NextRequest) {
       ...openaiMessagesFromClient,
     ];
 
-    // Get model from environment variable, default to gpt-4o-mini
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    // Get model from environment variable, default to gpt-5-mini
+    const model = process.env.OPENAI_MODEL || "gpt-5-mini";
 
     if (shouldLogAiPrompts()) {
       const maxCharsPerMessage = Number.parseInt(
