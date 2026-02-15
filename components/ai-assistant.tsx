@@ -124,7 +124,6 @@ function DesktopAIAssistant({
       bookType,
       currentPage,
       autoRun,
-      hideInputUntilFirstResponse: true,
       includeSelectionContextOnSend: true,
       onClose: () => setIsOpen(false),
     }),

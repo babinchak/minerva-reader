@@ -49,11 +49,6 @@ export interface AIAgentPanelProps {
   bookType?: "epub" | "pdf";
   autoRun?: { nonce: number; action: "page" | "selection" } | null;
   /**
-   * If true, hide the free-form chat input until after the first assistant response completes.
-   * Useful when opening via an “explain” affordance so the assistant feels like a reading tool first.
-   */
-  hideInputUntilFirstResponse?: boolean;
-  /**
    * If true, when sending a typed question we will include the currently selected text as context.
    * Intended for mobile quick-action UX.
    */
@@ -128,7 +123,6 @@ export function AIAgentPanel({
   rawManifest,
   bookType = "epub",
   autoRun = null,
-  hideInputUntilFirstResponse = false,
   includeSelectionContextOnSend = false,
   showHeader = true,
   showMessages = true,
@@ -140,7 +134,6 @@ export function AIAgentPanel({
   className,
   onClose,
 }: AIAgentPanelProps) {
-  const [showInput, setShowInput] = useState(!hideInputUntilFirstResponse);
   const lastAutoRunNonceRef = useRef<number | null>(null);
 
   const normalizedSelectedText = selectedText ?? "";
@@ -189,7 +182,6 @@ export function AIAgentPanel({
             const data = line.slice(6);
             if (data === "[DONE]") {
               setIsLoading(false);
-              setShowInput(true);
               await onStreamComplete?.(fullContent);
               onActionComplete?.();
               return;
@@ -215,7 +207,6 @@ export function AIAgentPanel({
       }
 
       setIsLoading(false);
-      setShowInput(true);
       await onStreamComplete?.(fullContent);
       onActionComplete?.();
     },
@@ -561,7 +552,6 @@ export function AIAgentPanel({
 
     // Get current selection position
     setIsLoading(true);
-    if (hideInputUntilFirstResponse) setShowInput(false);
 
     let summaries: SummaryContext[] = [];
     let selectionPositionLabel: string | undefined;
@@ -622,7 +612,6 @@ export function AIAgentPanel({
         const visible = getEpubVisibleContext({ maxChars: 30000 });
         if (!visible?.text) {
           setIsLoading(false);
-          setShowInput(true);
           onActionComplete?.();
           return;
         }
@@ -809,7 +798,6 @@ export function AIAgentPanel({
         )
       );
       setIsLoading(false);
-      setShowInput(true);
       onActionComplete?.();
     }
   }, [
@@ -818,7 +806,6 @@ export function AIAgentPanel({
     bookTitle,
     bookType,
     handleStreamingResponse,
-    hideInputUntilFirstResponse,
     isLoading,
     messages,
     rawManifest,
@@ -912,8 +899,7 @@ export function AIAgentPanel({
       {/* Empty state: input near top (Cursor-style) */}
       {showMessages && messages.length === 0 && (
         <div className="flex-1 flex flex-col justify-start pt-4 px-4 min-h-0">
-          {showInput && (
-            <div className="space-y-4 max-w-full">
+          <div className="space-y-4 max-w-full">
               {(trimmedSelectedText || (currentPage && currentPage >= 1)) && (
                 <div className="flex justify-center">
                   <span className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -941,7 +927,6 @@ export function AIAgentPanel({
                 </Button>
               </div>
             </div>
-          )}
         </div>
       )}
 
@@ -1013,8 +998,7 @@ export function AIAgentPanel({
               </span>
             </div>
           )}
-          {showInput && (
-            <div className="flex gap-2">
+          <div className="flex gap-2">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -1031,7 +1015,6 @@ export function AIAgentPanel({
                 <Send className="h-4 w-4" />
               </Button>
             </div>
-          )}
         </div>
       )}
     </div>
