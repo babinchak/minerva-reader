@@ -1,5 +1,6 @@
 "use client";
 
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,9 @@ import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-pos
 import { getCurrentPdfPageContext } from "@/lib/pdf-position/page-context";
 import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 import { getPdfLocalContextAroundCurrentSelection } from "@/lib/pdf-position/local-context";
+import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context-from-document";
 import { getEpubVisibleContext } from "@/lib/epub-visible-context";
+import { ContextPreviewDialog } from "@/components/context-preview-dialog";
 
 const DEFAULT_MAX_EXPLAIN_SELECTION_CHARS = 4000;
 const MAX_EXPLAIN_SELECTION_CHARS = (() => {
@@ -65,6 +68,8 @@ export interface AIAgentPanelProps {
    * Enables page context to be included when user types a question.
    */
   currentPage?: number;
+  /** PDF document for extracting local context from arbitrary pages (not just DOM). */
+  pdfDocument?: PDFDocumentProxy | null;
   /**
    * Notified when a user-triggered action starts (send/explain).
    * Useful for shells (e.g. mobile quick state) to expand UI to show the response.
@@ -129,6 +134,7 @@ export function AIAgentPanel({
   showSelectedTextBanner = true,
   showSelectionChip = false,
   currentPage,
+  pdfDocument,
   onActionStart,
   onActionComplete,
   className,
@@ -147,7 +153,68 @@ export function AIAgentPanel({
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [chats, setChats] = useState<{ id: string; book_id: string | null; created_at: string }[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [contextDialogOpen, setContextDialogOpen] = useState(false);
+  const [capturedContext, setCapturedContext] = useState<{
+    startPosition: string;
+    endPosition: string;
+    localArea?: { beforeText?: string; selectedText?: string; afterText?: string };
+    selectedText?: string;
+  } | null>(null);
   const supabase = createClient();
+
+  const handleContextButtonPress = useCallback(() => {
+    if (trimmedSelectedText) {
+      const isPdf = bookType === "pdf";
+      if (isPdf) {
+        const pos = getCurrentPdfSelectionPosition();
+        if (pos) {
+          let localArea: { beforeText?: string; selectedText?: string; afterText?: string } | undefined;
+          if (!pdfDocument) {
+            const local = getPdfLocalContextAroundCurrentSelection({
+              beforeChars: 800,
+              afterChars: 800,
+              maxTotalChars: 2400,
+            });
+            if (local) {
+              localArea = {
+                beforeText: local.beforeText || undefined,
+                selectedText: local.selectedText || undefined,
+                afterText: local.afterText || undefined,
+              };
+            }
+          }
+          setCapturedContext({
+            startPosition: pos.start,
+            endPosition: pos.end,
+            selectedText: trimmedSelectedText,
+            localArea,
+          });
+        } else {
+          setCapturedContext(null);
+        }
+      } else {
+        const readingOrder = rawManifest?.readingOrder || [];
+        const pos = getCurrentSelectionPosition(readingOrder, null);
+        if (pos) {
+          setCapturedContext({
+            startPosition: pos.start,
+            endPosition: pos.end,
+            selectedText: trimmedSelectedText,
+          });
+        } else {
+          setCapturedContext(null);
+        }
+      }
+    } else {
+      setCapturedContext(null);
+    }
+    setContextDialogOpen(true);
+  }, [
+    trimmedSelectedText,
+    bookType,
+    rawManifest?.readingOrder,
+    pdfDocument,
+  ]);
 
   // Helper function to handle streaming response
   const handleStreamingResponse = useCallback(
@@ -679,15 +746,28 @@ export function AIAgentPanel({
     appendSummaries("Broader summary (wide context)", broadSummaries);
     appendSummaries("More specific summary (narrow context)", narrowSummaries);
 
-    // Add local PDF context window around selection (best-effort)
+    // Add local PDF context window around selection (from document for cross-page context)
     if (isPdf && !isExplainPage) {
-      const local = getPdfLocalContextAroundCurrentSelection({
-        beforeChars: 800,
-        afterChars: 800,
-        maxTotalChars: 2400,
-      });
+      const position = getCurrentPdfSelectionPosition();
+      let local: { beforeText: string; selectedText: string; afterText: string } | null = null;
+      if (pdfDocument && position && explainBodyText) {
+        local = await getPdfLocalContextFromDocument(
+          pdfDocument,
+          position.start,
+          position.end,
+          explainBodyText,
+          { beforeChars: 1200, afterChars: 1200, pagesBefore: 2, pagesAfter: 2, maxTotalChars: 4000 }
+        );
+      }
+      if (!local) {
+        local = getPdfLocalContextAroundCurrentSelection({
+          beforeChars: 800,
+          afterChars: 800,
+          maxTotalChars: 2400,
+        });
+      }
       if (local && (local.beforeText || local.afterText)) {
-        prompt += "Local context around the selection (PDF text near where it appears on the page):\n\n";
+        prompt += "Local context around the selection (PDF text from surrounding pages):\n\n";
         if (local.beforeText) {
           prompt += `Before:\n"${local.beforeText}"\n\n`;
         }
@@ -805,6 +885,7 @@ export function AIAgentPanel({
     bookId,
     bookTitle,
     bookType,
+    pdfDocument,
     handleStreamingResponse,
     isLoading,
     messages,
@@ -902,11 +983,18 @@ export function AIAgentPanel({
           <div className="space-y-4 max-w-full">
               {(trimmedSelectedText || (currentPage && currentPage >= 1)) && (
                 <div className="flex justify-center">
-                  <span className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleContextButtonPress();
+                    }}
+                    className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+                  >
                     {trimmedSelectedText
                       ? "Using selected text for context"
                       : `Using page ${currentPage} for context`}
-                  </span>
+                  </button>
                 </div>
               )}
               <div className="flex gap-2">
@@ -993,11 +1081,18 @@ export function AIAgentPanel({
         <div className="p-4 border-t border-border shrink-0">
           {(trimmedSelectedText || (currentPage && currentPage >= 1)) && (
             <div className="mb-2">
-              <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleContextButtonPress();
+                }}
+                className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+              >
                 {trimmedSelectedText
                   ? "Using selected text for context"
                   : `Using page ${currentPage} for context`}
-              </span>
+              </button>
             </div>
           )}
           <div className="flex gap-2">
@@ -1019,6 +1114,21 @@ export function AIAgentPanel({
             </div>
         </div>
       )}
+
+      <ContextPreviewDialog
+        isOpen={contextDialogOpen}
+        onClose={() => {
+          setContextDialogOpen(false);
+          setCapturedContext(null);
+        }}
+        bookId={bookId}
+        bookType={bookType}
+        rawManifest={rawManifest}
+        bookTitle={bookTitle}
+        bookAuthor={bookAuthor}
+        capturedContext={capturedContext}
+        pdfDocument={pdfDocument}
+      />
     </div>
   );
 }

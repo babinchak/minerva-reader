@@ -1,5 +1,6 @@
 "use client";
 
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AIRail } from "@/components/ai-rail";
 import { AIBottomDrawer } from "@/components/ai-bottom-drawer";
@@ -13,6 +14,8 @@ export interface AIAssistantProps {
   bookType: "epub" | "pdf";
   /** Current PDF page number (1-based). Used for context hint and including page in typed questions. */
   currentPage?: number;
+  /** PDF document for extracting text from arbitrary pages (local context). */
+  pdfDocument?: PDFDocumentProxy | null;
   mobileDrawerMinMode?: "closed" | "quick";
   /**
    * Optional external trigger to open the desktop AI pane and run an action.
@@ -44,6 +47,7 @@ export function AIAssistant(props: AIAssistantProps) {
       rawManifest={props.rawManifest}
       bookType={props.bookType}
       currentPage={props.currentPage}
+      pdfDocument={props.pdfDocument}
       minMode={props.mobileDrawerMinMode}
     />
   );
@@ -57,6 +61,7 @@ function DesktopAIAssistant({
   rawManifest,
   bookType,
   currentPage,
+  pdfDocument,
   requestRun = null,
   requestOpen = null,
   onOpenChange,
@@ -123,11 +128,13 @@ function DesktopAIAssistant({
       rawManifest,
       bookType,
       currentPage,
+      pdfDocument,
       autoRun,
+      hideInputUntilFirstResponse: true,
       includeSelectionContextOnSend: true,
       onClose: () => setIsOpen(false),
     }),
-    [autoRun, bookId, bookType, currentPage, rawManifest, selectedText]
+    [autoRun, bookId, bookType, currentPage, pdfDocument, rawManifest, selectedText]
   );
 
   return (
