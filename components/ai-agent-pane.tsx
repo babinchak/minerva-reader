@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles } from "lucide-react";
+import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -1454,20 +1454,17 @@ export function AIAgentPanel({
               role="status"
               aria-live="polite"
             >
-              <div className="rounded-md border border-amber-500/40 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-                {!processingStatus.summariesReady && !processingStatus.vectorsReady ? (
-                  <p>
-                    Book is still processing. AI context will be limited until summaries and vector search are ready.
-                  </p>
-                ) : !processingStatus.summariesReady ? (
-                  <p>
-                    Summaries processing… Quick and Deep mode will have limited context until done.
-                  </p>
-                ) : (
-                  <p>
-                    Vector search processing… Deep mode uses keyword search until semantic search is ready.
-                  </p>
-                )}
+              <div className="flex items-center justify-between gap-3 rounded-md border border-amber-500/40 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+                <p className="min-w-0 flex-1">
+                  {!processingStatus.summariesReady && !processingStatus.vectorsReady ? (
+                    "Book is still processing. AI context will be limited until summaries and vector search are ready."
+                  ) : !processingStatus.summariesReady ? (
+                    "Summaries processing… Quick and Deep mode will have limited context until done."
+                  ) : (
+                    "Vector search processing… Deep mode uses keyword search until semantic search is ready."
+                  )}
+                </p>
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-600 dark:text-amber-400" aria-hidden />
               </div>
             </div>
           )}
