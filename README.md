@@ -69,12 +69,7 @@ npm run dev
 
 ## External Processing
 
-Book processing is handled by external services:
-
-- [readium-processor-lambda](https://github.com/babinchak/readium-processor-lambda) — Generates Readium manifests from EPUB files (Go toolkit)
-- [readium-summaries-lambda](https://github.com/babinchak/readium-summaries-lambda) — Generates book, chapter, and sub-chapter summaries with the positioning system
-
-Vector embeddings for RAG are produced by a separate pipeline and stored in Supabase Vector Buckets.
+Book processing is handled by external services that generate Readium manifests from EPUB files and book/chapter/sub-chapter summaries with the positioning system. Vector embeddings for RAG are produced by a separate pipeline and stored in Supabase Vector Buckets.
 
 ## Future Development
 
