@@ -582,7 +582,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
             </>
           )}
           <div
-            className="flex-1 overflow-auto bg-muted/20"
+            className="flex-1 overflow-auto bg-background"
             ref={scrollRef}
             onPointerDown={(e) => {
               if (!isMobile) return;

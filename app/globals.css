@@ -72,6 +72,12 @@
 @layer utilities {}
 
 @layer base {
+  /* Override pdfjs-dist dark mode (prefers-color-scheme) so PDF viewer uses our theme.
+   * pdfjs uses #1c1b22 (blue-gray) in dark mode; we use a warm dark. */
+  .dark .pdfViewer {
+    background-color: hsl(var(--background));
+  }
+
   /* Make text selection clearly visible inside the AI pane (both themes). */
   [data-ai-pane="true"] ::selection {
     background: hsl(var(--primary) / 0.35);
