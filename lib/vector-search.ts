@@ -36,10 +36,13 @@ export async function vectorSearch(
 
     const supabase = createServiceClient();
     const index = supabase.storage.vectors.from(VECTOR_BUCKET).index(VECTOR_INDEX);
+
+    // Query without filter - Supabase Vector filter causes 500 in alpha (see github.com/orgs/supabase/discussions/40815).
+    // Request extra results and filter client-side by book_id.
+    const requestTopK = Math.min(topK * 5, 100);
     const { data, error } = await index.queryVectors({
       queryVector: { float32: queryVector },
-      topK,
-      filter: { book_id: bookId },
+      topK: requestTopK,
       returnDistance: true,
       returnMetadata: true,
     });
@@ -49,12 +52,40 @@ export async function vectorSearch(
       return { results: [], error: error.message ?? "Vector search failed" };
     }
 
-    const results: VectorSearchResult[] = (data?.vectors ?? []).map((v) => {
+    const bookIdStr = String(bookId);
+    const filtered = (data?.vectors ?? []).filter((v) => {
+      const meta = (v.metadata ?? {}) as Record<string, unknown>;
+      return String(meta.book_id ?? "") === bookIdStr;
+    });
+    const limited = filtered.slice(0, topK);
+
+    // Vector keys are embedding_section ids; fetch content from embedding_sections
+    const sectionIds = limited.map((v) => v.key).filter(Boolean);
+    const sectionMap = new Map<string, { content_text: string; start_position: string | null; end_position: string | null }>();
+
+    if (sectionIds.length > 0) {
+      const { data: sections } = await supabase
+        .from("embedding_sections")
+        .select("id, content_text, start_position, end_position")
+        .eq("book_id", bookId)
+        .in("id", sectionIds);
+
+      for (const row of sections ?? []) {
+        sectionMap.set(row.id, {
+          content_text: row.content_text ?? "",
+          start_position: row.start_position ?? null,
+          end_position: row.end_position ?? null,
+        });
+      }
+    }
+
+    const results: VectorSearchResult[] = limited.map((v) => {
+      const fromDb = sectionMap.get(v.key);
       const meta = (v.metadata ?? {}) as Record<string, unknown>;
       return {
-        content_text: String(meta.content_text ?? ""),
-        start_position: meta.start_position != null ? String(meta.start_position) : null,
-        end_position: meta.end_position != null ? String(meta.end_position) : null,
+        content_text: fromDb?.content_text ?? String(meta.content_text ?? ""),
+        start_position: fromDb?.start_position ?? (meta.start_position != null ? String(meta.start_position) : null),
+        end_position: fromDb?.end_position ?? (meta.end_position != null ? String(meta.end_position) : null),
         similarity: typeof v.distance === "number" ? 1 - v.distance : null,
       };
     });
