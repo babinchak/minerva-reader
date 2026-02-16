@@ -1,36 +1,82 @@
 # Minerva Reader
 
-Minerva Reader is a personal EPUB library with an in-browser reader and a seamless AI assistant. All questions will be fed to the AI with location-specific summaries as context, using a character-specific positioning system. Explain current page or a text selection in a single click.
+Minerva Reader is a personal EPUB and PDF library with an in-browser reader and an AI assistant. Ask questions about your books with location-specific context—the AI uses a character-specific positioning system to ground answers in the exact passage. Explain the current page or a text selection in a single click.
 
 ## Features
 
-- Personal library with EPUB and PDF upload
-- Web reader powered by Readium/Thorium
-- AI reading assistant
-- Character-specific positioning system for precise location tracking
-- Context retrieval from book, chapter, sub-chapter, and local passage
-- Supabase-backed auth, storage, and metadata
+- **Personal library** — Upload EPUB and PDF files
+- **Web reader** — Powered by Readium/Thorium
+- **AI reading assistant** — Two modes:
+  - **Fast mode** — Direct explain page/selection with summaries and local context
+  - **Agentic mode** — LangGraph-based agent with tools: vector search, text search, and optional web search
+- **RAG (Retrieval-Augmented Generation)** — Vector embeddings for semantic search within a book; falls back to keyword search when vectors aren’t available
+- **Character-specific positioning** — Precise location tracking for EPUB and PDF
+- **Context retrieval** — Book, chapter, sub-chapter, and local passage summaries
+- **Supabase** — Auth, Postgres, Storage, and Vector Buckets
 
 ## Use Cases
 
-- "Explain page" or "Explain selection" in single button click
+- "Explain page" or "Explain selection" in a single button click
 - Ask follow-up questions grounded to the exact location in the book
+- Agentic mode: semantic search, keyword search, and web search for deeper research
 
 ## Tech Stack
 
-- Next.js
-- Supabase Auth, Postgres, and Storage
-- OpenAI GPT for AI assistant
-- Thorium/Readium reader for EPUB
-- Tailwind CSS + shadcn/ui
+- **Next.js** — App router
+- **Supabase** — Auth, Postgres, Storage, Vector Buckets
+- **OpenAI** — GPT for chat, embeddings for vector search
+- **LangChain / LangGraph** — Agentic mode with tool-calling
+- **Thorium/Readium** — EPUB reader
+- **Tailwind CSS + shadcn/ui**
+- **PWA** — Installable app with generated icons
 
-## Lambdas
-- https://github.com/babinchak/readium-processor-lambda to generate Readium manifests from epub files using Go toolkit.
-- https://github.com/babinchak/readium-summaries-lambda to generate book, chapter, sub-chapter summaries with positioning system.
+## Getting Started
 
-## Future Development - RAG, Multi-stage pipeline, 
-- Generate vector embeddings for sections throughout the book.
-- Have AI query by semantic similarity scores on those vectors.
-- Agentic ability determines which of the most-similar sections are relevant to the user's question.
-- Allow user to click on AI's chosen reference and visit that reference in a different tab.
-- Eventually multi-book RAG, where user can find references over a collection of books
+### Prerequisites
+
+- Node.js 20+
+- Supabase project
+- OpenAI API key
+
+### Installation
+
+```bash
+npm install
+```
+
+### Environment Variables
+
+Copy `.env.example` to `.env.local` and configure:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Supabase publishable/anon key |
+| `OPENAI_API_KEY` | Yes | OpenAI API key for chat and embeddings |
+| `OPENAI_MODEL` | No | Chat model (default: `gpt-4o-mini`) |
+| `OPENAI_TITLE_MODEL` | No | Model for chat title generation (e.g. `gpt-4o-mini` if main model is poor at short outputs) |
+| `OPENAI_EMBEDDING_MODEL` | No | Embedding model (default: `text-embedding-3-small`) |
+| `TAVILY_API_KEY` | No | Enables web search in agentic mode |
+| `VECTOR_BUCKET_NAME` | No | Supabase Vector bucket (default: `book-embeddings`) |
+| `VECTOR_INDEX_NAME` | No | Vector index name (default: `sections-openai`) |
+| `LANGSMITH_API_KEY` | No | LangSmith tracing for agentic mode |
+
+### Run
+
+```bash
+npm run dev
+```
+
+## External Processing
+
+Book processing is handled by external services:
+
+- [readium-processor-lambda](https://github.com/babinchak/readium-processor-lambda) — Generates Readium manifests from EPUB files (Go toolkit)
+- [readium-summaries-lambda](https://github.com/babinchak/readium-summaries-lambda) — Generates book, chapter, and sub-chapter summaries with the positioning system
+
+Vector embeddings for RAG are produced by a separate pipeline and stored in Supabase Vector Buckets.
+
+## Future Development
+
+- Allow user to click on AI-chosen references and navigate to that location in the reader
+- Multi-book RAG — semantic search across a collection of books
