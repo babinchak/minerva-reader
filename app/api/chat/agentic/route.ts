@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let vectorsReady = false;
     if (bookId) {
       const { data: userBook } = await supabase
         .from("user_books")
@@ -52,6 +53,12 @@ export async function POST(req: NextRequest) {
       if (!userBook) {
         return NextResponse.json({ error: "Access denied to this book" }, { status: 403 });
       }
+      const { data: book } = await supabase
+        .from("books")
+        .select("vectors_processed_at")
+        .eq("id", bookId)
+        .single();
+      vectorsReady = Boolean(book?.vectors_processed_at);
     }
 
     const messages = rawMessages as IncomingMessage[];
@@ -65,7 +72,7 @@ export async function POST(req: NextRequest) {
       return new HumanMessage(m.content ?? "");
     });
 
-    const graph = createAgentGraph(bookId ?? null, user.id);
+    const graph = createAgentGraph(bookId ?? null, user.id, { vectorsReady });
     const initialState = {
       messages: [new SystemMessage(MARKDOWN_SYSTEM_PROMPT), ...langchainMessages],
     };

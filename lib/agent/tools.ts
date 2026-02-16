@@ -4,7 +4,17 @@ import { vectorSearch } from "@/lib/vector-search";
 import { textSearch } from "@/lib/text-search";
 import { webSearch } from "@/lib/tools/web-search";
 
-export function createAgentTools(bookId: string | null, userId: string) {
+export interface AgentToolsOptions {
+  vectorsReady?: boolean;
+}
+
+export function createAgentTools(
+  bookId: string | null,
+  userId: string,
+  options?: AgentToolsOptions
+) {
+  const vectorsReady = options?.vectorsReady ?? false;
+
   const vectorSearchTool = tool(
     async ({ query, limit }: { query: string; limit?: number }) => {
       if (!bookId) {
@@ -106,5 +116,9 @@ export function createAgentTools(bookId: string | null, userId: string) {
     }
   );
 
-  return [vectorSearchTool, textSearchTool, webSearchTool];
+  const tools: ReturnType<typeof tool>[] = [textSearchTool, webSearchTool];
+  if (vectorsReady && bookId) {
+    tools.unshift(vectorSearchTool);
+  }
+  return tools;
 }

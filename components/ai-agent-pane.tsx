@@ -414,24 +414,56 @@ export function AIAgentPanel({
     init();
   }, [supabase]);
 
-  // Fetch book metadata when bookId is available
+  // Processing status: summaries and vectors (both improve AI context quality)
+  const [processingStatus, setProcessingStatus] = useState<{
+    summariesReady: boolean;
+    vectorsReady: boolean;
+  } | null>(null);
+
+  // Fetch book metadata and processing status when bookId is available; poll while incomplete
   useEffect(() => {
-    if (bookId) {
-      const fetchBookMetadata = async () => {
-        const { data, error } = await supabase
-          .from("books")
-          .select("title, author")
-          .eq("id", bookId)
-          .single();
-
-        if (!error && data) {
-          setBookTitle(data.title || "");
-          setBookAuthor(data.author || "");
-        }
-      };
-
-      fetchBookMetadata();
+    if (!bookId) {
+      setProcessingStatus(null);
+      return;
     }
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const poll = async () => {
+      const { data, error } = await supabase
+        .from("books")
+        .select("title, author, summaries_processed_at, vectors_processed_at")
+        .eq("id", bookId)
+        .single();
+
+      if (!error && data) {
+        const summariesReady = Boolean(data.summaries_processed_at);
+        const vectorsReady = Boolean(data.vectors_processed_at);
+        setBookTitle(data.title || "");
+        setBookAuthor(data.author || "");
+        setProcessingStatus({ summariesReady, vectorsReady });
+        return summariesReady && vectorsReady;
+      }
+      setProcessingStatus(null);
+      return false;
+    };
+
+    void (async () => {
+      const done = await poll();
+      if (!done) {
+        intervalId = setInterval(async () => {
+          const complete = await poll();
+          if (complete && intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+        }, 15_000);
+      }
+    })();
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [bookId, supabase]);
 
   // Fetch chats for user (filter by bookId when in a book)
@@ -1415,6 +1447,30 @@ export function AIAgentPanel({
               </Button>
             )}
           </div>
+          {/* Processing status banner: set expectations when summaries/vectors aren't ready */}
+          {bookId && processingStatus && (!processingStatus.summariesReady || !processingStatus.vectorsReady) && (
+            <div
+              className="px-4 pb-3 pt-0"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="rounded-md border border-amber-500/40 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+                {!processingStatus.summariesReady && !processingStatus.vectorsReady ? (
+                  <p>
+                    Book is still processing. AI context will be limited until summaries and vector search are ready.
+                  </p>
+                ) : !processingStatus.summariesReady ? (
+                  <p>
+                    Summaries processing… Quick and Deep mode will have limited context until done.
+                  </p>
+                ) : (
+                  <p>
+                    Vector search processing… Deep mode uses keyword search until semantic search is ready.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

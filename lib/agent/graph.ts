@@ -21,8 +21,17 @@ function shouldContinue(state: AgentState): "tools" | "__end__" {
   return lastMessage.tool_calls?.length ? "tools" : "__end__";
 }
 
-export function createAgentGraph(bookId: string | null, userId: string) {
-  const tools = createAgentTools(bookId, userId) as StructuredToolInterface[];
+export interface AgentGraphOptions {
+  vectorsReady?: boolean;
+}
+
+export function createAgentGraph(
+  bookId: string | null,
+  userId: string,
+  options?: AgentGraphOptions
+) {
+  const vectorsReady = options?.vectorsReady ?? false;
+  const tools = createAgentTools(bookId, userId, { vectorsReady }) as StructuredToolInterface[];
   const toolNode = new ToolNode<AgentState>(tools);
 
   const model = new ChatOpenAI({
