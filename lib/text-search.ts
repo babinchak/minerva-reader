@@ -26,7 +26,19 @@ export async function textSearch(
   }
 
   const maxResults = Math.min(Math.max(1, limit), 50);
-  const searchPattern = `%${query.trim().replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
+  // Long queries rarely match substring search—extract a short key term for better results
+  const trimmed = query.trim();
+  const effectiveQuery =
+    trimmed.length > 50 || trimmed.split(/\s+/).length > 4
+      ? (trimmed
+          .split(/\s+/)
+          .filter((w) => w.length > 2)
+          .slice(0, 3)
+          .join(" ") ||
+          trimmed.split(/\s+/)[0] ||
+          trimmed)
+      : trimmed;
+  const searchPattern = `%${effectiveQuery.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
 
   const { data, error } = await supabase
     .from("embedding_sections")
