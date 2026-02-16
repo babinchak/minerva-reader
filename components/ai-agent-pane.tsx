@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare } from "lucide-react";
+import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -29,6 +29,7 @@ import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context
 import { getEpubVisibleContext } from "@/lib/epub-visible-context";
 import { getEpubLocalContextAroundCurrentSelection } from "@/lib/book-position/local-context";
 import { ContextPreviewDialog } from "@/components/context-preview-dialog";
+import { cn } from "@/lib/utils";
 
 const DEFAULT_MAX_EXPLAIN_SELECTION_CHARS = 4000;
 const MAX_EXPLAIN_SELECTION_CHARS = (() => {
@@ -1374,27 +1375,33 @@ export function AIAgentPanel({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                    aria-label="Chat mode"
-                    title={chatMode === "fast" ? "Fast mode (single call)" : "Agentic mode (tools: vector, text, web search)"}
-                  >
-                    {chatMode === "fast" ? "Fast" : "Agentic"}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => setChatMode("fast")}>
-                    Fast
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setChatMode("agentic")}>
-                    Agentic
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={chatMode === "agentic"}
+                  aria-label={chatMode === "fast" ? "Quick mode (single call)" : "Deep mode (tools: vector, text, web search)"}
+                  title={chatMode === "fast" ? "Quick mode (single call)" : "Deep mode (tools: vector, text, web search)"}
+                  onClick={() => setChatMode(chatMode === "fast" ? "agentic" : "fast")}
+                  className={cn(
+                    "relative flex h-6 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 focus:outline-none focus:ring-0",
+                    chatMode === "fast" ? "bg-amber-400 dark:bg-amber-500" : "bg-blue-500 dark:bg-blue-600"
+                  )}
+                >
+                  <Zap className="absolute left-1 h-3.5 w-3.5 shrink-0 text-amber-900 dark:text-amber-950" aria-hidden />
+                  <Sparkles className="absolute right-1.5 h-3.5 w-3.5 shrink-0 text-blue-900 dark:text-blue-950" aria-hidden />
+                  <span
+                    className={cn(
+                      "absolute top-0.5 h-5 w-6 rounded-full bg-white shadow-md transition-all duration-200",
+                      chatMode === "fast" ? "left-[calc(100%-1.5rem-2px)]" : "left-0.5"
+                    )}
+                    aria-hidden
+                  />
+                </button>
+                <span className="text-xs text-muted-foreground">
+                  {chatMode === "fast" ? "Quick" : "Deep"}
+                </span>
+              </div>
             </div>
             {onClose && (
               <Button
