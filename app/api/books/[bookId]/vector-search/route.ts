@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { vectorSearch } from "@/lib/vector-search";
+import { textSearch } from "@/lib/text-search";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(
@@ -36,10 +37,29 @@ export async function POST(
       );
     }
 
-    const { results, error } = await vectorSearch(bookId, query, limit);
+    let { results, error } = await vectorSearch(bookId, query, limit);
 
     if (error) {
       return NextResponse.json({ error }, { status: 500 });
+    }
+
+    // Fallback to text search when vector bucket is empty (e.g. vectors_processed_at is null)
+    if (results.length === 0) {
+      const firstWord = query.trim().split(/\s+/).find((w) => w.length > 2) ?? query.trim().split(/\s+/)[0] ?? query;
+      if (firstWord) {
+        const { results: textResults } = await textSearch(bookId, user.id, firstWord, limit);
+        if (textResults.length > 0) {
+          return NextResponse.json({
+            results: textResults.map((r) => ({
+              content_text: r.content_text,
+              start_position: r.start_position,
+              end_position: r.end_position,
+              similarity: null,
+            })),
+            fallback: "keyword",
+          });
+        }
+      }
     }
 
     return NextResponse.json({ results });

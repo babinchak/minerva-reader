@@ -14,6 +14,24 @@ export function createAgentTools(bookId: string | null, userId: string) {
       if (error) {
         return JSON.stringify({ results: [], error });
       }
+      // Fallback to text search when vector bucket is empty (e.g. vectors_processed_at is null)
+      if (results.length === 0) {
+        const firstWord = query.trim().split(/\s+/).find((w) => w.length > 2) ?? query.trim().split(/\s+/)[0] ?? query;
+        if (firstWord) {
+          const { results: textResults } = await textSearch(bookId, userId, firstWord, limit ?? 10);
+          if (textResults.length > 0) {
+            return JSON.stringify({
+              results: textResults.map((r) => ({
+                content_text: r.content_text,
+                start_position: r.start_position,
+                end_position: r.end_position,
+                similarity: null,
+              })),
+              _fallback: "keyword",
+            });
+          }
+        }
+      }
       return JSON.stringify({
         results: results.map((r) => ({
           content_text: r.content_text,

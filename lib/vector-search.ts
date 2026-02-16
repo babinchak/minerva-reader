@@ -45,6 +45,7 @@ export async function vectorSearch(
     });
 
     if (error) {
+      console.error("[vector-search] Supabase query error:", error);
       return { results: [], error: error.message ?? "Vector search failed" };
     }
 
@@ -60,6 +61,7 @@ export async function vectorSearch(
 
     return { results };
   } catch (err) {
+    console.error("[vector-search] Unexpected error:", err);
     const msg = err instanceof Error ? err.message : "Vector search failed";
     return { results: [], error: msg };
   }
