@@ -205,6 +205,7 @@ export function AIAgentPanel({
     selectedText?: string;
   } | null>(null);
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
+  const sendingRef = useRef(false);
   const supabase = createClient();
 
   const getSelectionSnapshot = useCallback((): SelectionSnapshot | null => {
@@ -667,9 +668,16 @@ export function AIAgentPanel({
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     onActionStart?.();
 
     const userInput = input;
+    setInput("");
+    setIsLoading(true);
+    if (chatMode === "agentic") setAgenticStatus("Thinking...");
+
+    try {
     let sendPositionLabel: string | undefined;
     let sendPositionTitle: string | undefined;
     let sendContextBlock = "";
@@ -732,6 +740,23 @@ export function AIAgentPanel({
       appendSummaries("Broader summary (wide context)", broadSummaries);
       appendSummaries("More specific summary (narrow context)", narrowSummaries);
     };
+
+    const userMessage: AIMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      content: userInput,
+      timestamp: new Date(),
+      selectionPositionLabel: sendPositionLabel,
+      selectionPositionTitle: sendPositionTitle,
+    };
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: AIMessage = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
 
     if (bookId) {
       if (!hasSelection && bookType === "pdf") {
@@ -859,27 +884,6 @@ export function AIAgentPanel({
       }
     }
 
-    const userMessage: AIMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content: userInput,
-      timestamp: new Date(),
-      selectionPositionLabel: sendPositionLabel,
-      selectionPositionTitle: sendPositionTitle,
-    };
-
-    const assistantMessageId = (Date.now() + 1).toString();
-    const assistantMessage: AIMessage = {
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      timestamp: new Date(),
-    };
-
-    setInput("");
-    setIsLoading(true);
-    if (chatMode === "agentic") setAgenticStatus("Thinking...");
-
     try {
       let chatId: string | null = null;
       let msgCount = 0;
@@ -919,7 +923,6 @@ export function AIAgentPanel({
         }
       } else {
         historyForAPI = messages.map((m) => ({ role: m.role, content: m.content }));
-        setMessages((prev) => [...prev, userMessage, assistantMessage]);
       }
 
       const userMsgIndex = msgCount;
@@ -1008,6 +1011,9 @@ export function AIAgentPanel({
       );
       setIsLoading(false);
       onActionComplete?.();
+    }
+    } finally {
+      sendingRef.current = false;
     }
   };
 
