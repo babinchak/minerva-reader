@@ -195,6 +195,7 @@ export function AIAgentPanel({
   >([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [chatMode, setChatMode] = useState<"fast" | "agentic">("fast");
+  const [agenticStatus, setAgenticStatus] = useState<string | null>(null);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [capturedContext, setCapturedContext] = useState<{
     startPosition?: string;
@@ -339,7 +340,8 @@ export function AIAgentPanel({
     async (
       response: Response,
       assistantMessageId: string,
-      onStreamComplete?: (content: string) => void | Promise<void>
+      onStreamComplete?: (content: string) => void | Promise<void>,
+      onStatus?: (message: string | null) => void
     ) => {
       if (!response.ok) {
         throw new Error(`API error: ${response.statusText}`);
@@ -366,6 +368,7 @@ export function AIAgentPanel({
           if (line.startsWith("data: ")) {
             const data = line.slice(6);
             if (data === "[DONE]") {
+              onStatus?.(null);
               setIsLoading(false);
               await onStreamComplete?.(fullContent);
               onActionComplete?.();
@@ -374,7 +377,9 @@ export function AIAgentPanel({
 
             try {
               const parsed = JSON.parse(data);
-              if (parsed.content) {
+              if (parsed.type === "status" && typeof parsed.message === "string") {
+                onStatus?.(parsed.message);
+              } else if (parsed.content) {
                 fullContent += parsed.content;
                 setMessages((prev) =>
                   prev.map((msg) =>
@@ -391,6 +396,7 @@ export function AIAgentPanel({
         }
       }
 
+      onStatus?.(null);
       setIsLoading(false);
       await onStreamComplete?.(fullContent);
       onActionComplete?.();
@@ -839,6 +845,7 @@ export function AIAgentPanel({
 
     setInput("");
     setIsLoading(true);
+    if (chatMode === "agentic") setAgenticStatus("Thinking...");
 
     try {
       let chatId: string | null = null;
@@ -939,16 +946,22 @@ export function AIAgentPanel({
       });
 
       const isNewChat = chatId && msgCount === 0;
-      await handleStreamingResponse(response, assistantMessageId, async (content) => {
-        if (chatId) {
-          await persistAssistantMessage(chatId, content, assistantMsgIndex);
-          if (isNewChat) {
-            generateAndUpdateChatTitle(chatId, userInput, content).catch(() => {});
+      await handleStreamingResponse(
+        response,
+        assistantMessageId,
+        async (content) => {
+          if (chatId) {
+            await persistAssistantMessage(chatId, content, assistantMsgIndex);
+            if (isNewChat) {
+              generateAndUpdateChatTitle(chatId, userInput, content).catch(() => {});
+            }
           }
-        }
-      });
+        },
+        chatMode === "agentic" ? setAgenticStatus : undefined
+      );
     } catch (error) {
       console.error("Error calling chat API:", error);
+      setAgenticStatus(null);
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
@@ -1002,6 +1015,7 @@ export function AIAgentPanel({
 
     // Get current selection position
     setIsLoading(true);
+    if (chatMode === "agentic") setAgenticStatus("Thinking...");
 
     let summaries: SummaryContext[] = [];
     let selectionPositionLabel: string | undefined;
@@ -1245,16 +1259,22 @@ export function AIAgentPanel({
       });
 
       const isNewChat = chatId && msgCount === 0;
-      await handleStreamingResponse(response, assistantMessageId, async (content) => {
-        if (chatId) {
-          await persistAssistantMessage(chatId, content, assistantMsgIndex);
-          if (isNewChat) {
-            generateAndUpdateChatTitle(chatId, explainUserMessage, content).catch(() => {});
+      await handleStreamingResponse(
+        response,
+        assistantMessageId,
+        async (content) => {
+          if (chatId) {
+            await persistAssistantMessage(chatId, content, assistantMsgIndex);
+            if (isNewChat) {
+              generateAndUpdateChatTitle(chatId, explainUserMessage, content).catch(() => {});
+            }
           }
-        }
-      });
+        },
+        chatMode === "agentic" ? setAgenticStatus : undefined
+      );
     } catch (error) {
       console.error("Error calling chat API:", error);
+      setAgenticStatus(null);
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
@@ -1493,6 +1513,12 @@ export function AIAgentPanel({
       {/* Input (bottom: when chat has messages, or in compact mode when showMessages is false) */}
       {((showMessages && messages.length > 0) || !showMessages) && (
         <div className="p-4 border-t border-border shrink-0">
+          {chatMode === "agentic" && isLoading && agenticStatus && (
+            <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-pulse" />
+              <span>{agenticStatus}</span>
+            </div>
+          )}
           {(trimmedSelectedText || (currentPage && currentPage >= 1)) && (
             <div className="mb-2">
               <button
