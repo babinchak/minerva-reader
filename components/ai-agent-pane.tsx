@@ -370,8 +370,8 @@ export function AIAgentPanel({
             const data = line.slice(6);
             if (data === "[DONE]") {
               onStatus?.(null);
-              setIsLoading(false);
               await onStreamComplete?.(fullContent);
+              setIsLoading(false);
               onActionComplete?.();
               return;
             }
@@ -398,8 +398,8 @@ export function AIAgentPanel({
       }
 
       onStatus?.(null);
-      setIsLoading(false);
       await onStreamComplete?.(fullContent);
+      setIsLoading(false);
       onActionComplete?.();
     },
     [onActionComplete]
