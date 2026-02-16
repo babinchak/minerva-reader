@@ -194,6 +194,7 @@ export function AIAgentPanel({
     { id: string; book_id: string | null; created_at: string; title: string | null }[]
   >([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [chatMode, setChatMode] = useState<"fast" | "agentic">("fast");
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [capturedContext, setCapturedContext] = useState<{
     startPosition?: string;
@@ -923,12 +924,18 @@ export function AIAgentPanel({
         { role: "user" as const, content: userContent },
       ];
 
-      const response = await fetch("/api/chat", {
+      const chatUrl = chatMode === "agentic" ? "/api/chat/agentic" : "/api/chat";
+      const chatBody =
+        chatMode === "agentic"
+          ? JSON.stringify({ messages: messagesForAPI, bookId: bookId ?? undefined })
+          : JSON.stringify({ messages: messagesForAPI });
+
+      const response = await fetch(chatUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messages: messagesForAPI }),
+        body: chatBody,
       });
 
       const isNewChat = chatId && msgCount === 0;
@@ -1223,12 +1230,18 @@ export function AIAgentPanel({
         { role: "user" as const, content: prompt },
       ];
 
-      const response = await fetch("/api/chat", {
+      const chatUrl = chatMode === "agentic" ? "/api/chat/agentic" : "/api/chat";
+      const chatBody =
+        chatMode === "agentic"
+          ? JSON.stringify({ messages: messagesForAPI, bookId: bookId ?? undefined })
+          : JSON.stringify({ messages: messagesForAPI });
+
+      const response = await fetch(chatUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messages: messagesForAPI }),
+        body: chatBody,
       });
 
       const isNewChat = chatId && msgCount === 0;
@@ -1261,6 +1274,7 @@ export function AIAgentPanel({
     bookId,
     bookTitle,
     bookType,
+    chatMode,
     pdfDocument,
     handleStreamingResponse,
     generateAndUpdateChatTitle,
@@ -1338,6 +1352,27 @@ export function AIAgentPanel({
                       </DropdownMenuItem>
                     ))
                   )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    aria-label="Chat mode"
+                    title={chatMode === "fast" ? "Fast mode (single call)" : "Agentic mode (tools: vector, text, web search)"}
+                  >
+                    {chatMode === "fast" ? "Fast" : "Agentic"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => setChatMode("fast")}>
+                    Fast
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setChatMode("agentic")}>
+                    Agentic
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
