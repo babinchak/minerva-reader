@@ -52,6 +52,8 @@ export async function updateSession(request: NextRequest) {
     !user &&
     // Allow dev-only smoke test endpoint without auth
     !(process.env.NODE_ENV !== "production" && request.nextUrl.pathname.startsWith("/api/langsmith-smoke")) &&
+    // Stripe webhooks are server-to-server, no auth cookies
+    !request.nextUrl.pathname.startsWith("/api/stripe/webhook") &&
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/auth")
   ) {

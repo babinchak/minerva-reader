@@ -23,6 +23,7 @@ function shouldContinue(state: AgentState): "tools" | "__end__" {
 
 export interface AgentGraphOptions {
   vectorsReady?: boolean;
+  model?: string;
 }
 
 export function createAgentGraph(
@@ -31,11 +32,12 @@ export function createAgentGraph(
   options?: AgentGraphOptions
 ) {
   const vectorsReady = options?.vectorsReady ?? false;
+  const modelId = options?.model ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini";
   const tools = createAgentTools(bookId, userId, { vectorsReady }) as StructuredToolInterface[];
   const toolNode = new ToolNode<AgentState>(tools);
 
   const model = new ChatOpenAI({
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    model: modelId,
   }).bindTools(tools);
 
   async function callModel(state: AgentState) {

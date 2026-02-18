@@ -15,16 +15,12 @@ export default async function ReadBookPage({ params }: PageProps) {
   const supabase = await createClient();
   const serviceSupabase = createServiceClient();
 
-  // Get authenticated user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) {
-    redirect("/auth/login");
-  }
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // Fetch the book to get user_id and verify access
+  // Fetch the book (include is_curated for anonymous access)
   const { data: book, error: bookError } = await supabase
     .from("books")
-    .select("id, uploaded_by, book_type, storage_path, file_name, title")
+    .select("id, uploaded_by, book_type, storage_path, file_name, title, is_curated")
     .eq("id", bookId)
     .single();
 
@@ -41,15 +37,20 @@ export default async function ReadBookPage({ params }: PageProps) {
     );
   }
 
-  // Verify user has access and fetch reading position
-  const { data: userBook } = await supabase
-    .from("user_books")
-    .select("id, current_page, reading_position")
-    .eq("user_id", user.id)
-    .eq("book_id", bookId)
-    .single();
+  let userBook: { current_page: number | null; reading_position: unknown } | null = null;
 
-  if (!userBook) {
+  if (user) {
+    const { data } = await supabase
+      .from("user_books")
+      .select("id, current_page, reading_position")
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .single();
+    userBook = data;
+  }
+
+  // Access control: logged-in users need user_books; anonymous only for curated
+  if (user && !userBook) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -58,6 +59,9 @@ export default async function ReadBookPage({ params }: PageProps) {
         </div>
       </div>
     );
+  }
+  if (!user && !book.is_curated) {
+    redirect("/auth/login");
   }
 
   const bookType = book.book_type || "epub";
@@ -94,7 +98,7 @@ export default async function ReadBookPage({ params }: PageProps) {
         pdfUrl={signedUrl.signedUrl}
         fileName={book.file_name || book.title}
         bookId={bookId}
-        initialPage={userBook.current_page ?? undefined}
+        initialPage={userBook?.current_page ?? undefined}
       />
     );
   }
@@ -104,7 +108,7 @@ export default async function ReadBookPage({ params }: PageProps) {
   const manifestPath = `books/${book.id}/manifest.json`;
 
   // Fetch the manifest from readium-manifests bucket
-  const { data: manifestData, error: manifestError } = await supabase.storage
+  const { data: manifestData, error: manifestError } = await serviceSupabase.storage
     .from("readium-manifests")
     .download(manifestPath);
 
@@ -156,7 +160,7 @@ export default async function ReadBookPage({ params }: PageProps) {
     <BookReader
       rawManifest={manifest}
       selfHref={selfHref}
-      initialReadingPosition={userBook.reading_position ?? undefined}
+      initialReadingPosition={(userBook?.reading_position as Record<string, unknown> | null | undefined) ?? undefined}
     />
   );
 }

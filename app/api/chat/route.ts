@@ -1,5 +1,13 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
+import { createClient } from "@/lib/supabase/server";
+import {
+  getTier,
+  getModelForTier,
+  getCredits,
+  deductCredits,
+  creditsForAiUsage,
+} from "@/lib/credits";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -55,6 +63,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const tier = await getTier(user?.id ?? null);
+    const model = getModelForTier(tier);
+
+    // Logged-in users: check credits before (estimate 500 credits max per fast request)
+    if (user) {
+      const credits = await getCredits(user.id);
+      const minCredits = 50;
+      if (!credits || credits.balance < minCredits) {
+        return new Response(
+          JSON.stringify({
+            error: "Insufficient credits",
+            message: "You've run out of credits. Upgrade or add more to continue.",
+          }),
+          { status: 402, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Convert messages to OpenAI format
     const openaiMessagesFromClient: OpenAI.Chat.ChatCompletionMessageParam[] = (
       messages as IncomingChatMessage[]
@@ -73,9 +101,6 @@ export async function POST(req: NextRequest) {
       { role: "system", content: MARKDOWN_SYSTEM_PROMPT },
       ...openaiMessagesFromClient,
     ];
-
-    // Get model from environment variable, default to gpt-5-mini
-    const model = process.env.OPENAI_MODEL || "gpt-5-mini";
 
     if (shouldLogAiPrompts()) {
       const maxCharsPerMessage = Number.parseInt(
@@ -110,6 +135,7 @@ export async function POST(req: NextRequest) {
 
     // Create a ReadableStream to send the response
     const encoder = new TextEncoder();
+    let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
     const readable = new ReadableStream({
       async start(controller) {
         try {
@@ -118,9 +144,27 @@ export async function POST(req: NextRequest) {
             if (content) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
             }
+            if (chunk.usage) {
+              usage = chunk.usage;
+            }
           }
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
           controller.close();
+
+          // Deduct credits for logged-in users (fast mode, not agentic)
+          if (user && usage) {
+            const inputTokens = usage.prompt_tokens ?? 0;
+            const outputTokens = usage.completion_tokens ?? 0;
+            const credits = creditsForAiUsage(model, inputTokens, outputTokens, false);
+            if (credits > 0) {
+              await deductCredits(user.id, credits, "ai", undefined, {
+                agentic: false,
+                model,
+                input_tokens: inputTokens,
+                output_tokens: outputTokens,
+              });
+            }
+          }
         } catch (error) {
           controller.error(error);
         }

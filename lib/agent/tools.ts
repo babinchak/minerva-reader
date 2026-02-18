@@ -116,9 +116,8 @@ export function createAgentTools(
     }
   );
 
-  const tools: ReturnType<typeof tool>[] = [textSearchTool, webSearchTool];
-  if (vectorsReady && bookId) {
-    tools.unshift(vectorSearchTool);
-  }
-  return tools;
+  const tools = vectorsReady && bookId
+    ? [vectorSearchTool, textSearchTool, webSearchTool]
+    : [textSearchTool, webSearchTool];
+  return tools as ReturnType<typeof tool>[];
 }

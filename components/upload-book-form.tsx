@@ -1,20 +1,56 @@
 'use client'
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Upload, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { CREDITS_REFRESH_EVENT } from '@/lib/credits-refresh';
 
 export function UploadBookForm() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploadLimit, setUploadLimit] = useState<{
+    booksUploadedThisWeek: number;
+    booksUploadLimit: number;
+  } | null>(null);
+
+  const fetchCredits = useCallback(() => {
+    fetch(`/api/credits?t=${Date.now()}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) =>
+        d
+          ? {
+              booksUploadedThisWeek: d.booksUploadedThisWeek ?? 0,
+              booksUploadLimit: d.booksUploadLimit ?? 3,
+            }
+          : null
+      )
+      .then(setUploadLimit)
+      .catch(() => setUploadLimit(null));
+  }, []);
+
+  useEffect(() => {
+    fetchCredits();
+  }, [fetchCredits, message]);
+
+  useEffect(() => {
+    const handler = () => fetchCredits();
+    window.addEventListener(CREDITS_REFRESH_EVENT, handler);
+    return () => window.removeEventListener(CREDITS_REFRESH_EVENT, handler);
+  }, [fetchCredits]);
+
+  const limitReached =
+    uploadLimit &&
+    uploadLimit.booksUploadLimit < 999 &&
+    uploadLimit.booksUploadedThisWeek >= uploadLimit.booksUploadLimit;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (!file || limitReached) return;
 
     setUploading(true);
     setMessage(null);
@@ -56,7 +92,16 @@ export function UploadBookForm() {
       <CardHeader>
         <CardTitle>Upload Book</CardTitle>
         <CardDescription>
-          Upload an EPUB or PDF file to add it to your library. Duplicate books will be automatically detected.
+          {uploadLimit && uploadLimit.booksUploadLimit < 999 ? (
+            <>
+              Upload an EPUB or PDF file. {uploadLimit.booksUploadedThisWeek}/{uploadLimit.booksUploadLimit} books this week.
+              {uploadLimit.booksUploadedThisWeek >= uploadLimit.booksUploadLimit && (
+                <> <Link href="/?upgrade=1" className="text-primary hover:underline">Upgrade</Link> for unlimited.</>
+              )}
+            </>
+          ) : (
+            'Upload an EPUB or PDF file to add it to your library. Duplicate books will be automatically detected.'
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -87,7 +132,7 @@ export function UploadBookForm() {
           
           <Button 
             type="submit" 
-            disabled={!file || uploading}
+            disabled={!file || uploading || !!limitReached}
             className="w-full"
           >
             {uploading ? (

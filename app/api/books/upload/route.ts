@@ -1,6 +1,7 @@
 import { extractPdfMetadata } from "@/lib/pdf-metadata";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { getTier, countBooksUploadedThisWeek } from "@/lib/credits";
 
 export async function POST(request: NextRequest) {
   console.log("[UPLOAD] Request received");
@@ -103,7 +104,23 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Not a duplicate - create new book
+    // Not a duplicate - check free tier weekly limit (3 books/week)
+    const tier = await getTier(user.id);
+    if (tier === "free") {
+      const uploadedThisWeek = await countBooksUploadedThisWeek(user.id);
+      if (uploadedThisWeek >= 3) {
+        return NextResponse.json(
+          {
+            error: "Upload limit reached",
+            message:
+              "Free tier allows 3 new books per week. Upgrade to Pro for unlimited uploads.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Create new book
     console.log("[UPLOAD] Creating new book record...");
     const bookId = crypto.randomUUID();
     const extension = bookType === "pdf" ? "pdf" : "epub";

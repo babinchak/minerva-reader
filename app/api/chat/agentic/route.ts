@@ -3,6 +3,14 @@ import { createAgentGraph } from "@/lib/agent/graph";
 import { streamAgentToSSE } from "@/lib/agent/stream";
 import { HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  getTier,
+  getModelForTier,
+  getCredits,
+  deductCredits,
+  countAgenticRequestsToday,
+  AGENTIC_ESTIMATED_CREDITS,
+} from "@/lib/credits";
 
 const MARKDOWN_SYSTEM_PROMPT =
   "You are a helpful reading assistant. Respond using GitHub-flavored Markdown (GFM).\n" +
@@ -30,6 +38,35 @@ export async function POST(req: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const tier = await getTier(user.id);
+
+    // Free tier: 5 deep mode questions per day
+    if (tier === "free") {
+      const agenticToday = await countAgenticRequestsToday(user.id);
+      if (agenticToday >= 5) {
+        return NextResponse.json(
+          {
+            error: "Deep mode limit reached",
+            message:
+              "Free tier allows 5 deep mode questions per day. Upgrade to Pro for unlimited.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Check credits
+    const credits = await getCredits(user.id);
+    if (!credits || credits.balance < AGENTIC_ESTIMATED_CREDITS) {
+      return NextResponse.json(
+        {
+          error: "Insufficient credits",
+          message: "You've run out of credits. Upgrade or add more to continue.",
+        },
+        { status: 402 }
+      );
     }
 
     const body = (await req.json()) as { messages?: unknown; bookId?: string };
@@ -72,7 +109,11 @@ export async function POST(req: NextRequest) {
       return new HumanMessage(m.content ?? "");
     });
 
-    const graph = createAgentGraph(bookId ?? null, user.id, { vectorsReady });
+    const model = getModelForTier(tier);
+    const graph = createAgentGraph(bookId ?? null, user.id, {
+      vectorsReady,
+      model,
+    });
     const initialState = {
       messages: [new SystemMessage(MARKDOWN_SYSTEM_PROMPT), ...langchainMessages],
     };
@@ -85,6 +126,12 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(chunk));
           }
           controller.close();
+
+          // Deduct credits for agentic request (estimated)
+          await deductCredits(user.id, AGENTIC_ESTIMATED_CREDITS, "ai", undefined, {
+            agentic: true,
+            model,
+          });
         } catch (err) {
           console.error("Agentic stream error:", err);
           controller.enqueue(

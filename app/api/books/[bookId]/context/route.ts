@@ -105,10 +105,7 @@ export async function POST(
     const { bookId } = await params;
     const supabase = await createClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { data: { user } } = await supabase.auth.getUser();
 
     const body = await request.json();
     const { bookType, startPosition, endPosition } = body as {
@@ -116,6 +113,34 @@ export async function POST(
       startPosition?: string;
       endPosition?: string;
     };
+
+    // Anonymous: only allow context for curated books
+    if (!user) {
+      const { data: book } = await supabase
+        .from("books")
+        .select("is_curated")
+        .eq("id", bookId)
+        .single();
+      if (!book?.is_curated) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    } else {
+      // Logged-in: verify access via user_books
+      const { data: userBook } = await supabase
+        .from("user_books")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("book_id", bookId)
+        .single();
+      const { data: curatedBook } = await supabase
+        .from("books")
+        .select("is_curated")
+        .eq("id", bookId)
+        .single();
+      if (!userBook && !curatedBook?.is_curated) {
+        return NextResponse.json({ error: "Access denied to this book" }, { status: 403 });
+      }
+    }
 
     if (!bookType || !startPosition || !endPosition) {
       return NextResponse.json(
