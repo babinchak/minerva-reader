@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "next-themes";
 import { PwaRegister } from "@/components/pwa-register";
 import { CreditsRefreshOnSuccess } from "@/components/credits-refresh-on-success";
+import { ScrollLockRepair } from "@/components/scroll-lock-repair";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -59,6 +60,7 @@ export default function RootLayout({
         >
           <PwaRegister />
           <CreditsRefreshOnSuccess />
+          <ScrollLockRepair />
           {children}
         </ThemeProvider>
       </body>

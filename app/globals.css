@@ -67,6 +67,17 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Override Thorium reader's html,body styles which persist after navigation */
+  html.scroll-unlock,
+  body.scroll-unlock {
+    overflow: auto !important;
+    overflow-x: hidden !important;
+    position: relative !important;
+    margin-top: 0 !important;
+    /* Reset Thorium's overscroll-behavior and touch-action so wheel scroll works */
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
 }
 
 @layer utilities {}
