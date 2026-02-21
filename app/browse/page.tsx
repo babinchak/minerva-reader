@@ -24,10 +24,18 @@ export default async function BrowsePage() {
       <main className="min-h-screen flex flex-col items-center text-foreground">
         <nav className="w-full flex justify-center border-b border-border h-16">
           <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
-            <Link href="/" className="flex items-center gap-2 text-foreground font-semibold">
-              <BookOpen className="h-5 w-5" />
-              Minerva Reader
-            </Link>
+            <div className="flex gap-5 items-center font-semibold">
+              <Link href="/" className="flex items-center gap-2 text-foreground">
+                <BookOpen className="h-5 w-5" />
+                Minerva Reader
+              </Link>
+              <Link href="/browse" className="text-muted-foreground hover:text-foreground transition-colors">
+                Browse
+              </Link>
+              <Link href="/settings" className="text-muted-foreground hover:text-foreground transition-colors">
+                Settings
+              </Link>
+            </div>
             <div className="flex items-center gap-2">
               <EnvVarWarning />
               <ThemeSwitcher />
@@ -63,10 +71,18 @@ export default async function BrowsePage() {
     <main className="min-h-screen flex flex-col text-foreground">
       <nav className="w-full flex justify-center border-b border-border h-16">
         <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
-          <Link href="/" className="flex items-center gap-2 text-foreground font-semibold">
-            <BookOpen className="h-5 w-5" />
-            Minerva Reader
-          </Link>
+          <div className="flex gap-5 items-center font-semibold">
+            <Link href="/" className="flex items-center gap-2 text-foreground">
+              <BookOpen className="h-5 w-5" />
+              Minerva Reader
+            </Link>
+            <Link href="/browse" className="text-muted-foreground hover:text-foreground transition-colors">
+              Browse
+            </Link>
+            <Link href="/settings" className="text-muted-foreground hover:text-foreground transition-colors">
+              Settings
+            </Link>
+          </div>
           <div className="flex items-center gap-2">
             <Suspense>
               <AuthButton />

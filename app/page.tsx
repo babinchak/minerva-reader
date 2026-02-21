@@ -97,6 +97,9 @@ export default async function Home({
               <Link href={"/browse"} className="text-muted-foreground hover:text-foreground transition-colors">
                 Browse
               </Link>
+              <Link href={"/settings"} className="text-muted-foreground hover:text-foreground transition-colors">
+                Settings
+              </Link>
             </div>
             <div className="flex items-center gap-2">
               {!hasEnvVars ? (
