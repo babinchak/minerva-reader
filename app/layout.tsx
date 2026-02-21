@@ -3,6 +3,7 @@ import { ThemeProvider } from "next-themes";
 import { PwaRegister } from "@/components/pwa-register";
 import { CreditsRefreshOnSuccess } from "@/components/credits-refresh-on-success";
 import { ScrollLockRepair } from "@/components/scroll-lock-repair";
+import { ThemeVariantsProvider } from "@/components/theme-variants-provider";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -51,6 +52,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var s=localStorage.getItem("minerva-theme-variants");if(s){try{var p=JSON.parse(s);var l=p.light||"minerva";var d=p.dark||"minerva";document.documentElement.setAttribute("data-light-theme",l);document.documentElement.setAttribute("data-dark-theme",d);}catch(e){}}})();`,
+          }}
+        />
+      </head>
       <body className="antialiased">
         <ThemeProvider
           attribute="class"
@@ -58,10 +66,12 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <PwaRegister />
-          <CreditsRefreshOnSuccess />
-          <ScrollLockRepair />
-          {children}
+          <ThemeVariantsProvider>
+            <PwaRegister />
+            <CreditsRefreshOnSuccess />
+            <ScrollLockRepair />
+            {children}
+          </ThemeVariantsProvider>
         </ThemeProvider>
       </body>
     </html>
