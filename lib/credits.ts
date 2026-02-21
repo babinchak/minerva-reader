@@ -1,17 +1,31 @@
 /**
- * Credits system: tier resolution, balance checks, deductions.
- * Credits are abstract units (not OpenAI tokens). Used for AI usage and uploads.
+ * Credits/usage system: tier resolution, balance checks.
+ * Uses cost_cents for tracking. Legacy credits kept for migration.
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
 
 export type UserTier = "anonymous" | "free" | "paid";
 
+export type OnDemandLimitType = "disabled" | "fixed" | "unlimited";
+
+/** Monthly allowance in cents. $20 = 2000, $5 = 500. */
+export const ALLOWANCE_CENTS = {
+  free: Number(process.env.ALLOWANCE_CENTS_FREE) || 500,
+  paid: Number(process.env.ALLOWANCE_CENTS_PAID) || 2000,
+} as const;
+
 export interface UserCredits {
   balance: number;
+  balanceCents: number;
   tier: UserTier;
   monthlyAllowance: number;
+  allowanceCents: number;
   allowanceResetAt: Date | null;
+  onDemandLimitType: OnDemandLimitType;
+  onDemandLimitCents: number;
+  onDemandCreditsThisPeriod: number;
+  onDemandCentsThisPeriod: number;
 }
 
 /** Model env vars per tier. Map to actual OpenAI model IDs. */
@@ -42,6 +56,14 @@ export const AGENTIC_MULTIPLIER = 1.5;
 /** Estimated credits per agentic request (when usage not available from stream). */
 export const AGENTIC_ESTIMATED_CREDITS =
   Number(process.env.CREDITS_AGENTIC_ESTIMATE) || 100;
+
+/** Estimated cost in cents per agentic request ($1 = 100 cents). */
+export const AGENTIC_ESTIMATED_CENTS =
+  Number(process.env.AGENTIC_ESTIMATED_CENTS) || 100;
+
+/** Cents per 1000 on-demand credits (legacy). e.g. 10 = $0.10/1k credits. */
+export const CREDITS_OVERAGE_CENTS_PER_1000 =
+  Number(process.env.CREDITS_OVERAGE_CENTS_PER_1000) || 10;
 
 const DEFAULT_RATE = { input: 0.2, output: 0.4 };
 
@@ -82,19 +104,28 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
 
   const { data, error } = await supabase
     .from("user_credits")
-    .select("balance, tier, monthly_allowance, allowance_reset_at")
+    .select("balance, balance_cents, tier, monthly_allowance, allowance_cents, allowance_reset_at, on_demand_limit_type, on_demand_limit_cents, on_demand_credits_this_period, on_demand_cents_this_period")
     .eq("user_id", userId)
     .single();
 
   if (error || !data) return null;
 
+  const tier = (data.tier as UserTier) || "free";
+  const allowanceCents = data.allowance_cents ?? (tier === "paid" ? ALLOWANCE_CENTS.paid : ALLOWANCE_CENTS.free);
+
   return {
     balance: data.balance ?? 0,
-    tier: (data.tier as UserTier) || "free",
+    balanceCents: data.balance_cents ?? 0,
+    tier,
     monthlyAllowance: data.monthly_allowance ?? 0,
+    allowanceCents,
     allowanceResetAt: data.allowance_reset_at
       ? new Date(data.allowance_reset_at)
       : null,
+    onDemandLimitType: (data.on_demand_limit_type as OnDemandLimitType) || "disabled",
+    onDemandLimitCents: data.on_demand_limit_cents ?? 1000,
+    onDemandCreditsThisPeriod: data.on_demand_credits_this_period ?? 0,
+    onDemandCentsThisPeriod: data.on_demand_cents_this_period ?? 0,
   };
 }
 
@@ -113,6 +144,7 @@ export async function ensureUserCredits(userId: string): Promise<void> {
   const now = new Date();
   const tier = (existing?.tier as UserTier) || "free";
   const allowance = tier === "paid" ? TIER_ALLOWANCES.paid : TIER_ALLOWANCES.free;
+  const allowanceCents = tier === "paid" ? ALLOWANCE_CENTS.paid : ALLOWANCE_CENTS.free;
 
   if (!existing) {
     const resetAt = new Date(now);
@@ -122,8 +154,10 @@ export async function ensureUserCredits(userId: string): Promise<void> {
     const { error: insertError } = await supabase.from("user_credits").insert({
       user_id: userId,
       balance: allowance,
+      balance_cents: allowanceCents,
       tier: "free",
       monthly_allowance: TIER_ALLOWANCES.free,
+      allowance_cents: allowanceCents,
       allowance_reset_at: resetAt.toISOString(),
       updated_at: now.toISOString(),
     });
@@ -152,18 +186,25 @@ export async function ensureUserCredits(userId: string): Promise<void> {
 
     const { data: row } = await supabase
       .from("user_credits")
-      .select("balance")
+      .select("balance, balance_cents")
       .eq("user_id", userId)
       .single();
 
     const currentBalance = row?.balance ?? 0;
+    const currentBalanceCents = row?.balance_cents ?? 0;
+    const tierNow = (existing?.tier as UserTier) || "free";
+    const allowanceCentsNow = tierNow === "paid" ? ALLOWANCE_CENTS.paid : ALLOWANCE_CENTS.free;
 
     await supabase
       .from("user_credits")
       .update({
         balance: currentBalance + allowance,
+        balance_cents: currentBalanceCents + allowanceCentsNow,
         monthly_allowance: allowance,
+        allowance_cents: allowanceCentsNow,
         allowance_reset_at: nextReset.toISOString(),
+        on_demand_credits_this_period: 0,
+        on_demand_cents_this_period: 0,
         updated_at: now.toISOString(),
       })
       .eq("user_id", userId);
@@ -178,7 +219,7 @@ export async function ensureUserCredits(userId: string): Promise<void> {
 }
 
 /**
- * Check if user has at least `amount` credits.
+ * Check if user has at least `amount` credits (from balance only).
  */
 export async function hasCredits(userId: string, amount: number): Promise<boolean> {
   const credits = await getCredits(userId);
@@ -186,8 +227,83 @@ export async function hasCredits(userId: string, amount: number): Promise<boolea
   return credits.balance >= amount;
 }
 
+/** Max on-demand credits allowed for a fixed limit (cents -> credits). */
+function maxOnDemandCreditsForFixedLimit(limitCents: number): number {
+  if (limitCents <= 0) return 0;
+  const units = limitCents / CREDITS_OVERAGE_CENTS_PER_1000;
+  return Math.floor(units * 1000);
+}
+
+/**
+ * Check if user can afford `amount` credits (balance + on-demand if enabled).
+ * @deprecated Use canAffordCents for cost-based checks.
+ */
+export async function canAffordCredits(userId: string, amount: number): Promise<boolean> {
+  const credits = await getCredits(userId);
+  if (!credits) return false;
+  if (credits.balance >= amount) return true;
+  if (credits.onDemandLimitType === "disabled") return false;
+
+  const shortfall = amount - credits.balance;
+  const wouldBeOnDemand = credits.onDemandCreditsThisPeriod + shortfall;
+
+  if (credits.onDemandLimitType === "unlimited") return true;
+  if (credits.onDemandLimitType === "fixed") {
+    const max = maxOnDemandCreditsForFixedLimit(credits.onDemandLimitCents);
+    return wouldBeOnDemand <= max;
+  }
+  return false;
+}
+
+export type UsageMode = "included" | "on_demand";
+
+/**
+ * Get current usage mode: included (balance > 0) or on_demand (balance <= 0).
+ */
+export async function getUsageMode(userId: string): Promise<UsageMode | null> {
+  const credits = await getCredits(userId);
+  if (!credits) return null;
+  return credits.balanceCents > 0 ? "included" : "on_demand";
+}
+
+/**
+ * Check if user can make a request.
+ * - Included mode (balance > 0): always allow.
+ * - On-demand mode (balance <= 0): use canAffordCents with estimated cost.
+ */
+export async function canMakeRequest(
+  userId: string,
+  estimatedCostCents: number
+): Promise<boolean> {
+  const credits = await getCredits(userId);
+  if (!credits) return false;
+  if (credits.balanceCents > 0) return true; // included mode - no cost check
+  return canAffordCents(userId, estimatedCostCents); // on-demand - check limit
+}
+
+/**
+ * Check if user can afford `costCents` (balance_cents + on-demand if enabled).
+ * Use for on-demand mode when you need to verify a specific cost.
+ */
+export async function canAffordCents(userId: string, costCents: number): Promise<boolean> {
+  const credits = await getCredits(userId);
+  if (!credits) return false;
+  if (credits.balanceCents >= costCents) return true;
+  if (credits.onDemandLimitType === "disabled") return false;
+
+  const shortfall = costCents - credits.balanceCents;
+  const wouldBeOnDemand = credits.onDemandCentsThisPeriod + shortfall;
+
+  if (credits.onDemandLimitType === "unlimited") return true;
+  if (credits.onDemandLimitType === "fixed") {
+    return wouldBeOnDemand <= credits.onDemandLimitCents;
+  }
+  return false;
+}
+
 /**
  * Deduct credits. Returns true if successful.
+ * When balance is insufficient, uses on-demand if enabled (balance can go negative).
  */
 export async function deductCredits(
   userId: string,
@@ -201,17 +317,43 @@ export async function deductCredits(
   const supabase = createServiceClient();
   const { data: row } = await supabase
     .from("user_credits")
-    .select("balance")
+    .select("balance, on_demand_limit_type, on_demand_limit_cents, on_demand_credits_this_period")
     .eq("user_id", userId)
     .single();
 
   if (!row) return false;
 
-  const newBalance = (row.balance ?? 0) - amount;
+  const balance = row.balance ?? 0;
+  const limitType = (row.on_demand_limit_type as OnDemandLimitType) || "disabled";
+  const limitCents = row.on_demand_limit_cents ?? 1000;
+  const onDemandSoFar = row.on_demand_credits_this_period ?? 0;
+
+  const newBalance = balance - amount;
+
+  // If balance would go negative, check on-demand
+  if (newBalance < 0) {
+    if (limitType === "disabled") return false;
+
+    const onDemandUsed = -newBalance; // credits drawn from on-demand
+    const wouldBeTotal = onDemandSoFar + onDemandUsed;
+
+    if (limitType === "fixed") {
+      const max = maxOnDemandCreditsForFixedLimit(limitCents);
+      if (wouldBeTotal > max) return false;
+    }
+  }
+
+  const updateData: Record<string, unknown> = {
+    balance: newBalance,
+    updated_at: new Date().toISOString(),
+  };
+  if (newBalance < 0) {
+    updateData.on_demand_credits_this_period = onDemandSoFar + (-newBalance);
+  }
 
   const { error: updateError } = await supabase
     .from("user_credits")
-    .update({ balance: newBalance, updated_at: new Date().toISOString() })
+    .update(updateData)
     .eq("user_id", userId);
 
   if (updateError) return false;
@@ -221,8 +363,13 @@ export async function deductCredits(
     amount: -amount,
     type,
     reference_id: referenceId ?? null,
-    metadata: metadata ?? null,
+    metadata: { ...(metadata ?? {}), on_demand: newBalance < 0 },
   });
+
+  // Report on-demand usage to Stripe for metered billing (fire-and-forget)
+  if (newBalance < 0) {
+    reportOverageUsageToStripe(userId, -newBalance).catch(() => {});
+  }
 
   return true;
 }
@@ -264,6 +411,39 @@ export async function addCredits(
   });
 
   return newBalance;
+}
+
+/**
+ * Update on-demand limit for a user. Paid tier only.
+ */
+export async function updateOnDemandLimit(
+  userId: string,
+  limitType: OnDemandLimitType,
+  limitCents?: number
+): Promise<boolean> {
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("user_credits")
+    .select("tier")
+    .eq("user_id", userId)
+    .single();
+
+  if (!data || (data.tier as UserTier) !== "paid") return false;
+
+  const update: Record<string, unknown> = {
+    on_demand_limit_type: limitType,
+    updated_at: new Date().toISOString(),
+  };
+  if (limitType === "fixed" && typeof limitCents === "number" && limitCents >= 0) {
+    update.on_demand_limit_cents = limitCents;
+  }
+
+  const { error } = await supabase
+    .from("user_credits")
+    .update(update)
+    .eq("user_id", userId);
+
+  return !error;
 }
 
 /**

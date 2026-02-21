@@ -5,6 +5,7 @@ import {
   getTier,
   countBooksUploadedThisWeek,
   countAgenticRequestsToday,
+  CREDITS_OVERAGE_CENTS_PER_1000,
 } from "@/lib/credits";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +18,18 @@ export async function GET() {
       return NextResponse.json({
         tier: "anonymous",
         balance: 0,
+        balanceCents: 0,
         monthlyAllowance: 0,
+        allowanceCents: 0,
         booksUploadedThisWeek: 0,
         agenticToday: 0,
         agenticLimit: 0,
+        allowanceResetAt: null,
+        onDemandLimitType: "disabled",
+        onDemandLimitCents: 1000,
+        onDemandCreditsThisPeriod: 0,
+        onDemandCentsThisPeriod: 0,
+        creditsOverageCentsPer1000: CREDITS_OVERAGE_CENTS_PER_1000,
       });
     }
 
@@ -35,11 +44,19 @@ export async function GET() {
       {
         tier,
         balance: credits?.balance ?? 0,
+        balanceCents: credits?.balanceCents ?? 0,
         monthlyAllowance: credits?.monthlyAllowance ?? 0,
+        allowanceCents: credits?.allowanceCents ?? 0,
+        allowanceResetAt: credits?.allowanceResetAt?.toISOString() ?? null,
         booksUploadedThisWeek,
         booksUploadLimit: tier === "free" ? 3 : 999999,
         agenticToday,
         agenticLimit,
+        onDemandLimitType: credits?.onDemandLimitType ?? "disabled",
+        onDemandLimitCents: credits?.onDemandLimitCents ?? 1000,
+        onDemandCreditsThisPeriod: credits?.onDemandCreditsThisPeriod ?? 0,
+        onDemandCentsThisPeriod: credits?.onDemandCentsThisPeriod ?? 0,
+        creditsOverageCentsPer1000: CREDITS_OVERAGE_CENTS_PER_1000,
       },
       {
         headers: {

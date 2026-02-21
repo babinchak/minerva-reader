@@ -6,9 +6,7 @@ export interface CheckoutSessionParams {
   userId: string;
   successUrl: string;
   cancelUrl: string;
-  mode: "subscription" | "payment";
-  /** For payment mode: credits to add */
-  credits?: number;
+  mode: "subscription";
 }
 
 export interface CheckoutSessionResult {

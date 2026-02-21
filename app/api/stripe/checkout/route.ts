@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { createStripeCheckoutSession } from "@/lib/payments/stripe";
-import { getTier } from "@/lib/credits";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,22 +10,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await req.json()) as {
-      mode?: "subscription" | "topup";
-      credits?: number;
-    };
-
-    // Top-up is Pro-only
-    if (body.mode === "topup") {
-      const tier = await getTier(user.id);
-      if (tier !== "paid") {
-        return NextResponse.json(
-          { error: "Top-up credits are only available for Pro subscribers" },
-          { status: 403 }
-        );
-      }
-    }
-
     const host = req.headers.get("host") ?? "localhost:3000";
     const protocol = host.includes("localhost") ? "http" : "https";
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `${protocol}://${host}`;
@@ -34,23 +17,12 @@ export async function POST(req: NextRequest) {
     const successUrl = `${baseUrl}/?success=1&upgrade=1`;
     const cancelUrl = `${baseUrl}/?canceled=1`;
 
-    let session;
-    if (body.mode === "topup" && body.credits) {
-      session = await createStripeCheckoutSession({
-        userId: user.id,
-        successUrl,
-        cancelUrl,
-        mode: "payment",
-        credits: body.credits,
-      });
-    } else {
-      session = await createStripeCheckoutSession({
-        userId: user.id,
-        successUrl,
-        cancelUrl,
-        mode: "subscription",
-      });
-    }
+    const session = await createStripeCheckoutSession({
+      userId: user.id,
+      successUrl,
+      cancelUrl,
+      mode: "subscription",
+    });
 
     if (!session) {
       return NextResponse.json(

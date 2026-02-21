@@ -50,11 +50,11 @@ export function CreditsDisplay() {
           Upgrade
         </Link>
       )}
-      {info.tier === "paid" && info.balance < 1000 && (
+      {info.tier === "paid" && (
         <Link
-          href="/?topup=1"
+          href="/settings/usage"
           className="text-primary hover:underline">
-          Add credits
+          Usage
         </Link>
       )}
     </div>

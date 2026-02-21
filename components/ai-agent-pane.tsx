@@ -338,16 +338,33 @@ export function AIAgentPanel({
     getSelectionSnapshot,
   ]);
 
+  type StreamUsage = {
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    costCents: number;
+    model?: string;
+    included: boolean;
+    chatMode?: string;
+  };
+
   // Helper function to handle streaming response
   const handleStreamingResponse = useCallback(
     async (
       response: Response,
       assistantMessageId: string,
-      onStreamComplete?: (content: string) => void | Promise<void>,
+      onStreamComplete?: (content: string, usage?: StreamUsage) => void | Promise<void>,
       onStatus?: (message: string | null) => void
     ) => {
       if (!response.ok) {
-        throw new Error(`API error: ${response.statusText}`);
+        let message = response.statusText;
+        try {
+          const body = await response.json();
+          if (body?.message) message = body.message;
+          else if (body?.error) message = body.error;
+        } catch {
+          // Ignore JSON parse errors
+        }
+        throw new Error(message);
       }
 
       if (!response.body) {
@@ -358,6 +375,7 @@ export function AIAgentPanel({
       const decoder = new TextDecoder();
       let buffer = "";
       let fullContent = "";
+      let streamUsage: StreamUsage | undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -372,7 +390,7 @@ export function AIAgentPanel({
             const data = line.slice(6);
             if (data === "[DONE]") {
               onStatus?.(null);
-              await onStreamComplete?.(fullContent);
+              await onStreamComplete?.(fullContent, streamUsage);
               setIsLoading(false);
               onActionComplete?.();
               return;
@@ -382,6 +400,15 @@ export function AIAgentPanel({
               const parsed = JSON.parse(data);
               if (parsed.type === "status" && typeof parsed.message === "string") {
                 onStatus?.(parsed.message);
+              } else if (parsed.type === "usage") {
+                streamUsage = {
+                  inputTokens: parsed.inputTokens,
+                  outputTokens: parsed.outputTokens,
+                  costCents: parsed.costCents ?? 0,
+                  model: parsed.model,
+                  included: parsed.included ?? true,
+                  chatMode: parsed.chatMode,
+                };
               } else if (parsed.content) {
                 fullContent += parsed.content;
                 setMessages((prev) =>
@@ -400,7 +427,7 @@ export function AIAgentPanel({
       }
 
       onStatus?.(null);
-      await onStreamComplete?.(fullContent);
+      await onStreamComplete?.(fullContent, streamUsage);
       setIsLoading(false);
       onActionComplete?.();
     },
@@ -582,13 +609,27 @@ export function AIAgentPanel({
   const persistAssistantMessage = async (
     chatId: string,
     content: string,
-    messageIndex: number
+    messageIndex: number,
+    usage?: {
+      inputTokens?: number | null;
+      outputTokens?: number | null;
+      costCents: number;
+      model?: string;
+      included: boolean;
+      chatMode?: string;
+    }
   ) => {
     await supabase.from("chat_messages").insert({
       chat_id: chatId,
       role: "assistant",
       content,
       message_index: messageIndex,
+      cost_cents: usage?.costCents ?? null,
+      input_tokens: usage?.inputTokens ?? null,
+      output_tokens: usage?.outputTokens ?? null,
+      model: usage?.model ?? null,
+      usage_included: usage?.included ?? true,
+      chat_mode: usage?.chatMode ?? null,
     });
   };
 
@@ -1004,8 +1045,8 @@ export function AIAgentPanel({
       const chatUrl = chatMode === "agentic" ? "/api/chat/agentic" : "/api/chat";
       const chatBody =
         chatMode === "agentic"
-          ? JSON.stringify({ messages: messagesForAPI, bookId: bookId ?? undefined })
-          : JSON.stringify({ messages: messagesForAPI });
+          ? JSON.stringify({ messages: messagesForAPI, bookId: bookId ?? undefined, chatId: chatId ?? undefined })
+          : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 
       const response = await fetch(chatUrl, {
         method: "POST",
@@ -1019,9 +1060,9 @@ export function AIAgentPanel({
       await handleStreamingResponse(
         response,
         assistantMessageId,
-        async (content) => {
+        async (content, usage) => {
           if (chatId) {
-            await persistAssistantMessage(chatId, content, assistantMsgIndex);
+            await persistAssistantMessage(chatId, content, assistantMsgIndex, usage);
             if (isNewChat) {
               generateAndUpdateChatTitle(chatId, userInput, content).catch(() => {});
             }
@@ -1032,15 +1073,11 @@ export function AIAgentPanel({
     } catch (error) {
       console.error("Error calling chat API:", error);
       setAgenticStatus(null);
+      const errorMessage =
+        error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantMessageId
-            ? {
-                ...msg,
-                content:
-                  "Sorry, I encountered an error. Please make sure the OpenAI API key is configured correctly.",
-              }
-            : msg
+          msg.id === assistantMessageId ? { ...msg, content: errorMessage } : msg
         )
       );
       setIsLoading(false);
@@ -1320,8 +1357,8 @@ export function AIAgentPanel({
       const chatUrl = chatMode === "agentic" ? "/api/chat/agentic" : "/api/chat";
       const chatBody =
         chatMode === "agentic"
-          ? JSON.stringify({ messages: messagesForAPI, bookId: bookId ?? undefined })
-          : JSON.stringify({ messages: messagesForAPI });
+          ? JSON.stringify({ messages: messagesForAPI, bookId: bookId ?? undefined, chatId: chatId ?? undefined })
+          : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 
       const response = await fetch(chatUrl, {
         method: "POST",
@@ -1335,9 +1372,9 @@ export function AIAgentPanel({
       await handleStreamingResponse(
         response,
         assistantMessageId,
-        async (content) => {
+        async (content, usage) => {
           if (chatId) {
-            await persistAssistantMessage(chatId, content, assistantMsgIndex);
+            await persistAssistantMessage(chatId, content, assistantMsgIndex, usage);
             if (isNewChat) {
               generateAndUpdateChatTitle(chatId, explainUserMessage, content).catch(() => {});
             }
@@ -1348,15 +1385,11 @@ export function AIAgentPanel({
     } catch (error) {
       console.error("Error calling chat API:", error);
       setAgenticStatus(null);
+      const errorMessage =
+        error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantMessageId
-            ? {
-                ...msg,
-                content:
-                  "Sorry, I encountered an error. Please make sure the OpenAI API key is configured correctly.",
-              }
-            : msg
+          msg.id === assistantMessageId ? { ...msg, content: errorMessage } : msg
         )
       );
       setIsLoading(false);

@@ -22,6 +22,7 @@ function emitStatus(toolNames: string[]): string {
 /**
  * Stream LangGraph agent output and encode as SSE compatible with handleStreamingResponse.
  * Emits data: { content } for assistant text, data: { type: "status", message } for Cursor-style stage updates.
+ * Emits data: { type: "usage_tokens", inputTokens, outputTokens } before [DONE] when available from AIMessage.usage_metadata.
  */
 export async function* streamAgentToSSE(
   graph: AgentGraph,
@@ -32,10 +33,18 @@ export async function* streamAgentToSSE(
     configurable: { thread_id: crypto.randomUUID() },
   });
 
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+
   for await (const payload of stream) {
+    // LangGraph yields [namespace?, mode, chunk] - 3 elements with subgraphs, 2 without
     const isTuple = Array.isArray(payload) && payload.length >= 2;
-    const mode = isTuple ? (payload as [string, unknown])[0] : undefined;
-    const chunk = isTuple ? (payload as [unknown, unknown])[1] : payload;
+    const mode = isTuple
+      ? (payload.length >= 3 ? (payload as [unknown, string, unknown])[1] : (payload as [string, unknown])[0])
+      : undefined;
+    const chunk = isTuple
+      ? (payload.length >= 3 ? (payload as [unknown, unknown, unknown])[2] : (payload as [unknown, unknown])[1])
+      : payload;
 
     if (mode === "updates" && chunk && typeof chunk === "object") {
       const updates = chunk as Record<string, { messages?: unknown[] }>;
@@ -50,6 +59,16 @@ export async function* streamAgentToSSE(
           }
         } else if (typeof last?.content === "string" && last.content.length > 0) {
           yield `data: ${JSON.stringify({ type: "status", message: "Generating response..." })}\n\n`;
+        }
+        // Accumulate token usage from AIMessage.usage_metadata or response_metadata.tokenUsage
+        const um = last?.usage_metadata as { input_tokens?: number; output_tokens?: number } | undefined;
+        const rm = last?.response_metadata as { tokenUsage?: { promptTokens?: number; completionTokens?: number } } | undefined;
+        if (um) {
+          totalInputTokens += um.input_tokens ?? 0;
+          totalOutputTokens += um.output_tokens ?? 0;
+        } else if (rm?.tokenUsage) {
+          totalInputTokens += rm.tokenUsage.promptTokens ?? 0;
+          totalOutputTokens += rm.tokenUsage.completionTokens ?? 0;
         }
       }
       if (updates.tools?.messages?.length) {
@@ -71,6 +90,10 @@ export async function* streamAgentToSSE(
         }
       }
     }
+  }
+
+  if (totalInputTokens > 0 || totalOutputTokens > 0) {
+    yield `data: ${JSON.stringify({ type: "usage_tokens", inputTokens: totalInputTokens, outputTokens: totalOutputTokens })}\n\n`;
   }
   yield `data: [DONE]\n\n`;
 }

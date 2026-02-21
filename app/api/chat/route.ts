@@ -4,10 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import {
   getTier,
   getModelForTier,
-  getCredits,
-  deductCredits,
-  creditsForAiUsage,
+  canMakeRequest,
 } from "@/lib/credits";
+import { recordUsage, costCentsFromTokens } from "@/lib/usage";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -51,7 +50,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { messages } = (await req.json()) as { messages?: unknown };
+    const body = (await req.json()) as { messages?: unknown; chatId?: string };
+    const { messages, chatId } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(
@@ -68,11 +68,10 @@ export async function POST(req: NextRequest) {
     const tier = await getTier(user?.id ?? null);
     const model = getModelForTier(tier);
 
-    // Logged-in users: check credits before (estimate 500 credits max per fast request)
+    // Included mode: allow. On-demand mode: check can afford ~$0.50 for fast request.
     if (user) {
-      const credits = await getCredits(user.id);
-      const minCredits = 50;
-      if (!credits || credits.balance < minCredits) {
+      const canAfford = await canMakeRequest(user.id, 50);
+      if (!canAfford) {
         return new Response(
           JSON.stringify({
             error: "Insufficient credits",
@@ -126,11 +125,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Create a streaming response
+    // Create a streaming response (include_usage needed for token counts in final chunk)
     const stream = await openai.chat.completions.create({
       model,
       messages: openaiMessages,
       stream: true,
+      stream_options: { include_usage: true },
     });
 
     // Create a ReadableStream to send the response
@@ -148,23 +148,41 @@ export async function POST(req: NextRequest) {
               usage = chunk.usage;
             }
           }
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-          controller.close();
 
-          // Deduct credits for logged-in users (fast mode, not agentic)
+          // Record usage and send to client so it can store on chat_message
           if (user && usage) {
             const inputTokens = usage.prompt_tokens ?? 0;
             const outputTokens = usage.completion_tokens ?? 0;
-            const credits = creditsForAiUsage(model, inputTokens, outputTokens, false);
-            if (credits > 0) {
-              await deductCredits(user.id, credits, "ai", undefined, {
-                agentic: false,
+            const costCents = costCentsFromTokens(model, inputTokens, outputTokens, false);
+            if (costCents > 0) {
+              const result = await recordUsage({
+                userId: user.id,
+                costCents,
+                usageType: "chat",
                 model,
-                input_tokens: inputTokens,
-                output_tokens: outputTokens,
+                inputTokens,
+                outputTokens,
+                referenceId: chatId,
               });
+              if (result.success) {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({
+                      type: "usage",
+                      inputTokens,
+                      outputTokens,
+                      costCents: result.costCents,
+                      model,
+                      included: result.included,
+                      chatMode: "fast",
+                    })}\n\n`
+                  )
+                );
+              }
             }
           }
+          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+          controller.close();
         } catch (error) {
           controller.error(error);
         }

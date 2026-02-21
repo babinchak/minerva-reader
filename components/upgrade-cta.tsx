@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
 export function UpgradeCta() {
-  const [loading, setLoading] = useState<"pro" | "topup" | null>(null);
+  const [loading, setLoading] = useState(false);
   const [tier, setTier] = useState<string | null>(null);
 
   const fetchCredits = useCallback(() => {
@@ -27,22 +28,20 @@ export function UpgradeCta() {
     return () => window.removeEventListener(CREDITS_REFRESH_EVENT, handler);
   }, [fetchCredits]);
 
-  const handleCheckout = async (mode: "subscription" | "topup") => {
-    setLoading(mode === "subscription" ? "pro" : "topup");
+  const handleCheckout = async () => {
+    setLoading(true);
     try {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          mode === "subscription" ? { mode: "subscription" } : { mode: "topup", credits: 25000 }
-        ),
+        body: JSON.stringify({ mode: "subscription" }),
       });
       const data = await res.json();
       if (data.url) window.location.href = data.url;
       else throw new Error(data.error ?? "Checkout failed");
     } catch (err) {
       console.error(err);
-      setLoading(null);
+      setLoading(false);
     }
   };
 
@@ -52,18 +51,18 @@ export function UpgradeCta() {
         <CardTitle>{tier === "paid" ? "Pro" : "Upgrade to Pro"}</CardTitle>
         <CardDescription>
           {tier === "paid"
-            ? "Unlimited uploads, best AI model, and more credits. Add credits anytime."
+            ? "Unlimited uploads, best AI model, and included credits. Overage is billed in arrears."
             : "Unlimited uploads, best AI model, and more credits."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col sm:flex-row gap-3">
         {tier !== "paid" && (
           <Button
-            onClick={() => handleCheckout("subscription")}
-            disabled={!!loading}
+            onClick={() => handleCheckout()}
+            disabled={loading}
             className="flex-1"
           >
-            {loading === "pro" ? (
+            {loading ? (
               <>
                 <Loader2 className="animate-spin h-4 w-4" />
                 Redirecting...
@@ -74,20 +73,8 @@ export function UpgradeCta() {
           </Button>
         )}
         {tier === "paid" && (
-          <Button
-            variant="outline"
-            onClick={() => handleCheckout("topup")}
-            disabled={!!loading}
-            className="flex-1"
-          >
-            {loading === "topup" ? (
-              <>
-                <Loader2 className="animate-spin h-4 w-4" />
-                Redirecting...
-              </>
-            ) : (
-              "Add 25k credits"
-            )}
+          <Button variant="outline" asChild className="flex-1">
+            <Link href="/settings/usage">Manage usage</Link>
           </Button>
         )}
       </CardContent>

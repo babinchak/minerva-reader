@@ -6,11 +6,11 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getTier,
   getModelForTier,
-  getCredits,
-  deductCredits,
+  canMakeRequest,
   countAgenticRequestsToday,
-  AGENTIC_ESTIMATED_CREDITS,
+  AGENTIC_ESTIMATED_CENTS,
 } from "@/lib/credits";
+import { recordUsage, costCentsFromTokens } from "@/lib/usage";
 
 const MARKDOWN_SYSTEM_PROMPT =
   "You are a helpful reading assistant. Respond using GitHub-flavored Markdown (GFM).\n" +
@@ -57,9 +57,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check credits
-    const credits = await getCredits(user.id);
-    if (!credits || credits.balance < AGENTIC_ESTIMATED_CREDITS) {
+    // Included mode: allow. On-demand mode: check can afford ~$1 for Deep mode.
+    const canAfford = await canMakeRequest(user.id, AGENTIC_ESTIMATED_CENTS);
+    if (!canAfford) {
       return NextResponse.json(
         {
           error: "Insufficient credits",
@@ -69,8 +69,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = (await req.json()) as { messages?: unknown; bookId?: string };
-    const { messages: rawMessages, bookId } = body;
+    const body = (await req.json()) as { messages?: unknown; bookId?: string; chatId?: string };
+    const { messages: rawMessages, bookId, chatId } = body;
 
     if (!rawMessages || !Array.isArray(rawMessages)) {
       return NextResponse.json(
@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
     });
 
     const model = getModelForTier(tier);
+    const estimatedCents = AGENTIC_ESTIMATED_CENTS;
     const graph = createAgentGraph(bookId ?? null, user.id, {
       vectorsReady,
       model,
@@ -119,19 +120,62 @@ export async function POST(req: NextRequest) {
     };
 
     const encoder = new TextEncoder();
+    let capturedInputTokens: number | null = null;
+    let capturedOutputTokens: number | null = null;
+
     const readable = new ReadableStream({
       async start(controller) {
         try {
+          let lastChunk = "";
           for await (const chunk of streamAgentToSSE(graph, initialState)) {
-            controller.enqueue(encoder.encode(chunk));
+            if (chunk.includes("[DONE]")) {
+              const costCents =
+                capturedInputTokens != null && capturedOutputTokens != null
+                  ? costCentsFromTokens(model, capturedInputTokens, capturedOutputTokens, true)
+                  : estimatedCents;
+              const result = await recordUsage({
+                userId: user.id,
+                costCents,
+                usageType: "chat",
+                model,
+                inputTokens: capturedInputTokens ?? undefined,
+                outputTokens: capturedOutputTokens ?? undefined,
+                referenceId: chatId,
+              });
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: "usage",
+                    inputTokens: capturedInputTokens,
+                    outputTokens: capturedOutputTokens,
+                    costCents: result.success ? result.costCents : costCents,
+                    model,
+                    included: result.success ? result.included : true,
+                    chatMode: "agentic",
+                  })}\n\n`
+                )
+              );
+              lastChunk = chunk;
+            } else {
+              // Capture usage_tokens from stream (internal event, do not forward)
+              const match = chunk.match(/^data:\s*(\{.*\})\s*$/m);
+              if (match) {
+                try {
+                  const parsed = JSON.parse(match[1]) as { type?: string; inputTokens?: number; outputTokens?: number };
+                  if (parsed.type === "usage_tokens") {
+                    capturedInputTokens = parsed.inputTokens ?? null;
+                    capturedOutputTokens = parsed.outputTokens ?? null;
+                    continue; // skip forwarding internal event
+                  }
+                } catch {
+                  /* ignore parse errors */
+                }
+              }
+              controller.enqueue(encoder.encode(chunk));
+            }
           }
+          if (lastChunk) controller.enqueue(encoder.encode(lastChunk));
           controller.close();
-
-          // Deduct credits for agentic request (estimated)
-          await deductCredits(user.id, AGENTIC_ESTIMATED_CREDITS, "ai", undefined, {
-            agentic: true,
-            model,
-          });
         } catch (err) {
           console.error("Agentic stream error:", err);
           controller.enqueue(
