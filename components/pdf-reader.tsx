@@ -19,6 +19,7 @@ import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 import { AIAssistant } from "@/components/ai-assistant";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
+import { getCachedPdf, setCachedPdf } from "@/lib/pdf-cache";
 
 type PDFDocumentLoadingTask = {
   promise: Promise<PDFDocumentProxy>;
@@ -266,8 +267,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
       ).toString();
       pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
-      const baseParams: Record<string, unknown> = { url: pdfUrl };
-
       // Some mobile browsers can be flaky with module workers; fall back to main-thread parsing.
       const canUseWorker =
         typeof Worker !== "undefined" &&
@@ -279,9 +278,23 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
         return await loadingTask.promise;
       };
 
+      let data: ArrayBuffer;
+      const cached = await getCachedPdf(bookId);
+      if (cached) {
+        data = cached;
+      } else {
+        const res = await fetch(pdfUrl);
+        if (!res.ok) throw new Error(`Failed to fetch PDF: ${res.status}`);
+        data = await res.arrayBuffer();
+        await setCachedPdf(bookId, data);
+      }
+      if (cancelled) return;
+
+      const baseParams: Record<string, unknown> = { data, disableWorker: !canUseWorker };
+
       let pdf: PDFDocumentProxy;
       try {
-        pdf = await tryLoad({ ...baseParams, disableWorker: !canUseWorker });
+        pdf = await tryLoad(baseParams);
       } catch {
         // Retry once without worker as a safety net.
         pdf = await tryLoad({ ...baseParams, disableWorker: true });
@@ -290,10 +303,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
       setPdfDoc(pdf);
       setLoading(false);
     })().catch((err) => {
-        if (cancelled) return;
-        setError(err?.message || "Failed to load PDF");
-        setLoading(false);
-      });
+      if (cancelled) return;
+      setError(err?.message || "Failed to load PDF");
+      setLoading(false);
+    });
 
     return () => {
       cancelled = true;
@@ -303,7 +316,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
         // ignore
       }
     };
-  }, [pdfUrl]);
+  }, [pdfUrl, bookId]);
 
   // Scroll to initial page when PDF loads (pages may render async)
   const initialPageScrolledRef = useRef(false);
