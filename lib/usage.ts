@@ -13,6 +13,10 @@ const MODEL_CENTS_PER_1M: Record<string, { input: number; output: number }> = {
   "gpt-4o-mini": { input: 15, output: 60 },
   "gpt-4o": { input: 250, output: 1000 },
   "gpt-4.1": { input: 250, output: 1000 },
+  "gpt-5-mini": { input: 25, output: 200 },
+  "gpt-5-nano": { input: 10, output: 80 },
+  "gpt-5": { input: 175, output: 1400 },
+  "gpt-5.2": { input: 175, output: 1400 },
   "text-embedding-3-small": { input: 2, output: 0 },
   "text-embedding-3-large": { input: 13, output: 0 },
 };

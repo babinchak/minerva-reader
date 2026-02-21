@@ -29,7 +29,6 @@ import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context
 import { getEpubVisibleContext } from "@/lib/epub-visible-context";
 import { getEpubLocalContextAroundCurrentSelection } from "@/lib/book-position/local-context";
 import { ContextPreviewDialog } from "@/components/context-preview-dialog";
-import { CreditsDisplay } from "@/components/credits-display";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_MAX_EXPLAIN_SELECTION_CHARS = 4000;
@@ -1480,7 +1479,6 @@ export function AIAgentPanel({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <CreditsDisplay />
               <div className="flex items-center gap-1.5">
                 {!userId ? (
                   <span className="text-xs text-muted-foreground" title="Sign in for Deep mode">

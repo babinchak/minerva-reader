@@ -36,7 +36,7 @@ const tools = [searchTool];
 const toolNode = new ToolNode<AgentState>(tools);
 
 const model = new ChatOpenAI({
-  model: process.env.OPENAI_MODEL || "gpt-4.1",
+  model: process.env.OPENAI_MODEL || "gpt-5-mini",
 }).bindTools(tools);
 
 function shouldContinue(state: AgentState) {

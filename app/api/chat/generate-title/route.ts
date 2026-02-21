@@ -61,8 +61,8 @@ export async function POST(req: NextRequest) {
         ? assistantMessage.slice(0, 400) + "..."
         : assistantMessage;
 
-    // Use a dedicated title model; default to gpt-4o-mini (o1/o3 are poor at short outputs)
-    const model = process.env.OPENAI_TITLE_MODEL || "gpt-4o-mini";
+    // Use a dedicated title model; default to gpt-5-mini for short outputs
+    const model = process.env.OPENAI_TITLE_MODEL || "gpt-5-mini";
 
     const completion = await openai.chat.completions.create({
       model,
