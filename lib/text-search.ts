@@ -4,13 +4,20 @@ export interface TextSearchResult {
   content_text: string;
   start_position: string | null;
   end_position: string | null;
+  section_id?: string;
+}
+
+export interface TextSearchOptions {
+  /** When set, truncate content_text to this length. Omit for full content. */
+  snippetLength?: number;
 }
 
 export async function textSearch(
   bookId: string,
   userId: string,
   query: string,
-  limit = 10
+  limit = 10,
+  options?: TextSearchOptions
 ): Promise<{ results: TextSearchResult[]; error?: string }> {
   const supabase = await createClient();
 
@@ -42,7 +49,7 @@ export async function textSearch(
 
   const { data, error } = await supabase
     .from("embedding_sections")
-    .select("content_text, start_position, end_position")
+    .select("id, content_text, start_position, end_position")
     .eq("book_id", bookId)
     .ilike("content_text", searchPattern)
     .limit(maxResults);
@@ -51,11 +58,20 @@ export async function textSearch(
     return { results: [], error: error.message ?? "Text search failed" };
   }
 
-  const results: TextSearchResult[] = (data ?? []).map((row) => ({
-    content_text: row.content_text ?? "",
-    start_position: row.start_position ?? null,
-    end_position: row.end_position ?? null,
-  }));
+  const snippetLen = options?.snippetLength;
+
+  const results: TextSearchResult[] = (data ?? []).map((row) => {
+    let content = row.content_text ?? "";
+    if (snippetLen != null && content.length > snippetLen) {
+      content = content.slice(0, snippetLen).trim() + "…";
+    }
+    return {
+      content_text: content,
+      start_position: row.start_position ?? null,
+      end_position: row.end_position ?? null,
+      section_id: row.id,
+    };
+  });
 
   return { results };
 }

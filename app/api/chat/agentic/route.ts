@@ -20,8 +20,8 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- Use fenced code blocks with a language tag for code.\n" +
   "- Do NOT wrap the entire response in a single code block.\n" +
   "- Avoid raw HTML; prefer Markdown.\n" +
-  "\nYou have access to tools: vector_search (semantic search in the book), text_search (keyword search in the book), and web_search (search the web). " +
-  "Use them when they would improve your answer. You can also answer directly from the context provided if it's sufficient.";
+  "\nYou have access to tools: vector_search (semantic search in the book), get_passage_content (fetch full text for passages by section_id), text_search (keyword search in the book), and web_search (search the web). " +
+  "Use them when they would improve your answer. Call get_passage_content with section_ids when you need full text to quote or cite. You can also answer directly from the context provided if it's sufficient.";
 
 type IncomingMessage = { role: "system" | "user" | "assistant"; content: string };
 
