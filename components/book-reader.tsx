@@ -18,6 +18,7 @@ import {
   type ThemeTokens,
 } from "@edrlab/thorium-web/core/preferences";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { EpubReaderToolbar } from "@/components/epub-reader-toolbar";
 import { useTheme } from "next-themes";
 import { AIAssistant } from "@/components/ai-assistant";
 import { useParams } from "next/navigation";
@@ -104,6 +105,12 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
   const params = useParams();
   const bookId = params?.bookId as string;
 
+  const aiNonceRef = useRef(0);
+  const [aiRequest, setAiRequest] = useState<{ nonce: number; action: "page" | "selection" } | null>(null);
+  const openAiNonceRef = useRef(0);
+  const [openAiRequest, setOpenAiRequest] = useState<{ nonce: number } | null>(null);
+  const [isAiPaneOpen, setIsAiPaneOpen] = useState(false);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -136,7 +143,18 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
       <StatefulPreferencesProvider initialPreferences={thoriumPreferences}>
         <ThI18nProvider>
           <ThoriumThemeSync />
-          <div className="w-full h-screen flex flex-col">
+          <div className="epub-reader-with-custom-toolbar w-full h-screen flex flex-col">
+            <EpubReaderToolbar
+              onRequestAiRun={(action) => {
+                aiNonceRef.current += 1;
+                setAiRequest({ nonce: aiNonceRef.current, action });
+              }}
+              onRequestAiOpen={() => {
+                openAiNonceRef.current += 1;
+                setOpenAiRequest({ nonce: openAiNonceRef.current });
+              }}
+              isAiPaneOpen={isAiPaneOpen}
+            />
             <div className="flex flex-1 relative min-h-0">
               <div className="h-full w-full">
                 <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
@@ -146,6 +164,9 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
                 bookId={bookId}
                 rawManifest={rawManifest}
                 bookType="epub"
+                requestRun={aiRequest}
+                requestOpen={openAiRequest}
+                onOpenChange={setIsAiPaneOpen}
               />
             </div>
 

@@ -2,7 +2,6 @@
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AIRail } from "@/components/ai-rail";
 import { AIBottomDrawer } from "@/components/ai-bottom-drawer";
 import { AIAgentPanel } from "@/components/ai-agent-pane";
 import { useIsMobile } from "@/lib/use-media-query";
@@ -139,12 +138,7 @@ function DesktopAIAssistant({
 
   return (
     <>
-      {!isOpen && bookType !== "pdf" && (
-        <AIRail
-          selectedText={selectedText}
-          onActivate={(action) => openAndRun(action)}
-        />
-      )}
+      {/* EPUB uses the custom toolbar; no floating rail. PDF uses docked pane. */}
 
       {isOpen && isPdf && (
         <div
