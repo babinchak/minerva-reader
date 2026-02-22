@@ -10,6 +10,11 @@ export interface TextSearchResult {
 export interface TextSearchOptions {
   /** When set, truncate content_text to this length. Omit for full content. */
   snippetLength?: number;
+  /**
+   * When set, return a local window around the matched word instead of the full section.
+   * Extracts (buffer) chars before and after the first match. Keeps token cost low for large sections.
+   */
+  matchContextChars?: number;
 }
 
 export async function textSearch(
@@ -48,7 +53,11 @@ export async function textSearch(
     return t;
   });
 
+  // Escape for ILIKE: % and _ are wildcards
   const escapeForIlike = (s: string) => s.replace(/%/g, "\\%").replace(/_/g, "\\_");
+  // Escape for JS regex (used when extracting match context)
+  const escapeForRegex = (s: string) =>
+    s.replace(/[\\[\](){}?*+^$.|]/g, "\\$&");
 
   let queryBuilder = supabase
     .from("embedding_sections")
@@ -58,6 +67,8 @@ export async function textSearch(
   if (terms.length === 0) {
     return { results: [], error: "Empty search query" };
   }
+  // ILIKE substring match (PostgREST can't parse regex with parentheses in filter values).
+  // Word-boundary filtering happens in post-processing when extracting match context.
   if (terms.length === 1) {
     const pattern = `%${escapeForIlike(terms[0])}%`;
     queryBuilder = queryBuilder.ilike("content_text", pattern);
@@ -68,26 +79,43 @@ export async function textSearch(
     queryBuilder = queryBuilder.or(orConditions);
   }
 
-  const { data, error } = await queryBuilder.limit(maxResults);
+  const matchCtx = options?.matchContextChars ?? 200;
+  const fetchLimit = matchCtx > 0 ? Math.min(maxResults * 3, 50) : maxResults;
+  const { data, error } = await queryBuilder.limit(fetchLimit);
 
   if (error) {
     return { results: [], error: error.message ?? "Text search failed" };
   }
 
   const snippetLen = options?.snippetLength;
+  const escapedTerms = terms.map(escapeForRegex);
 
-  const results: TextSearchResult[] = (data ?? []).map((row) => {
+  const results: TextSearchResult[] = [];
+  const re = new RegExp(`\\b(${escapedTerms.join("|")})\\b`, "gi");
+  for (const row of data ?? []) {
+    re.lastIndex = 0;
     let content = row.content_text ?? "";
+    const match = re.exec(content);
+    if (!match && matchCtx > 0) {
+      continue;
+    }
+    if (match && matchCtx > 0 && content.length > matchCtx * 2) {
+      const start = Math.max(0, match.index - matchCtx);
+      const end = Math.min(content.length, match.index + match[0].length + matchCtx);
+      const excerpt = content.slice(start, end);
+      content = (start > 0 ? "…" : "") + excerpt + (end < content.length ? "…" : "");
+    }
     if (snippetLen != null && content.length > snippetLen) {
       content = content.slice(0, snippetLen).trim() + "…";
     }
-    return {
+    results.push({
       content_text: content,
       start_position: row.start_position ?? null,
       end_position: row.end_position ?? null,
       section_id: row.id,
-    };
-  });
+    });
+    if (results.length >= maxResults) break;
+  }
 
   return { results };
 }

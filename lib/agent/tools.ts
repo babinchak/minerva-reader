@@ -31,7 +31,7 @@ export function createAgentTools(
         const firstWord = query.trim().split(/\s+/).find((w) => w.length > 2) ?? query.trim().split(/\s+/)[0] ?? query;
         if (firstWord) {
           const { results: textResults } = await textSearch(bookId, userId, firstWord, limit ?? 10, {
-            snippetLength: SNIPPET_LENGTH,
+            matchContextChars: 200,
           });
           if (textResults.length > 0) {
             return JSON.stringify({
@@ -112,7 +112,7 @@ export function createAgentTools(
         return JSON.stringify({ results: [], error: "No book context. Text search requires an open book." });
       }
       const { results, error } = await textSearch(bookId, userId, query, limit ?? 10, {
-        snippetLength: SNIPPET_LENGTH,
+        matchContextChars: 200,
       });
       if (error) {
         return JSON.stringify({ results: [], error });
