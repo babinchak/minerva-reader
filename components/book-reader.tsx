@@ -14,6 +14,7 @@ import {
   defaultPreferences,
   ThThemeKeys,
   ThSettingsKeys,
+  ThActionsKeys,
   type ThemeTokens,
 } from "@edrlab/thorium-web/core/preferences";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -55,13 +56,18 @@ const FALLBACK_DARK = {
   immerse: "0.4",
 };
 
-/** Preferences with Themes panel hidden - theme colors injected dynamically */
+/** Preferences with Themes panel hidden, Jump to position removed - theme colors injected dynamically */
 const thoriumPreferences = createPreferences({
   ...defaultPreferences,
   settings: {
     ...defaultPreferences.settings,
     reflowOrder: defaultPreferences.settings.reflowOrder.filter((k) => k !== ThSettingsKeys.theme),
     fxlOrder: defaultPreferences.settings.fxlOrder.filter((k) => k !== ThSettingsKeys.theme),
+  },
+  actions: {
+    ...defaultPreferences.actions,
+    reflowOrder: defaultPreferences.actions.reflowOrder.filter((k) => k !== ThActionsKeys.jumpToPosition),
+    fxlOrder: defaultPreferences.actions.fxlOrder.filter((k) => k !== ThActionsKeys.jumpToPosition),
   },
   theming: {
     ...defaultPreferences.theming,
