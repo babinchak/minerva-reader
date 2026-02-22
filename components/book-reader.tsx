@@ -2,7 +2,6 @@
 
 import { StatefulReader, StatefulPreferencesProvider, ThStoreProvider, ThI18nProvider } from "@edrlab/thorium-web/epub";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { TextSelectionHandler } from "@/components/text-selection-handler";
 import { AIAssistant } from "@/components/ai-assistant";
 import { useParams } from "next/navigation";
 import { useSelectedText } from "@/lib/use-selected-text";
@@ -66,7 +65,6 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
               />
             </div>
 
-            <TextSelectionHandler rawManifest={rawManifest} bookId={bookId} />
             <EpubPositionSync bookId={bookId} storageKey={`${selfHref}${EPUB_STORAGE_KEY_SUFFIX}`} />
           </div>
         </ThI18nProvider>

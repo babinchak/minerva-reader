@@ -14,8 +14,6 @@ import {
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useRouter } from "next/navigation";
-import { getCurrentPdfSelectionPosition } from "@/lib/pdf-position/selection-position";
-import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 import { AIAssistant } from "@/components/ai-assistant";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
@@ -25,10 +23,6 @@ type PDFDocumentLoadingTask = {
   promise: Promise<PDFDocumentProxy>;
   destroy: () => void;
 };
-
-const PDF_DEBUG_ENABLED =
-  process.env.NEXT_PUBLIC_PDF_DEBUG === "1" ||
-  process.env.NEXT_PUBLIC_PDF_DEBUG === "true";
 
 interface PdfReaderProps {
   pdfUrl: string;
@@ -41,7 +35,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isDebugPanelOpen, setIsDebugPanelOpen] = useState(false);
   const selectedText = useSelectedText();
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
   const router = useRouter();
@@ -760,48 +753,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
               ))}
             </div>
           </div>
-          {PDF_DEBUG_ENABLED && (!isMobile || chromeVisible) && (
-            <div className="bg-background border-t border-border shadow-lg">
-              <button
-                onClick={() => setIsDebugPanelOpen(!isDebugPanelOpen)}
-                className="w-full flex items-center justify-between px-4 py-2 hover:bg-muted/50 transition-colors"
-              >
-                <span className="text-sm font-medium">Debug</span>
-                <span className="text-xs text-muted-foreground">
-                  {isDebugPanelOpen ? "Hide" : "Show"}
-                </span>
-              </button>
-              <div
-                className={`overflow-hidden transition-all duration-300 ${
-                  isDebugPanelOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-                }`}
-              >
-                <div className="px-4 py-3">
-                  <Button
-                    onClick={async () => {
-                      const positions = getCurrentPdfSelectionPosition();
-                      if (!positions) return;
-                      console.log("Selection start position:", positions.start);
-                      console.log("Selection end position:", positions.end);
-                      console.log("Selected text:", window.getSelection()?.toString().trim() || "");
-
-                      const summaries = await queryPdfSummariesForPosition(
-                        bookId,
-                        positions.start,
-                        positions.end,
-                      );
-
-                      console.log("Matching summaries:", summaries);
-                    }}
-                    variant="default"
-                    className="w-full"
-                  >
-                    Log Position
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
