@@ -178,6 +178,26 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
   );
 }
 
+/** Apply Readium --USER__* theme variables to EPUB iframe document(s) */
+function applyThemeToEpubIframes(tokens: Record<string, string>) {
+  const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+  for (const iframe of iframes) {
+    try {
+      const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+      if (!doc?.documentElement) continue;
+      const root = doc.documentElement.style;
+      root.setProperty("--USER__backgroundColor", tokens.background ?? "");
+      root.setProperty("--USER__textColor", tokens.text ?? "");
+      root.setProperty("--USER__linkColor", tokens.link ?? "");
+      root.setProperty("--USER__visitedColor", tokens.visited ?? "");
+      root.setProperty("--USER__selectionBackgroundColor", tokens.select ?? "");
+      root.setProperty("--USER__selectionTextColor", tokens.onSelect ?? "");
+    } catch {
+      // Cross-origin or inaccessible iframe
+    }
+  }
+}
+
 /** Syncs app theme (next-themes + theme variants) to Thorium */
 function ThoriumThemeSync() {
   const { resolvedTheme } = useTheme();
@@ -221,6 +241,36 @@ function ThoriumThemeSync() {
       attributeFilter: ["data-light-theme", "data-dark-theme", "class"],
     });
     return () => observer.disconnect();
+  }, [resolvedTheme]);
+
+  // Apply theme to EPUB iframe when theme changes (iframe has its own document, doesn't inherit)
+  useEffect(() => {
+    const tokens = getThoriumThemeFromStoredVariants();
+    if (!tokens) return;
+    const theme = resolvedTheme === "dark" ? "dark" : "light";
+    const themeTokens = tokens[theme];
+    if (!themeTokens) return;
+    const apply = () => applyThemeToEpubIframes(themeTokens);
+    apply();
+    // Retry for late-loading iframes (e.g. book still loading)
+    const t1 = setTimeout(apply, 300);
+    const t2 = setTimeout(apply, 1000);
+    // Re-apply when new EPUB iframes are added (e.g. chapter navigation)
+    const observer = new MutationObserver((mutations) => {
+      const hasNewIframe = mutations.some((m) =>
+        [...m.addedNodes].some(
+          (n) => n instanceof HTMLElement && (n.classList?.contains("readium-navigator-iframe") || n.querySelector?.(".readium-navigator-iframe"))
+        )
+      );
+      if (hasNewIframe) apply();
+    });
+    const root = document.querySelector(".epub-reader-with-custom-toolbar") ?? document.body;
+    observer.observe(root, { childList: true, subtree: true });
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      observer.disconnect();
+    };
   }, [resolvedTheme]);
   return null;
 }
