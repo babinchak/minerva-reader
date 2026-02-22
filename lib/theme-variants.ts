@@ -116,6 +116,110 @@ export function getPreviewColors(id: ThemeVariantId, mode: "light" | "dark") {
   return PREVIEW_COLORS[id][mode];
 }
 
+/** Convert CSS variable value "H S% L%" to "hsl(H, S%, L%)" */
+function cssVarToHsl(value: string): string {
+  const t = value.trim();
+  if (!t) return "";
+  const parts = t.split(/\s+/);
+  if (parts.length < 3) return "";
+  return `hsl(${parts[0]}, ${parts[1]}, ${parts[2]})`;
+}
+
+/** Build Thorium theme tokens from PREVIEW_COLORS (no DOM reads) */
+function buildTokensFromPreview(
+  id: ThemeVariantId,
+  mode: "light" | "dark"
+): Record<string, string> {
+  const { bg, primary, accent } = PREVIEW_COLORS[id][mode];
+  const isLight = mode === "light";
+  const text = isLight ? "hsl(25, 10%, 12%)" : "hsl(40, 15%, 95%)";
+  const subdue = isLight ? "hsl(25, 10%, 45%)" : "hsl(40, 10%, 65%)";
+  return {
+    background: bg,
+    text,
+    link: isLight ? "#0000ee" : "#63caff",
+    visited: isLight ? "#551a8b" : "#0099e5",
+    subdue,
+    disable: "#808080",
+    hover: accent,
+    onHover: text,
+    select: "#b4d8fe",
+    onSelect: "inherit",
+    focus: "#0067f4",
+    elevate: "0px 0px 2px #808080",
+    immerse: isLight ? "0.6" : "0.4",
+  };
+}
+
+/**
+ * Get Thorium theme tokens for the user's selected theme variants.
+ * Uses stored variant IDs - no DOM manipulation.
+ */
+export function getThoriumThemeFromStoredVariants(): {
+  light: Record<string, string>;
+  dark: Record<string, string>;
+} | null {
+  if (typeof window === "undefined") return null;
+  const { light: lightId, dark: darkId } = getStoredThemeVariants();
+  return {
+    light: buildTokensFromPreview(lightId, "light"),
+    dark: buildTokensFromPreview(darkId, "dark"),
+  };
+}
+
+/**
+ * Read current theme colors from document (respects theme variant + light/dark).
+ * Falls back to stored variants if document read fails.
+ */
+export function getThoriumThemeFromDocument(): {
+  light: Record<string, string>;
+  dark: Record<string, string>;
+} | null {
+  const fromStored = getThoriumThemeFromStoredVariants();
+  if (typeof document === "undefined") return fromStored;
+  const root = document.documentElement;
+  const style = getComputedStyle(root);
+
+  const buildTokens = (bg: string, fg: string, accent: string, mutedFg: string, isLight: boolean) => ({
+    background: cssVarToHsl(bg),
+    text: cssVarToHsl(fg),
+    link: isLight ? "#0000ee" : "#63caff",
+    visited: isLight ? "#551a8b" : "#0099e5",
+    subdue: cssVarToHsl(mutedFg) || "#808080",
+    disable: "#808080",
+    hover: cssVarToHsl(accent),
+    onHover: cssVarToHsl(fg),
+    select: "#b4d8fe",
+    onSelect: "inherit" as const,
+    focus: "#0067f4",
+    elevate: "0px 0px 2px #808080",
+    immerse: isLight ? "0.6" : "0.4",
+  });
+
+  const lightBg = style.getPropertyValue("--background").trim();
+  const lightFg = style.getPropertyValue("--foreground").trim();
+  const lightAccent = style.getPropertyValue("--accent").trim();
+  const lightMuted = style.getPropertyValue("--muted-foreground").trim();
+  if (!lightBg || !lightFg) return fromStored;
+  const lightTokens = buildTokens(lightBg, lightFg, lightAccent, lightMuted, true);
+
+  const hadDark = root.classList.contains("dark");
+  root.classList.add("dark");
+  const darkStyle = getComputedStyle(root);
+  const darkBg = darkStyle.getPropertyValue("--background").trim();
+  const darkFg = darkStyle.getPropertyValue("--foreground").trim();
+  const darkAccent = darkStyle.getPropertyValue("--accent").trim();
+  const darkMuted = darkStyle.getPropertyValue("--muted-foreground").trim();
+  if (!hadDark) root.classList.remove("dark");
+
+  const darkTokens =
+    darkBg && darkFg
+      ? buildTokens(darkBg, darkFg, darkAccent, darkMuted, false)
+      : lightTokens;
+
+  return { light: lightTokens, dark: darkTokens };
+}
+
 /**
  * Theme variant IDs. Each light theme has a paired dark theme with the same id.
  */

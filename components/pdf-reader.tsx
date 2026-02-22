@@ -108,8 +108,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
   useEffect(() => {
     // Default to an "immersive" UI on mobile: tap center to reveal chrome.
     setChromeVisible(!isMobile);
-    // Keep debug panel closed on mobile unless explicitly opened.
-    if (isMobile) setIsDebugPanelOpen(false);
   }, [isMobile]);
 
   const getCurrentPageNumberFromViewport = () => {
