@@ -66,8 +66,12 @@ const thoriumPreferences = createPreferences({
   },
   actions: {
     ...defaultPreferences.actions,
-    reflowOrder: defaultPreferences.actions.reflowOrder.filter((k) => k !== ThActionsKeys.jumpToPosition),
-    fxlOrder: defaultPreferences.actions.fxlOrder.filter((k) => k !== ThActionsKeys.jumpToPosition),
+    reflowOrder: defaultPreferences.actions.reflowOrder.filter(
+      (k) => k !== ThActionsKeys.jumpToPosition && k !== ThActionsKeys.fullscreen
+    ),
+    fxlOrder: defaultPreferences.actions.fxlOrder.filter(
+      (k) => k !== ThActionsKeys.jumpToPosition && k !== ThActionsKeys.fullscreen
+    ),
   },
   theming: {
     ...defaultPreferences.theming,
