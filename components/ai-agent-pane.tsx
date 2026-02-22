@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2 } from "lucide-react";
+import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -40,6 +40,57 @@ const MAX_EXPLAIN_SELECTION_CHARS = (() => {
   return Math.max(0, parsed);
 })();
 
+export interface MessageToolCall {
+  toolName: string;
+  args: Record<string, unknown>;
+  id?: string;
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  vector_search: "Vector search",
+  text_search: "Text Search",
+  web_search: "Web search",
+  get_passage_content: "Fetching passage",
+};
+
+function formatToolLabel(toolName: string): string {
+  return TOOL_LABELS[toolName] ?? toolName;
+}
+
+function getQueryPreview(tc: MessageToolCall, maxLen = 80): string {
+  const query = tc.args?.query;
+  if (typeof query === "string" && query.length > 0) {
+    return query.length > maxLen ? `${query.slice(0, maxLen)}...` : query;
+  }
+  if (tc.toolName === "get_passage_content") {
+    const ids = tc.args?.section_ids;
+    const count = Array.isArray(ids) ? ids.length : 0;
+    return count > 0 ? `${count} section${count === 1 ? "" : "s"}` : "";
+  }
+  return "";
+}
+
+function ToolCallSteps({ toolCalls }: { toolCalls: MessageToolCall[] }) {
+  return (
+    <div className="space-y-1 text-left">
+      {toolCalls.map((tc, i) => (
+        <details key={tc.id ?? i} className="group">
+          <summary className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
+            <span className="font-medium">{formatToolLabel(tc.toolName)}</span>
+            {getQueryPreview(tc) && (
+              <span className="truncate">— {getQueryPreview(tc)}</span>
+            )}
+          </summary>
+          <pre className="mt-1 ml-5 text-[10px] text-muted-foreground/80 overflow-x-auto whitespace-pre-wrap break-words">
+            {JSON.stringify(tc.args, null, 2)}
+          </pre>
+        </details>
+      ))}
+    </div>
+  );
+}
+
 interface AIMessage {
   id: string;
   role: "user" | "assistant";
@@ -47,6 +98,7 @@ interface AIMessage {
   timestamp: Date;
   selectionPositionLabel?: string;
   selectionPositionTitle?: string;
+  toolCalls?: MessageToolCall[];
 }
 
 export interface AIAgentPanelProps {
@@ -196,7 +248,6 @@ export function AIAgentPanel({
   >([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [chatMode, setChatMode] = useState<"fast" | "agentic">("fast");
-  const [agenticStatus, setAgenticStatus] = useState<string | null>(null);
   const [contextDialogOpen, setContextDialogOpen] = useState(false);
   const [capturedContext, setCapturedContext] = useState<{
     startPosition?: string;
@@ -351,7 +402,7 @@ export function AIAgentPanel({
     async (
       response: Response,
       assistantMessageId: string,
-      onStreamComplete?: (content: string, usage?: StreamUsage) => void | Promise<void>,
+      onStreamComplete?: (content: string, usage?: StreamUsage, toolCalls?: MessageToolCall[]) => void | Promise<void>,
       onStatus?: (message: string | null) => void
     ) => {
       if (!response.ok) {
@@ -375,6 +426,7 @@ export function AIAgentPanel({
       let buffer = "";
       let fullContent = "";
       let streamUsage: StreamUsage | undefined;
+      const accumulatedToolCalls: MessageToolCall[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -389,7 +441,7 @@ export function AIAgentPanel({
             const data = line.slice(6);
             if (data === "[DONE]") {
               onStatus?.(null);
-              await onStreamComplete?.(fullContent, streamUsage);
+              await onStreamComplete?.(fullContent, streamUsage, accumulatedToolCalls);
               setIsLoading(false);
               onActionComplete?.();
               return;
@@ -397,7 +449,21 @@ export function AIAgentPanel({
 
             try {
               const parsed = JSON.parse(data);
-              if (parsed.type === "status" && typeof parsed.message === "string") {
+              if (parsed.type === "tool_call" && typeof parsed.toolName === "string") {
+                const tc: MessageToolCall = {
+                  toolName: parsed.toolName,
+                  args: parsed.args && typeof parsed.args === "object" ? parsed.args : {},
+                  id: typeof parsed.id === "string" ? parsed.id : undefined,
+                };
+                accumulatedToolCalls.push(tc);
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, toolCalls: [...(msg.toolCalls ?? []), tc] }
+                      : msg
+                  )
+                );
+              } else if (parsed.type === "status" && typeof parsed.message === "string") {
                 onStatus?.(parsed.message);
               } else if (parsed.type === "usage") {
                 streamUsage = {
@@ -426,7 +492,7 @@ export function AIAgentPanel({
       }
 
       onStatus?.(null);
-      await onStreamComplete?.(fullContent, streamUsage);
+      await onStreamComplete?.(fullContent, streamUsage, accumulatedToolCalls);
       setIsLoading(false);
       onActionComplete?.();
     },
@@ -558,19 +624,32 @@ export function AIAgentPanel({
     const loadMessages = async () => {
       const { data } = await supabase
         .from("chat_messages")
-        .select("id, role, content, selection_position_label, selection_position_title, created_at")
+        .select("id, role, content, selection_position_label, selection_position_title, tool_calls, created_at")
         .eq("chat_id", activeChatId)
         .order("message_index", { ascending: true });
       if (data && data.length > 0) {
         setMessages(
-          data.map((m) => ({
-            id: m.id,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            timestamp: new Date(m.created_at),
-            selectionPositionLabel: m.selection_position_label ?? undefined,
-            selectionPositionTitle: m.selection_position_title ?? undefined,
-          }))
+          data.map((m) => {
+            const rawToolCalls = m.tool_calls;
+            const toolCalls: MessageToolCall[] | undefined = Array.isArray(rawToolCalls)
+              ? rawToolCalls
+                  .filter((tc) => tc && typeof tc.toolName === "string")
+                  .map((tc) => ({
+                    toolName: tc.toolName as string,
+                    args: (tc.args && typeof tc.args === "object" ? tc.args : {}) as Record<string, unknown>,
+                    id: typeof tc.id === "string" ? tc.id : undefined,
+                  }))
+              : undefined;
+            return {
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              timestamp: new Date(m.created_at),
+              selectionPositionLabel: m.selection_position_label ?? undefined,
+              selectionPositionTitle: m.selection_position_title ?? undefined,
+              toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+            };
+          })
         );
       } else {
         setMessages([]);
@@ -616,7 +695,8 @@ export function AIAgentPanel({
       model?: string;
       included: boolean;
       chatMode?: string;
-    }
+    },
+    toolCalls?: MessageToolCall[]
   ) => {
     await supabase.from("chat_messages").insert({
       chat_id: chatId,
@@ -629,6 +709,7 @@ export function AIAgentPanel({
       model: usage?.model ?? null,
       usage_included: usage?.included ?? true,
       chat_mode: usage?.chatMode ?? null,
+      tool_calls: toolCalls && toolCalls.length > 0 ? toolCalls : null,
     });
   };
 
@@ -749,8 +830,6 @@ export function AIAgentPanel({
     const userInput = input;
     setInput("");
     setIsLoading(true);
-    if (chatMode === "agentic") setAgenticStatus("Thinking...");
-
     try {
     let sendPositionLabel: string | undefined;
     let sendPositionTitle: string | undefined;
@@ -1059,19 +1138,18 @@ export function AIAgentPanel({
       await handleStreamingResponse(
         response,
         assistantMessageId,
-        async (content, usage) => {
+        async (content, usage, toolCalls) => {
           if (chatId) {
-            await persistAssistantMessage(chatId, content, assistantMsgIndex, usage);
+            await persistAssistantMessage(chatId, content, assistantMsgIndex, usage, toolCalls);
             if (isNewChat) {
               generateAndUpdateChatTitle(chatId, userInput, content).catch(() => {});
             }
           }
         },
-        chatMode === "agentic" ? setAgenticStatus : undefined
+        undefined
       );
     } catch (error) {
       console.error("Error calling chat API:", error);
-      setAgenticStatus(null);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
       setMessages((prev) =>
@@ -1124,7 +1202,6 @@ export function AIAgentPanel({
 
     // Get current selection position
     setIsLoading(true);
-    if (chatMode === "agentic") setAgenticStatus("Thinking...");
 
     let summaries: SummaryContext[] = [];
     let selectionPositionLabel: string | undefined;
@@ -1371,19 +1448,18 @@ export function AIAgentPanel({
       await handleStreamingResponse(
         response,
         assistantMessageId,
-        async (content, usage) => {
+        async (content, usage, toolCalls) => {
           if (chatId) {
-            await persistAssistantMessage(chatId, content, assistantMsgIndex, usage);
+            await persistAssistantMessage(chatId, content, assistantMsgIndex, usage, toolCalls);
             if (isNewChat) {
               generateAndUpdateChatTitle(chatId, explainUserMessage, content).catch(() => {});
             }
           }
         },
-        chatMode === "agentic" ? setAgenticStatus : undefined
+        undefined
       );
     } catch (error) {
       console.error("Error calling chat API:", error);
-      setAgenticStatus(null);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
       setMessages((prev) =>
@@ -1612,67 +1688,86 @@ export function AIAgentPanel({
           className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 overscroll-contain"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          {messages
-            .filter((m) => m.role !== "assistant" || m.content.trim().length > 0)
-            .map((message) => (
+          {(() => {
+            const filteredMessages = messages.filter(
+              (m) =>
+                m.role !== "assistant" ||
+                m.content.trim().length > 0 ||
+                (m.toolCalls?.length ?? 0) > 0 ||
+                (isLoading && messages[messages.length - 1]?.id === m.id)
+            );
+            return filteredMessages.map((message, index) => {
+              const isLastMessage = index === filteredMessages.length - 1;
+              const isStreaming =
+                isLoading &&
+                isLastMessage &&
+                message.role === "assistant" &&
+                !message.content.trim();
+              return (
             <div
               key={message.id}
-              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+              className={`flex flex-col gap-2 ${message.role === "user" ? "items-end" : "items-start"}`}
             >
-              <Card
-                className={`max-w-[80%] p-3 ${
-                  message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-foreground select-text"
-                }`}
-              >
-                {message.role === "assistant" ? (
-                  <Markdown content={message.content} />
-                ) : (
-                  <p className="text-sm whitespace-pre-wrap break-words">
-                    {message.content}
-                  </p>
-                )}
-                {message.selectionPositionLabel && (
-                  <div className="mt-2">
-                    <span
-                      title={message.selectionPositionTitle}
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
-                        message.role === "user"
-                          ? "text-primary-foreground/80"
-                          : "text-foreground/80"
-                      } border-primary/40 bg-primary/10`}
-                    >
-                      {message.selectionPositionLabel}
-                    </span>
+              {message.role === "assistant" &&
+                message.toolCalls &&
+                message.toolCalls.length > 0 && (
+                  <div className="w-full max-w-[80%] text-left">
+                    <ToolCallSteps toolCalls={message.toolCalls} />
                   </div>
                 )}
-              </Card>
+              <div
+                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"} w-full max-w-[80%]`}
+              >
+                <Card
+                  className={`p-3 ${
+                    message.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-foreground select-text"
+                  }`}
+                >
+                  {message.role === "assistant" ? (
+                    <>
+                      {message.content.trim() ? (
+                        <Markdown content={message.content} />
+                      ) : isStreaming ? (
+                        <div className="flex gap-1">
+                          <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
+                          <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
+                          <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap break-words">
+                      {message.content}
+                    </p>
+                  )}
+                  {message.selectionPositionLabel && (
+                    <div className="mt-2">
+                      <span
+                        title={message.selectionPositionTitle}
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+                          message.role === "user"
+                            ? "text-primary-foreground/80"
+                            : "text-foreground/80"
+                        } border-primary/40 bg-primary/10`}
+                      >
+                        {message.selectionPositionLabel}
+                      </span>
+                    </div>
+                  )}
+                </Card>
+              </div>
             </div>
-          ))}
-          {isLoading && (
-            <div className="flex justify-start">
-              <Card className="bg-muted p-3">
-                <div className="flex gap-1">
-                  <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
-                  <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
-                  <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
-                </div>
-              </Card>
-            </div>
-          )}
+          );
+            });
+          })()}
         </div>
       )}
 
       {/* Input (bottom: when chat has messages, or in compact mode when showMessages is false) */}
       {((showMessages && messages.length > 0) || !showMessages) && (
         <div className="p-4 border-t border-border shrink-0">
-          {chatMode === "agentic" && isLoading && agenticStatus && (
-            <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-pulse" />
-              <span>{agenticStatus}</span>
-            </div>
-          )}
           {(trimmedSelectedText || (currentPage && currentPage >= 1)) && (
             <div className="mb-2">
               <button

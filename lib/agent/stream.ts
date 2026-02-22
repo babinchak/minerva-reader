@@ -4,19 +4,13 @@ import type { AgentState } from "./graph";
 
 type AgentGraph = ReturnType<typeof import("./graph").createAgentGraph>;
 
-const TOOL_STATUS_LABELS: Record<string, string> = {
-  vector_search: "Searching book...",
-  text_search: "Searching text...",
-  web_search: "Searching web...",
-};
+type ToolCallChunk = { name?: string; args?: Record<string, unknown>; id?: string };
 
-function emitStatus(toolNames: string[]): string {
-  const labels = toolNames
-    .map((n) => TOOL_STATUS_LABELS[n])
-    .filter(Boolean);
-  if (labels.length === 0) return "";
-  if (labels.length === 1) return labels[0];
-  return labels.join(" ");
+function getToolCallPayload(tc: ToolCallChunk): { type: "tool_call"; toolName: string; args: Record<string, unknown>; id?: string } | null {
+  const name = typeof tc.name === "string" ? tc.name : undefined;
+  if (!name) return null;
+  const args = tc.args && typeof tc.args === "object" ? (tc.args as Record<string, unknown>) : {};
+  return { type: "tool_call", toolName: name, args, id: typeof tc.id === "string" ? tc.id : undefined };
 }
 
 /**
@@ -52,10 +46,11 @@ export async function* streamAgentToSSE(
         const last = updates.agent.messages[updates.agent.messages.length - 1] as AIMessage;
         const toolCalls = last?.tool_calls;
         if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-          const names = [...new Set(toolCalls.map((tc) => tc.name as string))];
-          const msg = emitStatus(names);
-          if (msg) {
-            yield `data: ${JSON.stringify({ type: "status", message: msg })}\n\n`;
+          for (const tc of toolCalls) {
+            const payload = getToolCallPayload(tc as ToolCallChunk);
+            if (payload) {
+              yield `data: ${JSON.stringify(payload)}\n\n`;
+            }
           }
         } else if (typeof last?.content === "string" && last.content.length > 0) {
           yield `data: ${JSON.stringify({ type: "status", message: "Generating response..." })}\n\n`;
