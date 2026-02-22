@@ -1,7 +1,6 @@
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BookOpen, User, Calendar } from "lucide-react";
+import { BookOpen, User } from "lucide-react";
 import Link from "next/link";
 
 /** Format author string for display: split by pipe, join with ", " */
@@ -18,7 +17,6 @@ export async function BooksList() {
     return null;
   }
 
-  // First, get the book_ids for this user from user_books
   const { data: userBookLinks, error: linksError } = await supabase
     .from("user_books")
     .select("book_id")
@@ -26,45 +24,16 @@ export async function BooksList() {
 
   if (linksError) {
     return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5" />
-            Your Books
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <p className="text-sm text-destructive">
-            Error loading books: {linksError.message}
-          </p>
-        </CardContent>
-      </Card>
+      <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
+        Error loading books: {linksError.message}
+      </div>
     );
   }
 
-  // If no book links, show empty state
   if (!userBookLinks || userBookLinks.length === 0) {
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5" />
-            Your Books
-          </CardTitle>
-          <CardDescription>
-            Books you&apos;ve uploaded or added to your library
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-8">
-            No books yet. Upload your first EPUB or PDF book to get started!
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return null; // Caller renders empty state
   }
 
-  // Fetch the actual books using the book_ids
   const bookIds = userBookLinks.map((link) => link.book_id);
   const { data: books, error: booksError } = await supabase
     .from("books")
@@ -74,23 +43,12 @@ export async function BooksList() {
 
   if (booksError) {
     return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5" />
-            Your Books
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <p className="text-sm text-destructive">
-            Error loading books: {booksError.message}
-          </p>
-        </CardContent>
-      </Card>
+      <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
+        Error loading books: {booksError.message}
+      </div>
     );
   }
 
-  // Build cover URLs for books that have cover_path (covers bucket is public)
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const userBooks = (books || []).map((book) => {
     const coverUrl = book.cover_path && supabaseUrl
@@ -100,96 +58,46 @@ export async function BooksList() {
       id: book.id,
       title: book.title,
       author: book.author,
-      createdAt: book.created_at,
       coverUrl,
     };
   });
 
   if (userBooks.length === 0) {
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5" />
-            Your Books
-          </CardTitle>
-          <CardDescription>
-            Books you&apos;ve uploaded or added to your library
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-8">
-            No books found. This might be a data consistency issue.
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <BookOpen className="h-5 w-5" />
-          Your Books ({userBooks.length})
-        </CardTitle>
-          <CardDescription>
-            Books you&apos;ve uploaded or added to your library
-          </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {userBooks.map((book) => (
-            <Link
-              key={book.id}
-              href={`/read/${book.id}`}
-              className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer block"
-            >
-              <div className="flex-shrink-0">
-                <div className="w-[100px] h-[150px] rounded-lg overflow-hidden bg-muted flex items-center justify-center shadow-sm">
-                  {book.coverUrl ? (
-                    <img
-                      src={book.coverUrl}
-                      alt={`Cover of ${book.title}`}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <BookOpen className="h-10 w-10 text-muted-foreground" />
-                  )}
-                </div>
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      {userBooks.map((book) => (
+        <Link
+          key={book.id}
+          href={`/read/${book.id}`}
+          className="group flex flex-col rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50"
+        >
+          <div className="mb-3 aspect-[2/3] w-full overflow-hidden rounded-md bg-muted shadow-sm">
+            {book.coverUrl ? (
+              <img
+                src={book.coverUrl}
+                alt={`Cover of ${book.title}`}
+                className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <BookOpen className="h-12 w-12 text-muted-foreground" />
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-lg mb-1 truncate">
-                  {book.title}
-                </h3>
-                {book.author && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                    <User className="h-4 w-4" />
-                    <span className="truncate">{formatAuthorDisplay(book.author)}</span>
-                  </div>
-                )}
-                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                  {book.createdAt && (
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      <span>Added {formatDate(book.createdAt)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+            )}
+          </div>
+          <h3 className="line-clamp-2 font-medium text-foreground group-hover:text-primary">
+            {book.title}
+          </h3>
+          {book.author && (
+            <p className="mt-0.5 line-clamp-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <User className="h-3 w-3 shrink-0" />
+              <span className="truncate">{formatAuthorDisplay(book.author)}</span>
+            </p>
+          )}
+        </Link>
+      ))}
+    </div>
   );
 }

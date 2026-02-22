@@ -8,7 +8,10 @@ import { Upload, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { CREDITS_REFRESH_EVENT } from '@/lib/credits-refresh';
 
-export function UploadBookForm() {
+export function UploadBookForm({
+  onSuccess,
+  compact = false,
+}: { onSuccess?: () => void; compact?: boolean } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -75,7 +78,7 @@ export function UploadBookForm() {
         ? `Book already exists: ${data.message}`
         : `Success: ${data.message}`
       );
-      
+      onSuccess?.();
       setFile(null);
       const fileInput = document.getElementById('book-file') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
@@ -87,25 +90,16 @@ export function UploadBookForm() {
     }
   };
 
-  return (
-    <Card className="w-full max-w-2xl">
-      <CardHeader>
-        <CardTitle>Upload Book</CardTitle>
-        <CardDescription>
-          {uploadLimit && uploadLimit.booksUploadLimit < 999 ? (
-            <>
-              Upload an EPUB or PDF file. {uploadLimit.booksUploadedThisWeek}/{uploadLimit.booksUploadLimit} books this week.
-              {uploadLimit.booksUploadedThisWeek >= uploadLimit.booksUploadLimit && (
+  const formContent = (
+    <form onSubmit={handleSubmit} className="space-y-4">
+          {compact && uploadLimit && uploadLimit.booksUploadLimit < 999 && (
+            <p className="text-sm text-muted-foreground">
+              {uploadLimit.booksUploadedThisWeek}/{uploadLimit.booksUploadLimit} books this week.
+              {limitReached && (
                 <> <Link href="/?upgrade=1" className="text-primary hover:underline">Upgrade</Link> for unlimited.</>
               )}
-            </>
-          ) : (
-            'Upload an EPUB or PDF file to add it to your library. Duplicate books will be automatically detected.'
+            </p>
           )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="book-file" className="text-sm font-medium">
               Select EPUB or PDF File
@@ -121,7 +115,7 @@ export function UploadBookForm() {
                 setError(null);
               }}
               disabled={uploading}
-              className="cursor-pointer"
+              className="cursor-pointer file:cursor-pointer"
             />
             {file && (
               <p className="text-sm text-muted-foreground">
@@ -162,6 +156,31 @@ export function UploadBookForm() {
             </div>
           )}
         </form>
+  );
+
+  if (compact) {
+    return formContent;
+  }
+
+  return (
+    <Card className="w-full max-w-2xl">
+      <CardHeader>
+        <CardTitle>Upload Book</CardTitle>
+        <CardDescription>
+          {uploadLimit && uploadLimit.booksUploadLimit < 999 ? (
+            <>
+              Upload an EPUB or PDF file. {uploadLimit.booksUploadedThisWeek}/{uploadLimit.booksUploadLimit} books this week.
+              {uploadLimit.booksUploadedThisWeek >= uploadLimit.booksUploadLimit && (
+                <> <Link href="/?upgrade=1" className="text-primary hover:underline">Upgrade</Link> for unlimited.</>
+              )}
+            </>
+          ) : (
+            'Upload an EPUB or PDF file to add it to your library.'
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {formContent}
       </CardContent>
     </Card>
   );

@@ -40,6 +40,7 @@
     "pdf-to-img": "^5.0.0",
     "pdfjs-dist": "^5.4.530",
     "pngjs": "^7.0.0",
+    "radix-ui": "^1.4.3",
     "react": "^19.0.0",
     "react-aria": "^3.45.0",
     "react-aria-components": "^1.14.0",
