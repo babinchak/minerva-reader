@@ -133,10 +133,10 @@ export function createAgentTools(
       name: "text_search",
       description:
         "Exact/keyword text search within the current book. Use when you need to find specific words or short phrases. " +
-        "IMPORTANT: Use 1–3 words or a short key phrase only (e.g. 'Napoleon', 'free will', 'Chapter Five'). " +
-        "Long queries rarely match—extract the most distinctive word or phrase. Returns matching sections. Only works when a book is open.",
+        "Use 1–3 words or a short key phrase per term. For multiple alternatives (OR search), separate with | (e.g. 'scarlet|velvet', 'Coke|coca-cola|Pepsi'). " +
+        "Returns matching sections. Only works when a book is open.",
       schema: z.object({
-        query: z.string().describe("1–3 words or a short key phrase to search for (e.g. a name, distinctive term, or short quote). Keep it brief."),
+        query: z.string().describe("Search term(s). Use | to search multiple alternatives (OR): e.g. 'scarlet|velvet' or 'Coke|coca-cola'."),
         limit: z.number().optional().describe("Max results to return (default 10, max 50)."),
       }),
     }

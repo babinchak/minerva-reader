@@ -33,26 +33,42 @@ export async function textSearch(
   }
 
   const maxResults = Math.min(Math.max(1, limit), 50);
-  // Long queries rarely match substring search—extract a short key term for better results
-  const trimmed = query.trim();
-  const effectiveQuery =
-    trimmed.length > 50 || trimmed.split(/\s+/).length > 4
-      ? (trimmed
-          .split(/\s+/)
-          .filter((w) => w.length > 2)
-          .slice(0, 3)
-          .join(" ") ||
-          trimmed.split(/\s+/)[0] ||
-          trimmed)
-      : trimmed;
-  const searchPattern = `%${effectiveQuery.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
+  // Support multiple terms with | (OR): e.g. "scarlet|velvet" or "Coke|coca-cola"
+  const rawTerms = query
+    .split(/\s*\|\s*/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0)
+    .slice(0, 5); // max 5 terms for OR search
 
-  const { data, error } = await supabase
+  const terms = rawTerms.map((t) => {
+    if (t.length > 50 || t.split(/\s+/).length > 4) {
+      const words = t.split(/\s+/).filter((w) => w.length > 2);
+      return words.slice(0, 3).join(" ") || words[0] || t.slice(0, 30);
+    }
+    return t;
+  });
+
+  const escapeForIlike = (s: string) => s.replace(/%/g, "\\%").replace(/_/g, "\\_");
+
+  let queryBuilder = supabase
     .from("embedding_sections")
     .select("id, content_text, start_position, end_position")
-    .eq("book_id", bookId)
-    .ilike("content_text", searchPattern)
-    .limit(maxResults);
+    .eq("book_id", bookId);
+
+  if (terms.length === 0) {
+    return { results: [], error: "Empty search query" };
+  }
+  if (terms.length === 1) {
+    const pattern = `%${escapeForIlike(terms[0])}%`;
+    queryBuilder = queryBuilder.ilike("content_text", pattern);
+  } else {
+    const orConditions = terms
+      .map((t) => `content_text.ilike.%${escapeForIlike(t)}%`)
+      .join(",");
+    queryBuilder = queryBuilder.or(orConditions);
+  }
+
+  const { data, error } = await queryBuilder.limit(maxResults);
 
   if (error) {
     return { results: [], error: error.message ?? "Text search failed" };
