@@ -1050,6 +1050,21 @@
     display: none !important;
   }
 
+  /* Thorium uses height: 100vh which can overflow and overlap our toolbar.
+   * Constrain the reader to the content area so it sits below the toolbar. */
+  .epub-reader-with-custom-toolbar #reader-main,
+  .epub-reader-with-custom-toolbar #reader-shell,
+  .epub-reader-with-custom-toolbar .layered-ui,
+  .epub-reader-with-custom-toolbar .stacked-ui {
+    height: 100% !important;
+    max-height: 100% !important;
+  }
+
+  /* Add top padding so body text isn't crowded against the toolbar */
+  .epub-reader-with-custom-toolbar #container {
+    padding-top: 1.5rem !important;
+  }
+
   /* Override Thorium reader's html,body styles which persist after navigation */
   html.scroll-unlock,
   body.scroll-unlock {
