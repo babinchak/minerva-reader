@@ -33,25 +33,11 @@ function useEpubPositionLabel(): string {
     currentChapter,
     currentIndex,
     totalItems,
-    positionsLeft,
-    currentPositions = [],
-    totalPositions,
     relativeProgression,
     totalProgression,
   } = progression;
 
-  // Prefer chapter + position when available
-  if (currentChapter && currentPositions.length > 0 && totalPositions) {
-    const pos = currentPositions.length >= 2
-      ? `${currentPositions[0]}\u2013${currentPositions[1]}`
-      : String(currentPositions[0]);
-    return `${currentChapter} (${pos} of ${totalPositions})`;
-  }
-
-  if (currentChapter && positionsLeft !== undefined) {
-    return `${currentChapter} (${positionsLeft} left)`;
-  }
-
+  // Show chapter title only (no position)
   if (currentChapter) return currentChapter;
 
   // Fallback: index + total
