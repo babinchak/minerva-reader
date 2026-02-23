@@ -34,10 +34,10 @@ export async function* streamAgentToSSE(
     // LangGraph yields [namespace?, mode, chunk] - 3 elements with subgraphs, 2 without
     const isTuple = Array.isArray(payload) && payload.length >= 2;
     const mode = isTuple
-      ? (payload.length >= 3 ? (payload as [unknown, string, unknown])[1] : (payload as [string, unknown])[0])
+      ? (payload.length >= 3 ? (payload as unknown as [unknown, string, unknown])[1] : (payload as unknown as [string, unknown])[0])
       : undefined;
     const chunk = isTuple
-      ? (payload.length >= 3 ? (payload as [unknown, unknown, unknown])[2] : (payload as [unknown, unknown])[1])
+      ? (payload.length >= 3 ? (payload as unknown as [unknown, unknown, unknown])[2] : (payload as unknown as [unknown, unknown])[1])
       : payload;
 
     if (mode === "updates" && chunk && typeof chunk === "object") {

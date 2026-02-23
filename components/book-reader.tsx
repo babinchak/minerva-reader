@@ -182,6 +182,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
 function applyThemeToEpubIframes(tokens: Record<string, string>) {
   const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
   for (const iframe of iframes) {
+    if (!(iframe instanceof HTMLIFrameElement)) continue;
     try {
       const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
       if (!doc?.documentElement) continue;

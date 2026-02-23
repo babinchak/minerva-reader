@@ -3,6 +3,7 @@
  * Uses cost_cents for tracking. Legacy credits kept for migration.
  */
 
+import { reportOverageUsageToStripe } from "@/lib/stripe-usage";
 import { createServiceClient } from "@/lib/supabase/server";
 
 export type UserTier = "anonymous" | "free" | "paid";
