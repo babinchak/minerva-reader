@@ -401,26 +401,193 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
     <div className="w-full h-screen flex">
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="flex flex-col h-full relative">
-          {(!isMobile || chromeVisible) && (
+          {/* Desktop: toolbar docks in flow. Mobile: always rendered as overlay, visibility toggled (no layout shift). */}
+          {!isMobile && (
+            <div
+              ref={toolbarRef}
+              className="relative grid grid-cols-[1fr_auto_1fr] items-center px-4 border-b bg-background text-foreground py-2"
+            >
+                <div className="min-w-0 flex items-center gap-2 justify-self-start">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="-ml-2 shrink-0"
+                    onClick={() => router.back()}
+                    aria-label="Back"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 min-w-0 justify-self-center">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => zoomBy(-ZOOM_STEP)}
+                      aria-label="Zoom out"
+                      title="Zoom out"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => zoomBy(ZOOM_STEP)}
+                      aria-label="Zoom in"
+                      title="Zoom in"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <Input
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onFocus={() => setIsEditingPage(true)}
+                    onBlur={() => {
+                      setIsEditingPage(false);
+                      commitPageInput();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (e.currentTarget as HTMLInputElement).blur();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setPageInput(String(currentPage));
+                        (e.currentTarget as HTMLInputElement).blur();
+                      }
+                    }}
+                    inputMode="numeric"
+                    aria-label="Current page"
+                    className="h-8 w-16 text-center"
+                  />
+                  <span className="text-sm text-muted-foreground select-none">
+                    / {pdfDoc.numPages}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 justify-self-end">
+                  <ThemeSwitcher />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsSearchOpen((v) => !v)}
+                    aria-label="Search"
+                    title="Search"
+                    className="shrink-0"
+                  >
+                    <Search className="h-5 w-5" />
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => requestAiRun("selection")}
+                    disabled={!selectionExists}
+                    aria-label="Explain selection"
+                    title={selectionExists ? "Explain selection" : "Select text to explain"}
+                    className="hidden md:inline-flex"
+                  >
+                    <Highlighter className="h-4 w-4 mr-2" />
+                    Explain selection
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => requestAiRun("page")}
+                    aria-label="Explain page"
+                    title="Explain page"
+                    className="hidden md:inline-flex"
+                  >
+                    <BookOpenText className="h-4 w-4 mr-2" />
+                    Explain page
+                  </Button>
+
+                  {!isAiPaneOpen && (
+                    <Button
+                      variant="default"
+                      onClick={() => {
+                        openAiNonceRef.current += 1;
+                        setOpenAiRequest({ nonce: openAiNonceRef.current });
+                      }}
+                      aria-label="Ask Minerva"
+                      title="Ask Minerva"
+                      className="hidden md:inline-flex"
+                    >
+                      Ask Minerva
+                    </Button>
+                  )}
+                </div>
+
+                {isSearchOpen && (
+                  <div className="absolute right-4 top-full mt-2 z-50 w-[min(520px,calc(100vw-2rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant={searchMode === "normal" ? "default" : "outline"}
+                        onClick={() => setSearchMode("normal")}
+                        className="h-8"
+                      >
+                        Normal
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={searchMode === "semantic" ? "default" : "outline"}
+                        onClick={() => setSearchMode("semantic")}
+                        className="h-8"
+                        title="Semantic search (vector matches) - not implemented yet"
+                      >
+                        Semantic
+                      </Button>
+                      <div className="flex-1" />
+                      <Button type="button" variant="ghost" size="icon" onClick={() => setIsSearchOpen(false)} aria-label="Close search">
+                        <span className="text-lg leading-none">×</span>
+                      </Button>
+                    </div>
+
+                    <div className="mt-3 flex gap-2">
+                      <Input
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={searchMode === "semantic" ? "Search by meaning..." : "Search text..."}
+                        className="h-9 flex-1"
+                      />
+                      <Button type="button" disabled={!searchQuery.trim()} title="Search (not implemented yet)">
+                        Search
+                      </Button>
+                    </div>
+
+                    <div className="mt-3 text-sm text-muted-foreground">
+                      {searchMode === "semantic" ? (
+                        <p>Semantic search results will appear here (top vector matches). Not implemented yet.</p>
+                      ) : (
+                        <p>Text search results will appear here. Not implemented yet.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+            </div>
+          )}
+          {isMobile && (
             <>
-              {isMobile && (
-                // Background "sheet" that fills the notch/safe-area region too,
-                // while keeping the interactive bar content below it.
-                <div
-                  className="absolute top-0 left-0 right-0 z-50 border-b/60 bg-background/90 backdrop-blur pointer-events-none"
-                  style={{ paddingTop: mobileSafeTop }}
-                />
-              )}
+              {/* Background "sheet" for notch/safe-area; hidden when chrome collapsed */}
+              <div
+                className={[
+                  "absolute top-0 left-0 right-0 z-50 border-b/60 bg-background/90 backdrop-blur transition-opacity duration-200",
+                  chromeVisible ? "opacity-100 pointer-events-none" : "opacity-0 pointer-events-none",
+                ].join(" ")}
+                style={{ paddingTop: mobileSafeTop }}
+                aria-hidden={!chromeVisible}
+              />
               <div
                 ref={toolbarRef}
                 className={[
-                  "relative grid grid-cols-[1fr_auto_1fr] items-center px-4 border-b bg-background text-foreground pointer-events-auto",
-                  // On mobile, overlay instead of docking (avoid reflow/layout shift).
-                  isMobile
-                    ? "absolute left-0 right-0 z-50 border-b/60 bg-background/90 backdrop-blur py-2"
-                    : "py-2",
+                  "absolute left-0 right-0 z-50 grid grid-cols-[1fr_auto_1fr] items-center px-4 border-b/60 bg-background/90 backdrop-blur py-2 transition-opacity duration-200",
+                  chromeVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
                 ].join(" ")}
-                style={isMobile ? { top: mobileSafeTop } : undefined}
+                style={{ top: mobileSafeTop }}
+                aria-hidden={!chromeVisible}
               >
                 <div className="min-w-0 flex items-center gap-2 justify-self-start">
                   <Button

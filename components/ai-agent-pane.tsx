@@ -29,6 +29,14 @@ import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context
 import { getEpubVisibleContext } from "@/lib/epub-visible-context";
 import { getEpubLocalContextAroundCurrentSelection } from "@/lib/book-position/local-context";
 import { ContextPreviewDialog } from "@/components/context-preview-dialog";
+import { UpgradeCta } from "@/components/upgrade-cta";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_MAX_EXPLAIN_SELECTION_CHARS = 4000;
@@ -520,6 +528,9 @@ export function AIAgentPanel({
     agenticLimit: number;
     balance: number;
   } | null>(null);
+
+  // Dialog shown when user runs out of credits
+  const [creditsExhaustedDialogOpen, setCreditsExhaustedDialogOpen] = useState(false);
   useEffect(() => {
     if (!userId) {
       setCreditsInfo(null);
@@ -1152,6 +1163,11 @@ export function AIAgentPanel({
       console.error("Error calling chat API:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
+      const isCreditsError =
+        errorMessage.toLowerCase().includes("credits") || errorMessage.toLowerCase().includes("run out");
+      if (isCreditsError) {
+        setCreditsExhaustedDialogOpen(true);
+      }
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId ? { ...msg, content: errorMessage } : msg
@@ -1462,6 +1478,11 @@ export function AIAgentPanel({
       console.error("Error calling chat API:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
+      const isCreditsError =
+        errorMessage.toLowerCase().includes("credits") || errorMessage.toLowerCase().includes("run out");
+      if (isCreditsError) {
+        setCreditsExhaustedDialogOpen(true);
+      }
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId ? { ...msg, content: errorMessage } : msg
@@ -1818,6 +1839,18 @@ export function AIAgentPanel({
         capturedContext={capturedContext}
         pdfDocument={pdfDocument}
       />
+
+      <Dialog open={creditsExhaustedDialogOpen} onOpenChange={setCreditsExhaustedDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Out of credits</DialogTitle>
+            <DialogDescription>
+              You&apos;ve run out of credits. Upgrade or add more to continue using the AI assistant.
+            </DialogDescription>
+          </DialogHeader>
+          <UpgradeCta />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
