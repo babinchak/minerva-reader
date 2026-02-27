@@ -8,9 +8,11 @@ import {
   ArrowLeft,
   BookOpenText,
   Highlighter,
+  List,
   Minus,
   Plus,
   Search,
+  X,
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useRouter } from "next/navigation";
@@ -51,6 +53,15 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<"normal" | "semantic">("normal");
   const [searchQuery, setSearchQuery] = useState("");
+  const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unknown; items?: unknown[] }> | null>(null);
+  const [isTocOpen, setIsTocOpen] = useState(false);
+  const [tocDrawerMode, setTocDrawerMode] = useState<"contents" | "pages">("contents");
+
+  const openTocDrawer = () => {
+    if (!pdfOutline?.length) setTocDrawerMode("pages");
+    setIsTocOpen(true);
+  };
+
 
   const aiNonceRef = useRef(0);
   const [aiRequest, setAiRequest] = useState<{ nonce: number; action: "page" | "selection" } | null>(
@@ -292,6 +303,13 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
       }
       if (cancelled) return;
       setPdfDoc(pdf);
+      try {
+        const outline = await pdf.getOutline();
+        if (cancelled) return;
+        setPdfOutline(outline && outline.length > 0 ? outline : null);
+      } catch {
+        setPdfOutline(null);
+      }
       setLoading(false);
     })().catch((err) => {
       if (cancelled) return;
@@ -473,6 +491,16 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
                   <Button
                     variant="ghost"
                     size="icon"
+                    onClick={openTocDrawer}
+                    aria-label="Table of contents"
+                    title="Table of contents"
+                    className="shrink-0 text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                  >
+                    <List className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setIsSearchOpen((v) => !v)}
                     aria-label="Search"
                     title="Search"
@@ -631,6 +659,16 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
 
                 <div className="flex items-center gap-2 shrink-0 justify-self-end">
                   <ThemeSwitcher />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={openTocDrawer}
+                    aria-label="Table of contents"
+                    title="Table of contents"
+                    className="shrink-0 text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+                  >
+                    <List className="h-5 w-5" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -916,7 +954,302 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
           />
         )}
       </div>
+
+      {/* Left TOC drawer */}
+      {isTocOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50"
+            aria-hidden
+            onClick={() => setIsTocOpen(false)}
+          />
+          <aside
+            className="fixed left-0 bottom-0 z-50 w-72 sm:w-80 bg-background text-foreground border-r border-border shadow-lg flex flex-col animate-in slide-in-from-left duration-200"
+            style={{ top: "calc(env(safe-area-inset-top, 0px) + 3.5rem)" }}
+            role="dialog"
+            aria-label="Table of contents"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+              <h2 className="font-semibold text-sm">Table of contents</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsTocOpen(false)}
+                aria-label="Close"
+                className="h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex border-b border-border shrink-0">
+              <button
+                type="button"
+                onClick={() => setTocDrawerMode("contents")}
+                className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  tocDrawerMode === "contents"
+                    ? "border-b-2 border-primary text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Contents
+              </button>
+              <button
+                type="button"
+                onClick={() => setTocDrawerMode("pages")}
+                className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  tocDrawerMode === "pages"
+                    ? "border-b-2 border-primary text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Pages
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {tocDrawerMode === "contents" ? (
+                pdfOutline && pdfOutline.length > 0 && pdfDoc ? (
+                  <div className="p-4">
+                    <PdfTocList
+                      items={pdfOutline}
+                      pdfDoc={pdfDoc}
+                      onSelectPage={(pageNum) => {
+                        goToPage(pageNum);
+                        setIsTocOpen(false);
+                      }}
+                      depth={0}
+                    />
+                  </div>
+                ) : (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    No table of contents in this document.
+                  </div>
+                )
+              ) : pdfDoc ? (
+                <div className="p-4">
+                  <PdfThumbnailList
+                    pdf={pdfDoc}
+                    currentPage={currentPage}
+                    onSelectPage={(pageNum) => {
+                      goToPage(pageNum);
+                      setIsTocOpen(false);
+                    }}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </aside>
+        </>
+      )}
     </div>
+  );
+}
+
+function PdfThumbnailList({
+  pdf,
+  currentPage,
+  onSelectPage,
+}: {
+  pdf: PDFDocumentProxy;
+  currentPage: number;
+  onSelectPage: (pageNum: number) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: pdf.numPages }, (_, idx) => (
+        <LazyPdfThumbnail
+          key={idx + 1}
+          pdf={pdf}
+          pageNumber={idx + 1}
+          isCurrentPage={currentPage === idx + 1}
+          onSelect={() => onSelectPage(idx + 1)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function LazyPdfThumbnail({
+  pdf,
+  pageNumber,
+  isCurrentPage,
+  onSelect,
+}: {
+  pdf: PDFDocumentProxy;
+  pageNumber: number;
+  isCurrentPage: boolean;
+  onSelect: () => void;
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [shouldRender, setShouldRender] = useState(pageNumber <= 5);
+
+  useEffect(() => {
+    if (shouldRender) return;
+    const el = hostRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setShouldRender(true);
+          obs.disconnect();
+        }
+      },
+      { root: null, rootMargin: "400px 0px", threshold: 0.01 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [shouldRender]);
+
+  return (
+    <div ref={hostRef}>
+      {shouldRender ? (
+        <PdfThumbnail pdf={pdf} pageNumber={pageNumber} isCurrentPage={isCurrentPage} onSelect={onSelect} />
+      ) : (
+        <div className="w-full rounded border border-border bg-muted/30" style={{ aspectRatio: "1 / 1.4142" }} />
+      )}
+    </div>
+  );
+}
+
+function PdfThumbnail({
+  pdf,
+  pageNumber,
+  isCurrentPage,
+  onSelect,
+}: {
+  pdf: PDFDocumentProxy;
+  pageNumber: number;
+  isCurrentPage: boolean;
+  onSelect: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let renderTask: { cancel?: () => void; promise: Promise<unknown> } | null = null;
+
+    const render = async () => {
+      const { PixelsPerInch } = await import("pdfjs-dist");
+      const page = await pdf.getPage(pageNumber);
+      if (cancelled || !canvasRef.current) return;
+
+      const viewport = page.getViewport({
+        scale: 0.25 * PixelsPerInch.PDF_TO_CSS_UNITS,
+      });
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      canvas.style.width = "100%";
+      canvas.style.height = "auto";
+      canvas.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
+
+      renderTask = page.render({
+        canvasContext: context,
+        viewport,
+        canvas,
+      });
+      await renderTask.promise;
+    };
+
+    render().catch(() => {});
+    return () => {
+      cancelled = true;
+      renderTask?.cancel?.();
+    };
+  }, [pdf, pageNumber]);
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`w-full mx-auto block text-left rounded border transition-colors hover:border-primary/50 hover:bg-accent/50 ${
+        isCurrentPage ? "border-primary ring-2 ring-primary/30 bg-accent/30" : "border-border"
+      }`}
+    >
+      <canvas ref={canvasRef} className="w-full h-auto block rounded-t" />
+      <div className="py-1 text-xs text-muted-foreground text-center">{pageNumber}</div>
+    </button>
+  );
+}
+
+function PdfTocList({
+  items,
+  pdfDoc,
+  onSelectPage,
+  depth,
+}: {
+  items: Array<{ title: string; dest?: unknown; items?: unknown[] }>;
+  pdfDoc: PDFDocumentProxy;
+  onSelectPage: (pageNum: number) => void;
+  depth: number;
+}) {
+  return (
+    <ul className="list-none space-y-0.5">
+      {items.map((item, idx) => {
+        const hasDest = item.dest != null;
+        const children = item.items;
+        return (
+          <li key={idx}>
+            {hasDest ? (
+              <button
+                type="button"
+                className="w-full text-left py-1.5 px-2 rounded-md text-foreground hover:bg-accent hover:text-accent-foreground text-sm transition-colors"
+                style={{ paddingLeft: 8 + depth * 12 }}
+                onClick={async () => {
+                  try {
+                    let pageNum: number | null = null;
+                    if (typeof item.dest === "string") {
+                      const destArray = await pdfDoc.getDestination(item.dest);
+                      if (destArray && Array.isArray(destArray) && destArray[0] != null) {
+                        const first = destArray[0];
+                        if (typeof first === "number") {
+                          pageNum = first + 1; // 0-based index to 1-based page
+                        } else if (typeof first === "object" && "num" in first) {
+                          const pageIndex = await pdfDoc.getPageIndex(first as { num: number; gen: number });
+                          pageNum = pageIndex >= 0 ? pageIndex + 1 : null;
+                        }
+                      }
+                    } else if (Array.isArray(item.dest) && item.dest[0] != null) {
+                      const first = item.dest[0];
+                      if (typeof first === "number") {
+                        pageNum = first + 1;
+                      } else if (typeof first === "object" && "num" in first) {
+                        const pageIndex = await pdfDoc.getPageIndex(first as { num: number; gen: number });
+                        pageNum = pageIndex >= 0 ? pageIndex + 1 : null;
+                      }
+                    }
+                    if (pageNum != null) {
+                      onSelectPage(pageNum);
+                    }
+                  } catch {
+                    // Ignore invalid destinations
+                  }
+                }}
+              >
+                {item.title || "(Untitled)"}
+              </button>
+            ) : (
+              <span
+                className="block py-1.5 px-2 text-sm text-muted-foreground"
+                style={{ paddingLeft: 8 + depth * 12 }}
+              >
+                {item.title || "(Untitled)"}
+              </span>
+            )}
+            {children && Array.isArray(children) && children.length > 0 && (
+              <PdfTocList
+                items={children as Array<{ title: string; dest?: unknown; items?: unknown[] }>}
+                pdfDoc={pdfDoc}
+                onSelectPage={onSelectPage}
+                depth={depth + 1}
+              />
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
