@@ -93,7 +93,7 @@ export function UploadBookForm({
   const formContent = (
     <form onSubmit={handleSubmit} className="space-y-4">
           {compact && uploadLimit && uploadLimit.booksUploadLimit < 999 && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground dark:text-foreground/80">
               {uploadLimit.booksUploadedThisWeek}/{uploadLimit.booksUploadLimit} books this week.
               {limitReached && (
                 <> <Link href="/?upgrade=1" className="text-primary hover:underline">Upgrade</Link> for unlimited.</>
@@ -101,7 +101,7 @@ export function UploadBookForm({
             </p>
           )}
           <div className="space-y-2">
-            <label htmlFor="book-file" className="text-sm font-medium">
+            <label htmlFor="book-file" className="text-sm font-medium text-foreground">
               Select EPUB or PDF File
             </label>
             <Input
@@ -115,10 +115,10 @@ export function UploadBookForm({
                 setError(null);
               }}
               disabled={uploading}
-              className="cursor-pointer file:cursor-pointer"
+              className="cursor-pointer file:cursor-pointer file:text-foreground"
             />
             {file && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground dark:text-foreground/80">
                 Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
               </p>
             )}
