@@ -841,7 +841,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 justify-self-end">
-                  <ThemeSwitcher />
                   {initialBookmarks !== undefined && (
                     <Button
                       variant="ghost"
