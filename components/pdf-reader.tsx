@@ -120,7 +120,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   // This avoids per-page transforms that can cause "chopped" edges and makes scroll work naturally.
   // On mobile, allow more zoom-out so pages load with visible left/right margins.
   const MIN_RENDER_SCALE_DESKTOP = 0.7;
-  const MIN_RENDER_SCALE_MOBILE = 0.95;
+  const MIN_RENDER_SCALE_MOBILE = 1;
   const MIN_RENDER_SCALE = isMobile ? MIN_RENDER_SCALE_MOBILE : MIN_RENDER_SCALE_DESKTOP;
   const MAX_RENDER_SCALE = 4;
   const [renderScale, setRenderScale] = useState(1);
@@ -305,7 +305,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     goToPage(parsed);
   };
 
-  const ZOOM_STEP = 0.25;
+  const ZOOM_STEP = 0.1;
   const zoomBy = (delta: number) => {
     const scroller = scrollRef.current;
     const nextScale = clamp(renderScale + delta, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
@@ -338,19 +338,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
       setRenderScale(MIN_RENDER_SCALE_MOBILE);
     }
   }, [isMobile, pdfDoc]);
-
-  useEffect(() => {
-    if (!isMobile) return;
-    if (renderScale > MIN_RENDER_SCALE_MOBILE + 0.001) return;
-    const scroller = scrollRef.current;
-    if (!scroller) return;
-
-    // At "zoomed all the way out", keep horizontal position centered so left/right margins match.
-    requestAnimationFrame(() => {
-      const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-      scroller.scrollLeft = maxScrollLeft > 0 ? maxScrollLeft / 2 : 0;
-    });
-  }, [isMobile, renderScale, MIN_RENDER_SCALE_MOBILE]);
 
   // iOS safe-area support is surprisingly inconsistent across Safari vs in-app webviews.
   // Avoid CSS `max()` here: if unsupported, the whole value becomes invalid and `top` falls back,
@@ -1135,10 +1122,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               tapRef.current = null;
             }}
           >
-            <div className="flex justify-center min-w-full px-3">
+            <div className="flex justify-center w-full">
               <div
                 ref={viewerRef}
-                className="pdfViewer min-w-max max-w-4xl max-w-full py-6 space-y-6"
+                className={`pdfViewer py-6 space-y-6 ${isMobile ? "w-full min-w-0 max-w-none" : "min-w-max max-w-4xl max-w-full"}`}
                 style={
                   gesture.active
                     ? {
@@ -1157,6 +1144,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     pageNumber={idx + 1}
                     scale={renderScale}
                     scrollContainerRef={scrollRef}
+                  isMobile={isMobile}
                   />
                 ))}
               </div>
@@ -1474,6 +1462,8 @@ interface PdfPageProps {
   pdf: PDFDocumentProxy;
   pageNumber: number;
   scale?: number;
+  scrollContainerRef?: RefObject<HTMLDivElement | null>;
+  isMobile?: boolean;
 }
 
 function LazyPdfPage({
@@ -1481,7 +1471,8 @@ function LazyPdfPage({
   pageNumber,
   scale = 1,
   scrollContainerRef,
-}: PdfPageProps & { scrollContainerRef?: RefObject<HTMLDivElement | null> }) {
+  isMobile,
+}: PdfPageProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
 
@@ -1509,10 +1500,16 @@ function LazyPdfPage({
   return (
     <div ref={hostRef}>
       {shouldRender ? (
-        <PdfPage pdf={pdf} pageNumber={pageNumber} scale={scale} />
+        <PdfPage
+          pdf={pdf}
+          pageNumber={pageNumber}
+          scale={scale}
+          scrollContainerRef={scrollContainerRef}
+          isMobile={isMobile}
+        />
       ) : (
         <div className="w-full flex justify-center">
-          <div className="page relative shadow-sm border bg-white w-full max-w-4xl">
+          <div className={`page relative shadow-sm border bg-white w-full ${isMobile ? "" : "max-w-4xl"}`}>
             <div className="w-full" style={{ aspectRatio: "1 / 1.4142" }} />
           </div>
         </div>
@@ -1521,7 +1518,13 @@ function LazyPdfPage({
   );
 }
 
-function PdfPage({ pdf, pageNumber, scale = 1 }: PdfPageProps) {
+function PdfPage({
+  pdf,
+  pageNumber,
+  scale = 1,
+  scrollContainerRef,
+  isMobile,
+}: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerHostRef = useRef<HTMLDivElement | null>(null);
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
@@ -1547,7 +1550,12 @@ function PdfPage({ pdf, pageNumber, scale = 1 }: PdfPageProps) {
         return;
       }
 
-      const rawWidth = pageContainerRef.current.parentElement?.clientWidth ?? 0;
+      const MOBILE_SIDE_MARGIN_PX = 16;
+      const scrollViewportWidth = scrollContainerRef?.current?.clientWidth ?? 0;
+      const mobileTargetWidth = Math.max(0, scrollViewportWidth - MOBILE_SIDE_MARGIN_PX * 2);
+      const rawWidth = isMobile && mobileTargetWidth > 0
+        ? mobileTargetWidth
+        : (pageContainerRef.current.parentElement?.clientWidth ?? 0);
       const containerWidth = Math.min(rawWidth || 896, 896);
       const baseViewport = page.getViewport({ scale: PixelsPerInch.PDF_TO_CSS_UNITS });
       const fitFactor = containerWidth
@@ -1658,7 +1666,7 @@ function PdfPage({ pdf, pageNumber, scale = 1 }: PdfPageProps) {
       if (renderTask?.cancel) renderTask.cancel();
       textLayerBuilder?.cancel?.();
     };
-  }, [pdf, pageNumber, scale]);
+  }, [pdf, pageNumber, scale, isMobile, scrollContainerRef]);
 
   return (
     <div className="w-full flex justify-center">
