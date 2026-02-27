@@ -1646,7 +1646,7 @@ export function AIAgentPanel({
                   {!processingStatus.summariesReady && !processingStatus.vectorsReady ? (
                     "Book is still processing. AI context will be limited until summaries and vector search are ready."
                   ) : !processingStatus.summariesReady ? (
-                    "Summaries processing… Quick and Deep mode will have limited context until done."
+                    "Summaries processing… Responses will have limited context until done."
                   ) : (
                     "Vector search processing… Deep mode uses keyword search until semantic search is ready."
                   )}
