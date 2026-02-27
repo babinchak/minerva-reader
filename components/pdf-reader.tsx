@@ -308,7 +308,22 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
 
   const ZOOM_STEP = 0.25;
   const zoomBy = (delta: number) => {
-    setRenderScale((s) => clamp(s + delta, MIN_RENDER_SCALE, MAX_RENDER_SCALE));
+    const scroller = scrollRef.current;
+    const nextScale = clamp(renderScale + delta, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
+    const ratio = nextScale / renderScale;
+    if (scroller && ratio !== 1) {
+      const rect = scroller.getBoundingClientRect();
+      const anchorX = scroller.scrollLeft + rect.width / 2;
+      const anchorY = scroller.scrollTop + rect.height / 2;
+      pendingScrollAdjustRef.current = {
+        anchorX,
+        anchorY,
+        midOffsetX: rect.width / 2,
+        midOffsetY: rect.height / 2,
+        ratio,
+      };
+    }
+    setRenderScale(nextScale);
   };
 
   useEffect(() => {
@@ -1130,19 +1145,20 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               tapRef.current = null;
             }}
           >
-            <div
-              ref={viewerRef}
-              className="pdfViewer max-w-4xl mx-auto py-6 space-y-6"
-              style={
-                gesture.active
-                  ? {
-                      transform: `translate3d(${gesture.tx}px, ${gesture.ty}px, 0) scale(${gesture.scale})`,
-                      transformOrigin: "0 0",
-                      willChange: "transform",
-                    }
-                  : undefined
-              }
-              onDoubleClick={() => setRenderScale(1)}
+            <div className="flex justify-center min-w-full px-6">
+              <div
+                ref={viewerRef}
+                className="pdfViewer min-w-max max-w-4xl py-6 space-y-6"
+                style={
+                  gesture.active
+                    ? {
+                        transform: `translate3d(${gesture.tx}px, ${gesture.ty}px, 0) scale(${gesture.scale})`,
+                        transformOrigin: "0 0",
+                        willChange: "transform",
+                      }
+                    : undefined
+                }
+                onDoubleClick={() => setRenderScale(1)}
             >
               {Array.from({ length: pdfDoc.numPages }, (_, idx) => (
                 <LazyPdfPage
@@ -1153,6 +1169,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                   scrollContainerRef={scrollRef}
                 />
               ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1628,9 +1645,9 @@ function PdfPage({ pdf, pageNumber, scale = 1 }: PdfPageProps) {
         return;
       }
 
-      // Fit-to-width by default on mobile to avoid the "stuck zoomed-in" feeling.
-      const containerWidth =
-        pageContainerRef.current.parentElement?.clientWidth || pageContainerRef.current.clientWidth;
+      // Fit-to-width. Cap at 896px so sizing stays stable when the viewer grows on zoom.
+      const rawWidth = pageContainerRef.current.parentElement?.clientWidth ?? 0;
+      const containerWidth = Math.min(rawWidth || 896, 896);
       const baseViewport = page.getViewport({ scale: PixelsPerInch.PDF_TO_CSS_UNITS });
       const fitFactor = containerWidth
         ? clamp(containerWidth / baseViewport.width, 0.5, 2.5)
