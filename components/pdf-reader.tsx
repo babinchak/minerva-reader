@@ -120,7 +120,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   // This avoids per-page transforms that can cause "chopped" edges and makes scroll work naturally.
   // On mobile, allow more zoom-out so pages load with visible left/right margins.
   const MIN_RENDER_SCALE_DESKTOP = 0.7;
-  const MIN_RENDER_SCALE_MOBILE = 1;
+  const MIN_RENDER_SCALE_MOBILE = 0.9;
   const MIN_RENDER_SCALE = isMobile ? MIN_RENDER_SCALE_MOBILE : MIN_RENDER_SCALE_DESKTOP;
   const MAX_RENDER_SCALE = 4;
   const [renderScale, setRenderScale] = useState(1);
@@ -658,7 +658,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   }
 
   return (
-    <div className="w-full h-screen flex">
+    <div className={`w-full flex ${isMobile ? "h-svh" : "h-screen"}`}>
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="flex flex-col h-full relative">
           {/* Desktop: toolbar docks in flow. Mobile: always rendered as overlay, visibility toggled (no layout shift). */}
@@ -1556,7 +1556,14 @@ function LazyPdfPage({
     const obs = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        setShouldRender(Boolean(entry?.isIntersecting));
+        const isIntersecting = Boolean(entry?.isIntersecting);
+        if (isMobile) {
+          // iOS can rapidly toggle intersection near viewport boundaries while scrolling.
+          // Keep pages mounted once rendered to avoid height churn and scroll-position jitter.
+          if (isIntersecting) setShouldRender(true);
+          return;
+        }
+        setShouldRender(isIntersecting);
       },
       // Keep a wide buffer so nearby pages stay warm, but far pages unmount.
       { root, rootMargin: "1400px 0px", threshold: 0 },
@@ -1564,7 +1571,7 @@ function LazyPdfPage({
 
     obs.observe(el);
     return () => obs.disconnect();
-  }, [scrollContainerRef]);
+  }, [scrollContainerRef, isMobile]);
 
   return (
     <div ref={hostRef}>
