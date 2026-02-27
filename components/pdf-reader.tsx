@@ -62,6 +62,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const [bookmarks, setBookmarks] = useState<number[]>(initialBookmarks ?? []);
   const lastSyncedRef = useRef<string>(JSON.stringify([...(initialBookmarks ?? [])].sort((a, b) => a - b)));
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTocPageRef = useRef<number | null>(null);
 
   useEffect(() => {
     setBookmarks(initialBookmarks ?? []);
@@ -201,6 +202,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
 
   useEffect(() => {
     // Keep current page in sync as we scroll.
+    // Re-run when isTocOpen changes: on mobile, the reader (and scroll div) unmount when TOC opens,
+    // so we must re-attach the listener when returning to the reader.
     const scroller = scrollRef.current;
     if (!scroller) return;
     let raf: number | null = null;
@@ -219,7 +222,27 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
       scroller.removeEventListener("scroll", onScroll);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfDoc, isEditingPage]);
+  }, [pdfDoc, loading, isEditingPage, isTocOpen]);
+
+  // When closing mobile TOC, scroll to the page that was selected (reader was unmounted during selection).
+  useEffect(() => {
+    if (!isMobile || isTocOpen || !pendingTocPageRef.current) return;
+    const page = pendingTocPageRef.current;
+    pendingTocPageRef.current = null;
+    requestAnimationFrame(() => {
+      goToPage(page);
+    });
+  }, [isMobile, isTocOpen]);
+
+  const handleTocSelectPage = (pageNum: number) => {
+    if (isMobile && isTocOpen) {
+      pendingTocPageRef.current = pageNum;
+      setIsTocOpen(false);
+    } else {
+      goToPage(pageNum);
+      setIsTocOpen(false);
+    }
+  };
 
   useEffect(() => {
     if (!isSearchOpen) return;
@@ -532,10 +555,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                 <PdfTocList
                   items={pdfOutline}
                   pdfDoc={pdfDoc}
-                  onSelectPage={(pageNum) => {
-                    goToPage(pageNum);
-                    setIsTocOpen(false);
-                  }}
+                  onSelectPage={handleTocSelectPage}
                   depth={0}
                   mobile
                 />
@@ -555,10 +575,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                 <PdfThumbnailList
                   pdf={pdfDoc}
                   currentPage={currentPage}
-                  onSelectPage={(pageNum) => {
-                    goToPage(pageNum);
-                    setIsTocOpen(false);
-                  }}
+                  onSelectPage={handleTocSelectPage}
                   gridLayout="mobile"
                   pageFilter={bookmarks}
                 />
@@ -569,10 +586,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               <PdfThumbnailList
                 pdf={pdfDoc}
                 currentPage={currentPage}
-                onSelectPage={(pageNum) => {
-                  goToPage(pageNum);
-                  setIsTocOpen(false);
-                }}
+                onSelectPage={handleTocSelectPage}
                 gridLayout="mobile"
               />
             </div>
@@ -1232,10 +1246,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     <PdfTocList
                       items={pdfOutline}
                       pdfDoc={pdfDoc}
-                      onSelectPage={(pageNum) => {
-                        goToPage(pageNum);
-                        setIsTocOpen(false);
-                      }}
+                      onSelectPage={handleTocSelectPage}
                       depth={0}
                     />
                   </div>
@@ -1254,10 +1265,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     <PdfThumbnailList
                       pdf={pdfDoc}
                       currentPage={currentPage}
-                      onSelectPage={(pageNum) => {
-                        goToPage(pageNum);
-                        setIsTocOpen(false);
-                      }}
+                      onSelectPage={handleTocSelectPage}
                       pageFilter={bookmarks}
                     />
                   </div>
