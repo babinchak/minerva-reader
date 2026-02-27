@@ -388,6 +388,31 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     }
   }, [isMobile, pdfDoc]);
 
+  useEffect(() => {
+    if (!isMobile) return;
+    if (!pdfDoc) return;
+    if (renderScale > MIN_RENDER_SCALE_MOBILE + 0.001) return;
+
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+
+    requestAnimationFrame(() => {
+      const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      if (maxScrollLeft <= 1) {
+        // No real horizontal overflow at min zoom: prevent tiny subpixel drift.
+        scroller.scrollLeft = 0;
+        return;
+      }
+      // Keep fit-width view visually centered when a tiny overflow remains from rounding.
+      if (maxScrollLeft < 12) {
+        scroller.scrollLeft = maxScrollLeft / 2;
+      } else {
+        // For larger overflow, keep scroll position valid but don't force recenter while zoomed in.
+        scroller.scrollLeft = Math.min(Math.max(0, scroller.scrollLeft), maxScrollLeft);
+      }
+    });
+  }, [isMobile, pdfDoc, renderScale, MIN_RENDER_SCALE_MOBILE]);
+
   // iOS safe-area support is surprisingly inconsistent across Safari vs in-app webviews.
   // Avoid CSS `max()` here: if unsupported, the whole value becomes invalid and `top` falls back,
   // which can put the bar under the notch. `env(..., 0px)` is widely supported and safe.
@@ -1194,7 +1219,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             <div className="flex justify-center w-full">
               <div
                 ref={viewerRef}
-                className={`pdfViewer py-6 space-y-6 ${isMobile ? "w-full min-w-0 max-w-none" : "min-w-max max-w-4xl max-w-full"}`}
+                className={`pdfViewer py-6 space-y-3 ${isMobile ? "w-full min-w-0 max-w-none" : "min-w-max max-w-4xl max-w-full"}`}
                 style={
                   gesture.active
                     ? {
