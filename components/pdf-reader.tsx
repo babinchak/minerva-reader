@@ -149,17 +149,27 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const lastCombinedScaleRef = useRef<number>(1);
   const pendingScrollAdjustRef = useRef<
     | {
+        mode: "ratio";
         anchorX: number;
         anchorY: number;
         midOffsetX: number;
         midOffsetY: number;
         ratio: number;
       }
+    | {
+        mode: "page-anchor";
+        pageNumber: number;
+        pageOffsetXRatio: number;
+        pageOffsetYRatio: number;
+        midOffsetX: number;
+        midOffsetY: number;
+      }
     | null
   >(null);
   const tapRef = useRef<{ pointerId: number; x: number; y: number; t: number; moved: boolean } | null>(
     null,
   );
+  const itemTextsCacheRef = useRef<Map<number, string[]>>(new Map());
 
   useEffect(() => {
     // Default to an "immersive" UI on mobile: tap center to reveal chrome.
@@ -307,14 +317,53 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
 
   const ZOOM_STEP = 0.1;
   const zoomBy = (delta: number) => {
+    if (delta === 0) return;
     const scroller = scrollRef.current;
+    const viewer = viewerRef.current;
     const nextScale = clamp(renderScale + delta, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
-    const ratio = nextScale / renderScale;
-    if (scroller && ratio !== 1) {
+    if (nextScale === renderScale) return;
+
+    if (scroller && viewer) {
       const rect = scroller.getBoundingClientRect();
+      const midOffsetX = rect.width / 2;
+      const midOffsetY = rect.height / 2;
+      const pages = Array.from(viewer.querySelectorAll<HTMLElement>(".page"));
+      const pageNumber = getCurrentPageNumberFromViewport() ?? currentPage;
+      const pageEl = pages[pageNumber - 1];
+      if (pageEl) {
+        const pageRect = pageEl.getBoundingClientRect();
+        const viewportMidX = rect.left + midOffsetX;
+        const viewportMidY = rect.top + midOffsetY;
+        const pageOffsetXRatio = clamp((viewportMidX - pageRect.left) / Math.max(1, pageRect.width), 0, 1);
+        const pageOffsetYRatio = clamp((viewportMidY - pageRect.top) / Math.max(1, pageRect.height), 0, 1);
+        pendingScrollAdjustRef.current = {
+          mode: "page-anchor",
+          pageNumber,
+          pageOffsetXRatio,
+          pageOffsetYRatio,
+          midOffsetX,
+          midOffsetY,
+        };
+      } else {
+        const ratio = nextScale / renderScale;
+        const anchorX = scroller.scrollLeft + midOffsetX;
+        const anchorY = scroller.scrollTop + midOffsetY;
+        pendingScrollAdjustRef.current = {
+          mode: "ratio",
+          anchorX,
+          anchorY,
+          midOffsetX,
+          midOffsetY,
+          ratio,
+        };
+      }
+    } else if (scroller) {
+      const rect = scroller.getBoundingClientRect();
+      const ratio = nextScale / renderScale;
       const anchorX = scroller.scrollLeft + rect.width / 2;
       const anchorY = scroller.scrollTop + rect.height / 2;
       pendingScrollAdjustRef.current = {
+        mode: "ratio",
         anchorX,
         anchorY,
         midOffsetX: rect.width / 2,
@@ -448,9 +497,28 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const scroller = scrollRef.current;
+        const viewer = viewerRef.current;
         if (!scroller) return;
-        scroller.scrollLeft = pending.anchorX * pending.ratio - pending.midOffsetX;
-        scroller.scrollTop = pending.anchorY * pending.ratio - pending.midOffsetY;
+        if (pending.mode === "page-anchor" && viewer) {
+          const pages = Array.from(viewer.querySelectorAll<HTMLElement>(".page"));
+          const pageEl = pages[pending.pageNumber - 1];
+          if (!pageEl) return;
+
+          const scrollerRect = scroller.getBoundingClientRect();
+          const pageRect = pageEl.getBoundingClientRect();
+          const targetOffsetX = pageRect.width * pending.pageOffsetXRatio;
+          const targetOffsetY = pageRect.height * pending.pageOffsetYRatio;
+          scroller.scrollLeft =
+            scroller.scrollLeft + (pageRect.left - scrollerRect.left) + targetOffsetX - pending.midOffsetX;
+          scroller.scrollTop =
+            scroller.scrollTop + (pageRect.top - scrollerRect.top) + targetOffsetY - pending.midOffsetY;
+          return;
+        }
+
+        if (pending.mode === "ratio") {
+          scroller.scrollLeft = pending.anchorX * pending.ratio - pending.midOffsetX;
+          scroller.scrollTop = pending.anchorY * pending.ratio - pending.midOffsetY;
+        }
       });
     });
   }, [renderScale]);
@@ -1083,6 +1151,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                   const ratio = nextRenderScale / start.startRenderScale;
 
                   pendingScrollAdjustRef.current = {
+                    mode: "ratio",
                     anchorX: start.anchorX,
                     anchorY: start.anchorY,
                     midOffsetX: start.lastMidOffsetX,
@@ -1144,7 +1213,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     pageNumber={idx + 1}
                     scale={renderScale}
                     scrollContainerRef={scrollRef}
-                  isMobile={isMobile}
+                    isMobile={isMobile}
+                    itemTextsCacheRef={itemTextsCacheRef}
                   />
                 ))}
               </div>
@@ -1464,6 +1534,7 @@ interface PdfPageProps {
   scale?: number;
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
   isMobile?: boolean;
+  itemTextsCacheRef?: RefObject<Map<number, string[]>>;
 }
 
 function LazyPdfPage({
@@ -1472,12 +1543,12 @@ function LazyPdfPage({
   scale = 1,
   scrollContainerRef,
   isMobile,
+  itemTextsCacheRef,
 }: PdfPageProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
 
   useEffect(() => {
-    if (shouldRender) return;
     const el = hostRef.current;
     const root = scrollContainerRef?.current ?? null;
     if (!el) return;
@@ -1485,17 +1556,15 @@ function LazyPdfPage({
     const obs = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        if (entry?.isIntersecting) {
-          setShouldRender(true);
-          obs.disconnect();
-        }
+        setShouldRender(Boolean(entry?.isIntersecting));
       },
-      { root, rootMargin: "1200px 0px", threshold: 0.01 },
+      // Keep a wide buffer so nearby pages stay warm, but far pages unmount.
+      { root, rootMargin: "1400px 0px", threshold: 0 },
     );
 
     obs.observe(el);
     return () => obs.disconnect();
-  }, [shouldRender, scrollContainerRef]);
+  }, [scrollContainerRef]);
 
   return (
     <div ref={hostRef}>
@@ -1506,6 +1575,7 @@ function LazyPdfPage({
           scale={scale}
           scrollContainerRef={scrollContainerRef}
           isMobile={isMobile}
+          itemTextsCacheRef={itemTextsCacheRef}
         />
       ) : (
         <div className="w-full flex justify-center">
@@ -1524,6 +1594,7 @@ function PdfPage({
   scale = 1,
   scrollContainerRef,
   isMobile,
+  itemTextsCacheRef,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerHostRef = useRef<HTMLDivElement | null>(null);
@@ -1540,7 +1611,12 @@ function PdfPage({
     const render = async () => {
       const { PixelsPerInch, setLayerDimensions } = await import("pdfjs-dist");
       const page = await pdf.getPage(pageNumber);
-      const textContent = await page.getTextContent();
+      let itemTexts = itemTextsCacheRef?.current?.get(pageNumber);
+      if (!itemTexts) {
+        const textContent = await page.getTextContent();
+        itemTexts = (textContent.items as Array<{ str?: string }>).map((item) => item?.str ?? "");
+        itemTextsCacheRef?.current?.set(pageNumber, itemTexts);
+      }
       if (
         cancelled ||
         !canvasRef.current ||
@@ -1612,7 +1688,6 @@ function PdfPage({
             current = walker.nextNode();
           }
 
-          const itemTexts = (textContent.items as Array<{ str?: string }>).map((item) => item?.str ?? "");
           let itemIndex = 0;
           let itemCharOffset = 0;
 
@@ -1666,7 +1741,7 @@ function PdfPage({
       if (renderTask?.cancel) renderTask.cancel();
       textLayerBuilder?.cancel?.();
     };
-  }, [pdf, pageNumber, scale, isMobile, scrollContainerRef]);
+  }, [pdf, pageNumber, scale, isMobile, scrollContainerRef, itemTextsCacheRef]);
 
   return (
     <div className="w-full flex justify-center">
