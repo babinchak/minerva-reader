@@ -276,7 +276,9 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
 
   const requestAiRun = (action: "page" | "selection") => {
     aiNonceRef.current += 1;
-    setAiRequest({ nonce: aiNonceRef.current, action });
+    const payload = { nonce: aiNonceRef.current, action };
+    setAiRequest(payload);
+    setIsAiPaneOpen(true); // Open pane immediately so we don't rely on onOpenChange (which can unmount panel)
   };
 
   const goToPage = (pageNumber: number) => {
@@ -1168,7 +1170,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             mobileDrawerMinMode={selectionExists ? "quick" : "closed"}
             requestRun={aiRequest}
             requestOpen={openAiRequest}
-            onOpenChange={setIsAiPaneOpen}
+            onOpenChange={(open) => setIsAiPaneOpen(open)}
           />
         )}
       </div>

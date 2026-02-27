@@ -1160,7 +1160,7 @@ export function AIAgentPanel({
         undefined
       );
     } catch (error) {
-      console.error("Error calling chat API:", error);
+      console.error("Chat API error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
       const isCreditsError =
@@ -1189,6 +1189,7 @@ export function AIAgentPanel({
   };
 
   const handleExplain = useCallback(async (action: "page" | "selection") => {
+    let msgCount = 0;
     if (!bookId || isLoading) return;
     onActionStart?.();
 
@@ -1209,9 +1210,7 @@ export function AIAgentPanel({
     const selectionExists = Boolean(currentSelectedText && currentSelectedText.trim().length > 0);
     const isExplainPage = action === "page";
     const isExplainSelectionNow = action === "selection";
-    if (isExplainSelectionNow && !selectionExists) {
-      return;
-    }
+    if (isExplainSelectionNow && !selectionExists) return;
 
     // If action says "page", but we are in an EPUB, we do a best-effort visible-context extraction.
     // For PDF we use the existing page-context logic.
@@ -1398,7 +1397,6 @@ export function AIAgentPanel({
 
     try {
       let chatId: string | null = null;
-      let msgCount = 0;
       let historyForAPI: { role: "user" | "assistant"; content: string }[] = [];
 
       if (userId) {
@@ -1475,7 +1473,7 @@ export function AIAgentPanel({
         undefined
       );
     } catch (error) {
-      console.error("Error calling chat API:", error);
+      console.error("Chat API error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
       const isCreditsError =
@@ -1514,9 +1512,7 @@ export function AIAgentPanel({
     if (!autoRun) return;
     if (autoRun.nonce === lastAutoRunNonceRef.current) return;
     lastAutoRunNonceRef.current = autoRun.nonce;
-    handleExplain(autoRun.action).catch(() => {
-      // best-effort
-    });
+    handleExplain(autoRun.action).catch(console.error);
   }, [autoRun, handleExplain]);
 
   return (

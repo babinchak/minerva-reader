@@ -1,7 +1,7 @@
 "use client";
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIBottomDrawer } from "@/components/ai-bottom-drawer";
 import { AIAgentPanel } from "@/components/ai-agent-pane";
 import { useIsMobile } from "@/lib/use-media-query";
@@ -66,10 +66,7 @@ function DesktopAIAssistant({
   onOpenChange,
 }: AIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    onOpenChange?.(isOpen);
-  }, [isOpen, onOpenChange]);
+  const openedViaRequestRunRef = useRef(false);
   const [autoRun, setAutoRun] = useState<{ nonce: number; action: "page" | "selection" } | null>(
     null
   );
@@ -77,18 +74,36 @@ function DesktopAIAssistant({
   const lastExternalNonceRef = useRef<number | null>(null);
   const lastOpenNonceRef = useRef<number | null>(null);
 
-  const openAndRun = (action: "page" | "selection") => {
+  const openAndRun = useCallback((action: "page" | "selection", viaRequestRun: boolean) => {
+    if (viaRequestRun) openedViaRequestRunRef.current = true; // Set BEFORE setState so isOpen effect sees it
+    const nextNonce = nonceRef.current + 1;
+    nonceRef.current = nextNonce;
     setIsOpen(true);
-    nonceRef.current += 1;
-    setAutoRun({ nonce: nonceRef.current, action });
-  };
+    setAutoRun({ nonce: nextNonce, action });
+  }, []);
 
+  // IMPORTANT: requestRun effect must run BEFORE isOpen effect so openedViaRequestRunRef is set
+  // before we check it. Effects run in declaration order.
   useEffect(() => {
     if (!requestRun) return;
     if (requestRun.nonce === lastExternalNonceRef.current) return;
     lastExternalNonceRef.current = requestRun.nonce;
-    openAndRun(requestRun.action);
-  }, [requestRun]);
+    openedViaRequestRunRef.current = true;
+    openAndRun(requestRun.action, true);
+  }, [requestRun, openAndRun]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      openedViaRequestRunRef.current = false;
+      onOpenChange?.(false);
+      return;
+    }
+    if (openedViaRequestRunRef.current) {
+      return; // Defer onOpenChange until onActionComplete - avoids parent re-render that unmounts panel
+    }
+    const t = setTimeout(() => onOpenChange?.(isOpen), 0);
+    return () => clearTimeout(t);
+  }, [isOpen, onOpenChange]);
 
   useEffect(() => {
     if (!requestOpen) return;
@@ -120,6 +135,13 @@ function DesktopAIAssistant({
     resizingRef.current = null;
   };
 
+  const handleActionComplete = useCallback(() => {
+    if (openedViaRequestRunRef.current) {
+      openedViaRequestRunRef.current = false;
+      onOpenChange?.(true);
+    }
+  }, [onOpenChange]);
+
   const panelProps = useMemo(
     () => ({
       selectedText,
@@ -132,18 +154,26 @@ function DesktopAIAssistant({
       hideInputUntilFirstResponse: true,
       includeSelectionContextOnSend: true,
       onClose: () => setIsOpen(false),
+      onActionComplete: handleActionComplete,
     }),
-    [autoRun, bookId, bookType, currentPage, pdfDocument, rawManifest, selectedText]
+    [autoRun, bookId, bookType, currentPage, pdfDocument, rawManifest, selectedText, handleActionComplete]
   );
 
   return (
     <>
       {/* EPUB uses the custom toolbar; no floating rail. PDF uses docked pane. */}
-
-      {isOpen && isPdf && (
+      {/* PDF: ALWAYS keep panel mounted when isOpen - use CSS to hide when closed.
+          Conditional render (isOpen && ...) causes unmount when onOpenChange triggers
+          parent re-render, losing messages mid-stream. */}
+      {isPdf && (
         <div
-          className="relative h-full border-l border-border bg-background shadow-lg flex flex-col"
-          style={{ width: `${dockWidth}px` }}
+          className="relative h-full border-l border-border bg-background shadow-lg flex flex-col transition-[width] duration-200 ease-out"
+          style={{
+            width: isOpen ? `${dockWidth}px` : 0,
+            minWidth: 0,
+            overflow: "hidden",
+            flexShrink: 0,
+          }}
         >
           <div
             className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
