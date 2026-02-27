@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,10 +116,9 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const openAiNonceRef = useRef(0);
   const [openAiRequest, setOpenAiRequest] = useState<{ nonce: number } | null>(null);
   const [isAiPaneOpen, setIsAiPaneOpen] = useState(false);
-
   // Global PDF zoom (applies to ALL pages by re-rendering at a larger viewport scale).
   // This avoids per-page transforms that can cause "chopped" edges and makes scroll work naturally.
-  // On mobile, keep the minimum zoom close to fit-to-width so pages don't feel "shrunk" with big gutters.
+  // On mobile, allow more zoom-out so pages load with visible left/right margins.
   const MIN_RENDER_SCALE_DESKTOP = 0.7;
   const MIN_RENDER_SCALE_MOBILE = 0.95;
   const MIN_RENDER_SCALE = isMobile ? MIN_RENDER_SCALE_MOBILE : MIN_RENDER_SCALE_DESKTOP;
@@ -332,6 +331,27 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     setRenderScale((s) => clamp(s, MIN_RENDER_SCALE, MAX_RENDER_SCALE));
   }, [MIN_RENDER_SCALE]);
 
+  // On mobile, start zoomed out to minimum (small left/right margins) when the PDF loads.
+  // Must run after the clamp effect so we don't get overwritten back to 1.
+  useEffect(() => {
+    if (isMobile && pdfDoc) {
+      setRenderScale(MIN_RENDER_SCALE_MOBILE);
+    }
+  }, [isMobile, pdfDoc]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    if (renderScale > MIN_RENDER_SCALE_MOBILE + 0.001) return;
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+
+    // At "zoomed all the way out", keep horizontal position centered so left/right margins match.
+    requestAnimationFrame(() => {
+      const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      scroller.scrollLeft = maxScrollLeft > 0 ? maxScrollLeft / 2 : 0;
+    });
+  }, [isMobile, renderScale, MIN_RENDER_SCALE_MOBILE]);
+
   // iOS safe-area support is surprisingly inconsistent across Safari vs in-app webviews.
   // Avoid CSS `max()` here: if unsupported, the whole value becomes invalid and `top` falls back,
   // which can put the bar under the notch. `env(..., 0px)` is widely supported and safe.
@@ -377,7 +397,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
       }
       if (cancelled) return;
 
-      const baseParams: Record<string, unknown> = { data, disableWorker: !canUseWorker };
+      const baseParams: Record<string, unknown> = {
+        data,
+        disableWorker: !canUseWorker,
+      };
 
       let pdf: PDFDocumentProxy;
       try {
@@ -412,39 +435,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     };
   }, [pdfUrl, bookId]);
 
-  // Scroll to initial page when PDF loads (pages may render async)
-  const initialPageScrolledRef = useRef(false);
-  useEffect(() => {
-    if (!pdfDoc || !initialPage || initialPage < 1 || initialPageScrolledRef.current) return;
-    let attempts = 0;
-    const maxAttempts = 10;
-    const tryScroll = () => {
-      attempts += 1;
-      const viewer = viewerRef.current;
-      const scroller = scrollRef.current;
-      if (!viewer || !scroller) {
-        if (attempts < maxAttempts) setTimeout(tryScroll, 50);
-        return;
-      }
-      const pages = Array.from(viewer.querySelectorAll<HTMLElement>(".page"));
-      if (pages.length === 0) {
-        if (attempts < maxAttempts) setTimeout(tryScroll, 50);
-        return;
-      }
-      initialPageScrolledRef.current = true;
-      const clamped = Math.max(1, Math.min(initialPage, pages.length));
-      const el = pages[clamped - 1];
-      const scrollerRect = scroller.getBoundingClientRect();
-      const pageRect = el.getBoundingClientRect();
-      const deltaY = pageRect.top - scrollerRect.top;
-      scroller.scrollTop = scroller.scrollTop + deltaY - 12;
-      setCurrentPage(clamped);
-      setPageInput(String(clamped));
-    };
-    const id = setTimeout(tryScroll, 50);
-    return () => clearTimeout(id);
-  }, [pdfDoc, initialPage]);
-
   useEffect(() => {
     // iOS Safari emits non-standard gesture events for pinch.
     // Prevent default so pinching the PDF doesn't trigger browser/OS gestures.
@@ -468,7 +458,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     if (!pending) return;
     pendingScrollAdjustRef.current = null;
 
-    // Wait for layout to react (pages will re-render at the new scale).
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const scroller = scrollRef.current;
@@ -998,8 +987,9 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               </div>
             </>
           )}
-          <div
-            className="flex-1 overflow-auto bg-background"
+          <div className="relative flex-1 min-h-0 bg-background">
+            <div
+            className="pdf-scroll-host absolute inset-0 overflow-auto bg-background"
             ref={scrollRef}
             onPointerDown={(e) => {
               if (!isMobile) return;
@@ -1145,10 +1135,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               tapRef.current = null;
             }}
           >
-            <div className="flex justify-center min-w-full px-6">
+            <div className="flex justify-center min-w-full px-3">
               <div
                 ref={viewerRef}
-                className="pdfViewer min-w-max max-w-4xl py-6 space-y-6"
+                className="pdfViewer min-w-max max-w-4xl max-w-full py-6 space-y-6"
                 style={
                   gesture.active
                     ? {
@@ -1159,17 +1149,18 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     : undefined
                 }
                 onDoubleClick={() => setRenderScale(1)}
-            >
-              {Array.from({ length: pdfDoc.numPages }, (_, idx) => (
-                <LazyPdfPage
-                  key={idx + 1}
-                  pdf={pdfDoc}
-                  pageNumber={idx + 1}
-                  scale={renderScale}
-                  scrollContainerRef={scrollRef}
-                />
-              ))}
+              >
+                {Array.from({ length: pdfDoc.numPages }, (_, idx) => (
+                  <LazyPdfPage
+                    key={idx + 1}
+                    pdf={pdfDoc}
+                    pageNumber={idx + 1}
+                    scale={renderScale}
+                    scrollContainerRef={scrollRef}
+                  />
+                ))}
               </div>
+            </div>
             </div>
           </div>
         </div>
@@ -1479,6 +1470,208 @@ function PdfThumbnail({
   );
 }
 
+interface PdfPageProps {
+  pdf: PDFDocumentProxy;
+  pageNumber: number;
+  scale?: number;
+}
+
+function LazyPdfPage({
+  pdf,
+  pageNumber,
+  scale = 1,
+  scrollContainerRef,
+}: PdfPageProps & { scrollContainerRef?: RefObject<HTMLDivElement | null> }) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
+
+  useEffect(() => {
+    if (shouldRender) return;
+    const el = hostRef.current;
+    const root = scrollContainerRef?.current ?? null;
+    if (!el) return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting) {
+          setShouldRender(true);
+          obs.disconnect();
+        }
+      },
+      { root, rootMargin: "1200px 0px", threshold: 0.01 },
+    );
+
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [shouldRender, scrollContainerRef]);
+
+  return (
+    <div ref={hostRef}>
+      {shouldRender ? (
+        <PdfPage pdf={pdf} pageNumber={pageNumber} scale={scale} />
+      ) : (
+        <div className="w-full flex justify-center">
+          <div className="page relative shadow-sm border bg-white w-full max-w-4xl">
+            <div className="w-full" style={{ aspectRatio: "1 / 1.4142" }} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PdfPage({ pdf, pageNumber, scale = 1 }: PdfPageProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const textLayerHostRef = useRef<HTMLDivElement | null>(null);
+  const pageContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let renderTask: { cancel?: () => void; promise: Promise<unknown> } | null = null;
+    let textLayerBuilder: {
+      cancel?: () => void;
+      render?: (opts: { viewport: unknown }) => Promise<unknown>;
+    } | null = null;
+
+    const render = async () => {
+      const { PixelsPerInch, setLayerDimensions } = await import("pdfjs-dist");
+      const page = await pdf.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      if (
+        cancelled ||
+        !canvasRef.current ||
+        !textLayerHostRef.current ||
+        !pageContainerRef.current
+      ) {
+        return;
+      }
+
+      const rawWidth = pageContainerRef.current.parentElement?.clientWidth ?? 0;
+      const containerWidth = Math.min(rawWidth || 896, 896);
+      const baseViewport = page.getViewport({ scale: PixelsPerInch.PDF_TO_CSS_UNITS });
+      const fitFactor = containerWidth
+        ? clamp(containerWidth / baseViewport.width, 0.5, 2.5)
+        : 1;
+
+      const viewport = page.getViewport({
+        scale: scale * fitFactor * PixelsPerInch.PDF_TO_CSS_UNITS,
+      });
+      const outputScale = window.devicePixelRatio || 1;
+
+      pageContainerRef.current.style.setProperty("--scale-factor", viewport.scale.toString());
+      setLayerDimensions(pageContainerRef.current, viewport);
+
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      canvas.width = Math.floor(viewport.width * outputScale);
+      canvas.height = Math.floor(viewport.height * outputScale);
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
+
+      const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
+      renderTask = page.render({ canvas, canvasContext: context, viewport, transform });
+      await renderTask.promise;
+
+      const { TextLayerBuilder } = await import("pdfjs-dist/web/pdf_viewer.mjs");
+      if (cancelled) return;
+
+      const textLayerHost = textLayerHostRef.current;
+      textLayerHost.innerHTML = "";
+      textLayerHost.style.setProperty("--scale-factor", viewport.scale.toString());
+      setLayerDimensions(textLayerHost, viewport);
+
+      textLayerBuilder = new TextLayerBuilder({
+        pdfPage: page,
+        onAppend: (div: HTMLDivElement) => {
+          // Only index leaf text spans (exclude structural wrapper spans) so
+          // position itemIndex stays aligned with actual text runs.
+          const walker = document.createTreeWalker(div, NodeFilter.SHOW_ELEMENT, {
+            acceptNode: (node) => {
+              if (!(node instanceof HTMLSpanElement)) return NodeFilter.FILTER_SKIP;
+              if (node.querySelector("span")) return NodeFilter.FILTER_SKIP;
+              if ((node.textContent ?? "").length === 0) return NodeFilter.FILTER_SKIP;
+              return NodeFilter.FILTER_ACCEPT;
+            },
+          });
+
+          const textNodes: HTMLSpanElement[] = [];
+          let current = walker.nextNode();
+          while (current) {
+            textNodes.push(current as HTMLSpanElement);
+            current = walker.nextNode();
+          }
+
+          const itemTexts = (textContent.items as Array<{ str?: string }>).map((item) => item?.str ?? "");
+          let itemIndex = 0;
+          let itemCharOffset = 0;
+
+          const advanceToNextNonEmptyItem = () => {
+            while (itemIndex < itemTexts.length && (itemTexts[itemIndex]?.length ?? 0) === 0) {
+              itemIndex += 1;
+              itemCharOffset = 0;
+            }
+          };
+
+          advanceToNextNonEmptyItem();
+
+          textNodes.forEach((node) => {
+            const safeIndex = Math.min(itemIndex, Math.max(0, itemTexts.length - 1));
+            node.dataset.itemIndex = safeIndex.toString();
+            node.dataset.pageNumber = pageNumber.toString();
+
+            // Consume this span's visible text against textContent item strings so
+            // subsequent spans keep the correct underlying item index.
+            let remaining = (node.textContent ?? "").length;
+            while (remaining > 0 && itemIndex < itemTexts.length) {
+              const currentItem = itemTexts[itemIndex] ?? "";
+              const remainingInItem = Math.max(0, currentItem.length - itemCharOffset);
+              if (remainingInItem === 0) {
+                itemIndex += 1;
+                itemCharOffset = 0;
+                advanceToNextNonEmptyItem();
+                continue;
+              }
+              const take = Math.min(remaining, remainingInItem);
+              remaining -= take;
+              itemCharOffset += take;
+              if (itemCharOffset >= currentItem.length) {
+                itemIndex += 1;
+                itemCharOffset = 0;
+                advanceToNextNonEmptyItem();
+              }
+            }
+          });
+          textLayerHost.appendChild(div);
+        },
+      }) as unknown as { cancel?: () => void; render?: (opts: { viewport: unknown }) => Promise<unknown> };
+
+      await textLayerBuilder?.render?.({ viewport });
+    };
+
+    render().catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (renderTask?.cancel) renderTask.cancel();
+      textLayerBuilder?.cancel?.();
+    };
+  }, [pdf, pageNumber, scale]);
+
+  return (
+    <div className="w-full flex justify-center">
+      <div ref={pageContainerRef} className="page relative shadow-sm border bg-white">
+        <div className="canvasWrapper">
+          <canvas ref={canvasRef} className="pointer-events-none block" />
+        </div>
+        <div ref={textLayerHostRef} className="absolute inset-0" />
+      </div>
+    </div>
+  );
+}
+
 function PdfTocList({
   items,
   pdfDoc,
@@ -1562,224 +1755,6 @@ function PdfTocList({
   );
 }
 
-interface PdfPageProps {
-  pdf: PDFDocumentProxy;
-  pageNumber: number;
-  scale?: number;
-}
-
-function LazyPdfPage({
-  pdf,
-  pageNumber,
-  scale = 1,
-  scrollContainerRef,
-}: PdfPageProps & { scrollContainerRef?: React.RefObject<HTMLDivElement | null> }) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
-  const [placeholderSize, setPlaceholderSize] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
-
-  useEffect(() => {
-    if (shouldRender) return;
-    const el = hostRef.current;
-    const root = scrollContainerRef?.current ?? null;
-    if (!el) return;
-
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry?.isIntersecting) {
-          setShouldRender(true);
-          obs.disconnect();
-        }
-      },
-      { root, rootMargin: "1200px 0px", threshold: 0.01 },
-    );
-
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [shouldRender, scrollContainerRef]);
-
-  // Compute placeholder size to match PdfPage's rendered dimensions (same formula).
-  // This ensures the placeholder matches the rendered page horizontally and respects zoom.
-  useEffect(() => {
-    if (shouldRender) return;
-    const el = containerRef.current;
-    if (!el) return;
-
-    let cancelled = false;
-
-    const update = async () => {
-      try {
-        const { PixelsPerInch } = await import("pdfjs-dist");
-        const page = await pdf.getPage(pageNumber);
-        if (cancelled) return;
-
-        const rawWidth = el.clientWidth ?? 0;
-        const containerWidth = Math.min(rawWidth || 896, 896);
-        const baseViewport = page.getViewport({
-          scale: PixelsPerInch.PDF_TO_CSS_UNITS,
-        });
-        const fitFactor = containerWidth
-          ? clamp(containerWidth / baseViewport.width, 0.5, 2.5)
-          : 1;
-
-        const viewport = page.getViewport({
-          scale: scale * fitFactor * PixelsPerInch.PDF_TO_CSS_UNITS,
-        });
-
-        if (cancelled) return;
-        setPlaceholderSize({ width: viewport.width, height: viewport.height });
-      } catch {
-        // Fallback to A4 aspect ratio if page fetch fails
-        if (cancelled) return;
-        const w = Math.min(el.clientWidth || 896, 896);
-        setPlaceholderSize({ width: w, height: w * 1.4142 });
-      }
-    };
-
-    update();
-    const ro = new ResizeObserver(() => update());
-    ro.observe(el);
-
-    return () => {
-      cancelled = true;
-      ro.disconnect();
-    };
-  }, [pdf, pageNumber, scale, shouldRender]);
-
-  return (
-    <div ref={hostRef}>
-      {shouldRender ? (
-        <PdfPage pdf={pdf} pageNumber={pageNumber} scale={scale} />
-      ) : (
-        <div ref={containerRef} className="w-full flex justify-center">
-          <div
-            className={`page relative shadow-sm border bg-white ${
-              !placeholderSize ? "w-full max-w-4xl" : ""
-            }`}
-            style={
-              placeholderSize
-                ? { width: placeholderSize.width, height: placeholderSize.height }
-                : undefined
-            }
-          >
-            {!placeholderSize && (
-              <div className="w-full" style={{ aspectRatio: "1 / 1.4142" }} />
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
-}
-
-function PdfPage({ pdf, pageNumber, scale = 1 }: PdfPageProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const textLayerHostRef = useRef<HTMLDivElement | null>(null);
-  const pageContainerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    let renderTask: { cancel?: () => void; promise: Promise<unknown> } | null =
-      null;
-    // pdfjs' TextLayerBuilder types vary across versions; keep this loose.
-    // Cast at the assignment site to avoid TypeScript variance issues across versions.
-    let textLayerBuilder: {
-      cancel?: () => void;
-      render?: (opts: { viewport: unknown }) => Promise<unknown>;
-    } | null = null;
-
-    const render = async () => {
-      const { PixelsPerInch, setLayerDimensions } = await import("pdfjs-dist");
-      const page = await pdf.getPage(pageNumber);
-      if (
-        cancelled ||
-        !canvasRef.current ||
-        !textLayerHostRef.current ||
-        !pageContainerRef.current
-      ) {
-        return;
-      }
-
-      // Fit-to-width. Cap at 896px so sizing stays stable when the viewer grows on zoom.
-      const rawWidth = pageContainerRef.current.parentElement?.clientWidth ?? 0;
-      const containerWidth = Math.min(rawWidth || 896, 896);
-      const baseViewport = page.getViewport({ scale: PixelsPerInch.PDF_TO_CSS_UNITS });
-      const fitFactor = containerWidth
-        ? clamp(containerWidth / baseViewport.width, 0.5, 2.5)
-        : 1;
-
-      const viewport = page.getViewport({
-        scale: scale * fitFactor * PixelsPerInch.PDF_TO_CSS_UNITS,
-      });
-      const outputScale = window.devicePixelRatio || 1;
-
-      pageContainerRef.current.style.setProperty("--scale-factor", viewport.scale.toString());
-      setLayerDimensions(pageContainerRef.current, viewport);
-
-      const canvas = canvasRef.current;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-
-      canvas.width = Math.floor(viewport.width * outputScale);
-      canvas.height = Math.floor(viewport.height * outputScale);
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
-
-      const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
-      renderTask = page.render({ canvas, canvasContext: context, viewport, transform });
-      await renderTask.promise;
-
-      const { TextLayerBuilder } = await import("pdfjs-dist/web/pdf_viewer.mjs");
-      if (cancelled) return;
-
-      const textLayerHost = textLayerHostRef.current;
-      textLayerHost.innerHTML = "";
-      textLayerHost.style.setProperty("--scale-factor", viewport.scale.toString());
-      setLayerDimensions(textLayerHost, viewport);
-
-      textLayerBuilder = new TextLayerBuilder({
-        pdfPage: page,
-        onAppend: (div: HTMLDivElement) => {
-          const textNodes = Array.from(div.querySelectorAll("span"));
-          textNodes.forEach((node, index) => {
-            node.dataset.itemIndex = index.toString();
-            node.dataset.pageNumber = pageNumber.toString();
-          });
-          textLayerHost.appendChild(div);
-        },
-      }) as unknown as { cancel?: () => void; render?: (opts: { viewport: unknown }) => Promise<unknown> };
-
-      await textLayerBuilder?.render?.({ viewport });
-    };
-
-    render().catch(() => {
-      // noop: error handled by parent
-    });
-
-    return () => {
-      cancelled = true;
-      if (renderTask?.cancel) renderTask.cancel();
-      textLayerBuilder?.cancel?.();
-    };
-  }, [pdf, pageNumber, scale]);
-
-  return (
-    <div className="w-full flex justify-center">
-      <div ref={pageContainerRef} className="page relative shadow-sm border bg-white">
-        <div className="canvasWrapper">
-          <canvas ref={canvasRef} className="pointer-events-none block" />
-        </div>
-        <div ref={textLayerHostRef} className="absolute inset-0" />
-      </div>
-    </div>
-  );
 }

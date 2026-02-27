@@ -1087,6 +1087,21 @@
     background-color: hsl(var(--background));
   }
 
+  /* Keep viewer pages visually centered and margins symmetric at fit-width scale. */
+  .pdf-scroll-host .pdfViewer .page {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Keep text selection visible and avoid inheriting app-level typographic tweaks. */
+  .pdf-scroll-host .pdfViewer .textLayer,
+  .pdf-scroll-host .pdfViewer .textLayer span,
+  .pdf-scroll-host .pdfViewer .textLayer br {
+    letter-spacing: normal !important;
+    word-spacing: normal !important;
+    text-transform: none !important;
+  }
+
   /* Make text selection clearly visible inside the AI pane (both themes). */
   [data-ai-pane="true"] ::selection {
     background: hsl(var(--primary) / 0.35);
