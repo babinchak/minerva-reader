@@ -1571,11 +1571,16 @@ interface PdfPageProps {
 function LazyPdfPage({
   pdf,
   pageNumber,
-  scale,
+  scale = 1,
   scrollContainerRef,
 }: PdfPageProps & { scrollContainerRef?: React.RefObject<HTMLDivElement | null> }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
+  const [placeholderSize, setPlaceholderSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
   useEffect(() => {
     if (shouldRender) return;
@@ -1598,14 +1603,73 @@ function LazyPdfPage({
     return () => obs.disconnect();
   }, [shouldRender, scrollContainerRef]);
 
+  // Compute placeholder size to match PdfPage's rendered dimensions (same formula).
+  // This ensures the placeholder matches the rendered page horizontally and respects zoom.
+  useEffect(() => {
+    if (shouldRender) return;
+    const el = containerRef.current;
+    if (!el) return;
+
+    let cancelled = false;
+
+    const update = async () => {
+      try {
+        const { PixelsPerInch } = await import("pdfjs-dist");
+        const page = await pdf.getPage(pageNumber);
+        if (cancelled) return;
+
+        const rawWidth = el.clientWidth ?? 0;
+        const containerWidth = Math.min(rawWidth || 896, 896);
+        const baseViewport = page.getViewport({
+          scale: PixelsPerInch.PDF_TO_CSS_UNITS,
+        });
+        const fitFactor = containerWidth
+          ? clamp(containerWidth / baseViewport.width, 0.5, 2.5)
+          : 1;
+
+        const viewport = page.getViewport({
+          scale: scale * fitFactor * PixelsPerInch.PDF_TO_CSS_UNITS,
+        });
+
+        if (cancelled) return;
+        setPlaceholderSize({ width: viewport.width, height: viewport.height });
+      } catch {
+        // Fallback to A4 aspect ratio if page fetch fails
+        if (cancelled) return;
+        const w = Math.min(el.clientWidth || 896, 896);
+        setPlaceholderSize({ width: w, height: w * 1.4142 });
+      }
+    };
+
+    update();
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+
+    return () => {
+      cancelled = true;
+      ro.disconnect();
+    };
+  }, [pdf, pageNumber, scale, shouldRender]);
+
   return (
     <div ref={hostRef}>
       {shouldRender ? (
         <PdfPage pdf={pdf} pageNumber={pageNumber} scale={scale} />
       ) : (
-        <div className="w-full flex justify-center">
-          <div className="page relative shadow-sm border bg-white w-full max-w-4xl">
-            <div className="w-full" style={{ aspectRatio: "1 / 1.4142" }} />
+        <div ref={containerRef} className="w-full flex justify-center">
+          <div
+            className={`page relative shadow-sm border bg-white ${
+              !placeholderSize ? "w-full max-w-4xl" : ""
+            }`}
+            style={
+              placeholderSize
+                ? { width: placeholderSize.width, height: placeholderSize.height }
+                : undefined
+            }
+          >
+            {!placeholderSize && (
+              <div className="w-full" style={{ aspectRatio: "1 / 1.4142" }} />
+            )}
           </div>
         </div>
       )}
