@@ -1143,7 +1143,13 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               onDoubleClick={() => setRenderScale(1)}
             >
               {Array.from({ length: pdfDoc.numPages }, (_, idx) => (
-                <LazyPdfPage key={idx + 1} pdf={pdfDoc} pageNumber={idx + 1} scale={renderScale} />
+                <LazyPdfPage
+                  key={idx + 1}
+                  pdf={pdfDoc}
+                  pageNumber={idx + 1}
+                  scale={renderScale}
+                  scrollContainerRef={scrollRef}
+                />
               ))}
             </div>
           </div>
@@ -1543,13 +1549,19 @@ interface PdfPageProps {
   scale?: number;
 }
 
-function LazyPdfPage({ pdf, pageNumber, scale }: PdfPageProps) {
+function LazyPdfPage({
+  pdf,
+  pageNumber,
+  scale,
+  scrollContainerRef,
+}: PdfPageProps & { scrollContainerRef?: React.RefObject<HTMLDivElement | null> }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
 
   useEffect(() => {
     if (shouldRender) return;
     const el = hostRef.current;
+    const root = scrollContainerRef?.current ?? null;
     if (!el) return;
 
     const obs = new IntersectionObserver(
@@ -1560,13 +1572,12 @@ function LazyPdfPage({ pdf, pageNumber, scale }: PdfPageProps) {
           obs.disconnect();
         }
       },
-      // Start rendering before it scrolls into view.
-      { root: null, rootMargin: "1200px 0px", threshold: 0.01 },
+      { root, rootMargin: "1200px 0px", threshold: 0.01 },
     );
 
     obs.observe(el);
     return () => obs.disconnect();
-  }, [shouldRender]);
+  }, [shouldRender, scrollContainerRef]);
 
   return (
     <div ref={hostRef}>
