@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   BookOpenText,
   Highlighter,
+  LayoutGrid,
   List,
   Minus,
   Plus,
@@ -410,6 +411,95 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-2">PDF Load Error</h1>
           <p className="text-muted-foreground">{error || "Unable to load PDF."}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mobile: full-screen TOC takeover - no reader, AI, or toolbar
+  if (isMobile && isTocOpen && pdfDoc) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex flex-col bg-background text-foreground"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
+        <div className="grid grid-cols-3 items-center px-4 py-3 border-b border-border shrink-0">
+          <div />
+          <div className="flex justify-center">
+            <div className="inline-flex rounded-lg border border-border p-0.5" role="group">
+              <button
+                type="button"
+                onClick={() => setTocDrawerMode("pages")}
+                aria-label="Page thumbnails"
+                className={`rounded-md p-2 transition-colors ${
+                  tocDrawerMode === "pages"
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <LayoutGrid className="h-5 w-5" />
+              </button>
+              {pdfOutline && pdfOutline.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTocDrawerMode("contents")}
+                  aria-label="Contents"
+                  className={`rounded-md p-2 transition-colors ${
+                    tocDrawerMode === "contents"
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <List className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsTocOpen(false)}
+              aria-label="Close"
+              className="h-10 w-10"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {tocDrawerMode === "contents" ? (
+            pdfOutline && pdfOutline.length > 0 ? (
+              <div className="p-4">
+                <PdfTocList
+                  items={pdfOutline}
+                  pdfDoc={pdfDoc}
+                  onSelectPage={(pageNum) => {
+                    goToPage(pageNum);
+                    setIsTocOpen(false);
+                  }}
+                  depth={0}
+                  mobile
+                />
+              </div>
+            ) : (
+              <div className="p-4 text-base text-muted-foreground">
+                No table of contents in this document.
+              </div>
+            )
+          ) : (
+            <div className="p-4">
+              <PdfThumbnailList
+                pdf={pdfDoc}
+                currentPage={currentPage}
+                onSelectPage={(pageNum) => {
+                  goToPage(pageNum);
+                  setIsTocOpen(false);
+                }}
+                gridLayout="mobile"
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -955,8 +1045,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
         )}
       </div>
 
-      {/* Left TOC drawer */}
-      {isTocOpen && (
+      {/* Left TOC drawer (desktop only; mobile uses full-screen takeover above) */}
+      {isTocOpen && !isMobile && (
         <>
           <div
             className="fixed inset-0 z-40 bg-black/50"
@@ -969,41 +1059,49 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
             role="dialog"
             aria-label="Table of contents"
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-              <h2 className="font-semibold text-sm">Table of contents</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsTocOpen(false)}
-                aria-label="Close"
-                className="h-8 w-8"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex border-b border-border shrink-0">
-              <button
-                type="button"
-                onClick={() => setTocDrawerMode("contents")}
-                className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
-                  tocDrawerMode === "contents"
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Contents
-              </button>
-              <button
-                type="button"
-                onClick={() => setTocDrawerMode("pages")}
-                className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
-                  tocDrawerMode === "pages"
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Pages
-              </button>
+            <div className="grid grid-cols-3 items-center px-4 py-3 border-b border-border shrink-0">
+              <div />
+              <div className="flex justify-center">
+                <div className="inline-flex rounded-lg border border-border p-0.5" role="group">
+                  <button
+                    type="button"
+                    onClick={() => setTocDrawerMode("pages")}
+                    aria-label="Page thumbnails"
+                    className={`rounded-md p-1.5 transition-colors ${
+                      tocDrawerMode === "pages"
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </button>
+                  {pdfOutline && pdfOutline.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setTocDrawerMode("contents")}
+                      aria-label="Contents"
+                      className={`rounded-md p-1.5 transition-colors ${
+                        tocDrawerMode === "contents"
+                          ? "bg-accent text-accent-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <List className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsTocOpen(false)}
+                  aria-label="Close"
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto min-h-0">
               {tocDrawerMode === "contents" ? (
@@ -1048,13 +1146,23 @@ function PdfThumbnailList({
   pdf,
   currentPage,
   onSelectPage,
+  gridLayout,
 }: {
   pdf: PDFDocumentProxy;
   currentPage: number;
   onSelectPage: (pageNum: number) => void;
+  gridLayout?: "desktop" | "mobile";
 }) {
+  const isGrid = gridLayout === "mobile";
+
   return (
-    <div className="space-y-2">
+    <div
+      className={
+        isGrid
+          ? "grid grid-cols-3 [@media(orientation:landscape)]:grid-cols-4 gap-3"
+          : "space-y-1.5"
+      }
+    >
       {Array.from({ length: pdf.numPages }, (_, idx) => (
         <LazyPdfThumbnail
           key={idx + 1}
@@ -1062,6 +1170,7 @@ function PdfThumbnailList({
           pageNumber={idx + 1}
           isCurrentPage={currentPage === idx + 1}
           onSelect={() => onSelectPage(idx + 1)}
+          gridLayout={gridLayout}
         />
       ))}
     </div>
@@ -1073,11 +1182,13 @@ function LazyPdfThumbnail({
   pageNumber,
   isCurrentPage,
   onSelect,
+  gridLayout,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
   isCurrentPage: boolean;
   onSelect: () => void;
+  gridLayout?: "desktop" | "mobile";
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [shouldRender, setShouldRender] = useState(pageNumber <= 5);
@@ -1102,7 +1213,13 @@ function LazyPdfThumbnail({
   return (
     <div ref={hostRef}>
       {shouldRender ? (
-        <PdfThumbnail pdf={pdf} pageNumber={pageNumber} isCurrentPage={isCurrentPage} onSelect={onSelect} />
+        <PdfThumbnail
+          pdf={pdf}
+          pageNumber={pageNumber}
+          isCurrentPage={isCurrentPage}
+          onSelect={onSelect}
+          gridLayout={gridLayout}
+        />
       ) : (
         <div className="w-full rounded border border-border bg-muted/30" style={{ aspectRatio: "1 / 1.4142" }} />
       )}
@@ -1115,11 +1232,13 @@ function PdfThumbnail({
   pageNumber,
   isCurrentPage,
   onSelect,
+  gridLayout,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
   isCurrentPage: boolean;
   onSelect: () => void;
+  gridLayout?: "desktop" | "mobile";
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -1160,16 +1279,24 @@ function PdfThumbnail({
     };
   }, [pdf, pageNumber]);
 
+  const isGrid = gridLayout === "mobile";
+
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full mx-auto block text-left rounded border transition-colors hover:border-primary/50 hover:bg-accent/50 ${
+      className={`w-full block text-left rounded border transition-colors hover:border-primary/50 hover:bg-accent/50 ${
+        !isGrid ? "max-w-[95px] mx-auto" : ""
+      } ${
         isCurrentPage ? "border-primary ring-2 ring-primary/30 bg-accent/30" : "border-border"
       }`}
     >
       <canvas ref={canvasRef} className="w-full h-auto block rounded-t" />
-      <div className="py-1 text-xs text-muted-foreground text-center">{pageNumber}</div>
+      <div
+        className={`py-1 text-center text-muted-foreground ${gridLayout === "mobile" ? "text-sm" : "text-xs"}`}
+      >
+        {pageNumber}
+      </div>
     </button>
   );
 }
@@ -1179,12 +1306,15 @@ function PdfTocList({
   pdfDoc,
   onSelectPage,
   depth,
+  mobile,
 }: {
   items: Array<{ title: string; dest?: unknown; items?: unknown[] }>;
   pdfDoc: PDFDocumentProxy;
   onSelectPage: (pageNum: number) => void;
   depth: number;
+  mobile?: boolean;
 }) {
+  const textSize = mobile ? "text-base" : "text-sm";
   return (
     <ul className="list-none space-y-0.5">
       {items.map((item, idx) => {
@@ -1195,7 +1325,7 @@ function PdfTocList({
             {hasDest ? (
               <button
                 type="button"
-                className="w-full text-left py-1.5 px-2 rounded-md text-foreground hover:bg-accent hover:text-accent-foreground text-sm transition-colors"
+                className={`w-full text-left py-1.5 px-2 rounded-md text-foreground hover:bg-accent hover:text-accent-foreground ${textSize} transition-colors`}
                 style={{ paddingLeft: 8 + depth * 12 }}
                 onClick={async () => {
                   try {
@@ -1232,7 +1362,7 @@ function PdfTocList({
               </button>
             ) : (
               <span
-                className="block py-1.5 px-2 text-sm text-muted-foreground"
+                className={`block py-1.5 px-2 ${textSize} text-muted-foreground`}
                 style={{ paddingLeft: 8 + depth * 12 }}
               >
                 {item.title || "(Untitled)"}
@@ -1244,6 +1374,7 @@ function PdfTocList({
                 pdfDoc={pdfDoc}
                 onSelectPage={onSelectPage}
                 depth={depth + 1}
+                mobile={mobile}
               />
             )}
           </li>
