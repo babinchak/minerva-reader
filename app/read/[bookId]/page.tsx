@@ -37,12 +37,12 @@ export default async function ReadBookPage({ params }: PageProps) {
     );
   }
 
-  let userBook: { current_page: number | null; reading_position: unknown } | null = null;
+  let userBook: { current_page: number | null; reading_position: unknown; bookmarks?: number[] } | null = null;
 
   if (user) {
     const { data } = await supabase
       .from("user_books")
-      .select("id, current_page, reading_position")
+      .select("id, current_page, reading_position, bookmarks")
       .eq("user_id", user.id)
       .eq("book_id", bookId)
       .single();
@@ -99,6 +99,7 @@ export default async function ReadBookPage({ params }: PageProps) {
         fileName={book.file_name || book.title}
         bookId={bookId}
         initialPage={userBook?.current_page ?? undefined}
+        initialBookmarks={userBook?.bookmarks ?? undefined}
       />
     );
   }

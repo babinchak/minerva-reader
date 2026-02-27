@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
+  Bookmark,
   BookOpenText,
   Highlighter,
   LayoutGrid,
@@ -32,9 +33,10 @@ interface PdfReaderProps {
   fileName?: string | null;
   bookId: string;
   initialPage?: number;
+  initialBookmarks?: number[];
 }
 
-export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
+export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +58,49 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unknown; items?: unknown[] }> | null>(null);
   const [isTocOpen, setIsTocOpen] = useState(false);
-  const [tocDrawerMode, setTocDrawerMode] = useState<"contents" | "pages">("contents");
+  const [tocDrawerMode, setTocDrawerMode] = useState<"contents" | "pages" | "bookmarks">("contents");
+  const [bookmarks, setBookmarks] = useState<number[]>(initialBookmarks ?? []);
+  const lastSyncedRef = useRef<string>(JSON.stringify([...(initialBookmarks ?? [])].sort((a, b) => a - b)));
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setBookmarks(initialBookmarks ?? []);
+    lastSyncedRef.current = JSON.stringify([...(initialBookmarks ?? [])].sort((a, b) => a - b));
+  }, [initialBookmarks]);
+
+  useEffect(() => {
+    if (initialBookmarks === undefined) return;
+    const current = JSON.stringify([...bookmarks].sort((a, b) => a - b));
+    if (current === lastSyncedRef.current) return;
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = setTimeout(() => {
+      syncTimeoutRef.current = null;
+      const toSync = [...bookmarks].sort((a, b) => a - b);
+      fetch(`/api/books/${bookId}/bookmarks`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookmarks: toSync }),
+      })
+        .then((res) => {
+          if (res.ok) lastSyncedRef.current = JSON.stringify(toSync);
+        })
+        .catch(() => {});
+    }, 1500);
+    return () => {
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    };
+  }, [bookId, bookmarks, initialBookmarks]);
+
+  const toggleBookmark = () => {
+    if (initialBookmarks === undefined) return;
+    const page = currentPage;
+    setBookmarks((prev) => {
+      const wasBookmarked = prev.includes(page);
+      return wasBookmarked
+        ? prev.filter((p) => p !== page)
+        : [...prev, page].sort((a, b) => a - b);
+    });
+  };
 
   const openTocDrawer = () => {
     if (!pdfOutline?.length) setTocDrawerMode("pages");
@@ -439,6 +483,20 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
               >
                 <LayoutGrid className="h-5 w-5" />
               </button>
+              {initialBookmarks !== undefined && (
+                <button
+                  type="button"
+                  onClick={() => setTocDrawerMode("bookmarks")}
+                  aria-label="Bookmarks"
+                  className={`rounded-md p-2 transition-colors ${
+                    tocDrawerMode === "bookmarks"
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Bookmark className="h-5 w-5" />
+                </button>
+              )}
               {pdfOutline && pdfOutline.length > 0 && (
                 <button
                   type="button"
@@ -485,6 +543,25 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
             ) : (
               <div className="p-4 text-base text-muted-foreground">
                 No table of contents in this document.
+              </div>
+            )
+          ) : tocDrawerMode === "bookmarks" ? (
+            bookmarks.length === 0 ? (
+              <div className="p-4 text-base text-muted-foreground">
+                No bookmarks. Use the bookmark icon to save pages.
+              </div>
+            ) : (
+              <div className="p-4">
+                <PdfThumbnailList
+                  pdf={pdfDoc}
+                  currentPage={currentPage}
+                  onSelectPage={(pageNum) => {
+                    goToPage(pageNum);
+                    setIsTocOpen(false);
+                  }}
+                  gridLayout="mobile"
+                  pageFilter={bookmarks}
+                />
               </div>
             )
           ) : (
@@ -578,6 +655,22 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
 
                 <div className="flex items-center gap-2 shrink-0 justify-self-end">
                   <ThemeSwitcher />
+                  {initialBookmarks !== undefined && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={toggleBookmark}
+                      aria-label={bookmarks.includes(currentPage) ? "Remove bookmark" : "Bookmark page"}
+                      title={bookmarks.includes(currentPage) ? "Remove bookmark" : "Bookmark page"}
+                      className={`shrink-0 hover:bg-accent/80 ${
+                        bookmarks.includes(currentPage)
+                          ? "fill-red-500 text-red-500 hover:fill-red-600 hover:text-red-600 [&_path]:fill-red-500 [&_path]:stroke-red-500"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Bookmark className="h-5 w-5" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -749,6 +842,22 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
 
                 <div className="flex items-center gap-2 shrink-0 justify-self-end">
                   <ThemeSwitcher />
+                  {initialBookmarks !== undefined && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={toggleBookmark}
+                      aria-label={bookmarks.includes(currentPage) ? "Remove bookmark" : "Bookmark page"}
+                      title={bookmarks.includes(currentPage) ? "Remove bookmark" : "Bookmark page"}
+                      className={`shrink-0 hover:bg-accent/80 ${
+                        bookmarks.includes(currentPage)
+                          ? "fill-red-500 text-red-500 hover:fill-red-600 hover:text-red-600 [&_path]:fill-red-500 [&_path]:stroke-red-500"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Bookmark className="h-5 w-5" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1075,6 +1184,20 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
                   >
                     <LayoutGrid className="h-4 w-4" />
                   </button>
+                  {initialBookmarks !== undefined && (
+                    <button
+                      type="button"
+                      onClick={() => setTocDrawerMode("bookmarks")}
+                      aria-label="Bookmarks"
+                      className={`rounded-md p-1.5 transition-colors ${
+                        tocDrawerMode === "bookmarks"
+                          ? "bg-accent text-accent-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Bookmark className="h-4 w-4" />
+                    </button>
+                  )}
                   {pdfOutline && pdfOutline.length > 0 && (
                     <button
                       type="button"
@@ -1122,6 +1245,24 @@ export function PdfReader({ pdfUrl, bookId, initialPage }: PdfReaderProps) {
                     No table of contents in this document.
                   </div>
                 )
+              ) : tocDrawerMode === "bookmarks" ? (
+                bookmarks.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    No bookmarks. Use the bookmark icon to save pages.
+                  </div>
+                ) : pdfDoc ? (
+                  <div className="p-4">
+                    <PdfThumbnailList
+                      pdf={pdfDoc}
+                      currentPage={currentPage}
+                      onSelectPage={(pageNum) => {
+                        goToPage(pageNum);
+                        setIsTocOpen(false);
+                      }}
+                      pageFilter={bookmarks}
+                    />
+                  </div>
+                ) : null
               ) : pdfDoc ? (
                 <div className="p-4">
                   <PdfThumbnailList
@@ -1147,13 +1288,18 @@ function PdfThumbnailList({
   currentPage,
   onSelectPage,
   gridLayout,
+  pageFilter,
 }: {
   pdf: PDFDocumentProxy;
   currentPage: number;
   onSelectPage: (pageNum: number) => void;
   gridLayout?: "desktop" | "mobile";
+  pageFilter?: number[];
 }) {
   const isGrid = gridLayout === "mobile";
+  const pages = pageFilter && pageFilter.length > 0
+    ? [...pageFilter].sort((a, b) => a - b).filter((p) => p >= 1 && p <= pdf.numPages)
+    : Array.from({ length: pdf.numPages }, (_, idx) => idx + 1);
 
   return (
     <div
@@ -1163,13 +1309,13 @@ function PdfThumbnailList({
           : "space-y-1.5"
       }
     >
-      {Array.from({ length: pdf.numPages }, (_, idx) => (
+      {pages.map((pageNum) => (
         <LazyPdfThumbnail
-          key={idx + 1}
+          key={pageNum}
           pdf={pdf}
-          pageNumber={idx + 1}
-          isCurrentPage={currentPage === idx + 1}
-          onSelect={() => onSelectPage(idx + 1)}
+          pageNumber={pageNum}
+          isCurrentPage={currentPage === pageNum}
+          onSelect={() => onSelectPage(pageNum)}
           gridLayout={gridLayout}
         />
       ))}
