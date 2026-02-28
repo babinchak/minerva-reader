@@ -39,6 +39,19 @@ interface PdfReaderProps {
 const MOBILE_PAGE_SIDE_MARGIN_PX = 2;
 const MOBILE_FIT_WIDTH_BUFFER_PX = 2;
 
+function isPdfDebugEnabled() {
+  if (typeof window === "undefined") return false;
+  if (process.env.NODE_ENV !== "production") return true;
+  try {
+    const query = new URLSearchParams(window.location.search);
+    if (query.has("pdfDebug")) return true;
+    if (window.localStorage.getItem("pdfDebug") === "1") return true;
+    return Boolean((window as Window & { __PDF_DEBUG__?: boolean }).__PDF_DEBUG__);
+  } catch {
+    return false;
+  }
+}
+
 export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
@@ -174,6 +187,19 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     null,
   );
   const itemTextsCacheRef = useRef<Map<number, string[]>>(new Map());
+  const debugEnabledRef = useRef(false);
+  const logPdfDebug = (event: string, payload?: Record<string, unknown>) => {
+    if (!debugEnabledRef.current) return;
+    const stamp = new Date().toISOString();
+    // Keep logs machine-readable and grouped by event.
+    console.log(`[PdfDebug ${stamp}] ${event}`, payload ?? {});
+  };
+
+  useEffect(() => {
+    debugEnabledRef.current = isPdfDebugEnabled();
+    if (!debugEnabledRef.current) return;
+    console.log("[PdfDebug] enabled. Dev mode logs by default; prod: use ?pdfDebug=1 or localStorage.pdfDebug=1");
+  }, []);
 
   useEffect(() => {
     // Default to an "immersive" UI on mobile: tap center to reveal chrome.
@@ -326,6 +352,15 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     const viewer = viewerRef.current;
     const nextScale = clamp(renderScale + delta, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
     if (nextScale === renderScale) return;
+    logPdfDebug("zoomBy:start", {
+      delta,
+      renderScale,
+      nextScale,
+      isMobile,
+      currentPage,
+      hasScroller: Boolean(scroller),
+      hasViewer: Boolean(viewer),
+    });
 
     if (scroller && viewer) {
       const rect = scroller.getBoundingClientRect();
@@ -338,8 +373,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
         const pageRect = pageEl.getBoundingClientRect();
         const viewportMidX = rect.left + midOffsetX;
         const viewportMidY = rect.top + midOffsetY;
-        const pageOffsetXRatio = clamp((viewportMidX - pageRect.left) / Math.max(1, pageRect.width), 0, 1);
-        const pageOffsetYRatio = clamp((viewportMidY - pageRect.top) / Math.max(1, pageRect.height), 0, 1);
+        // Keep exact relative position against the current page without clamping.
+        // Clamping to [0,1] can cause lateral drift when zoom/layout transitions cross centering boundaries.
+        const pageOffsetXRatio = (viewportMidX - pageRect.left) / Math.max(1, pageRect.width);
+        const pageOffsetYRatio = (viewportMidY - pageRect.top) / Math.max(1, pageRect.height);
         pendingScrollAdjustRef.current = {
           mode: "page-anchor",
           pageNumber,
@@ -348,6 +385,17 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
           midOffsetX,
           midOffsetY,
         };
+        logPdfDebug(isMobile ? "zoomBy:page-anchor-mobile" : "zoomBy:page-anchor-desktop", {
+          pageNumber,
+          pageOffsetXRatio,
+          pageOffsetYRatio,
+          midOffsetX,
+          midOffsetY,
+          pageRectLeft: pageRect.left,
+          pageRectTop: pageRect.top,
+          pageRectWidth: pageRect.width,
+          pageRectHeight: pageRect.height,
+        });
       } else {
         const ratio = nextScale / renderScale;
         const anchorX = scroller.scrollLeft + midOffsetX;
@@ -360,6 +408,13 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
           midOffsetY,
           ratio,
         };
+        logPdfDebug("zoomBy:ratio-fallback", {
+          anchorX,
+          anchorY,
+          midOffsetX,
+          midOffsetY,
+          ratio,
+        });
       }
     } else if (scroller) {
       const rect = scroller.getBoundingClientRect();
@@ -374,6 +429,11 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
         midOffsetY: rect.height / 2,
         ratio,
       };
+      logPdfDebug("zoomBy:scroller-only", {
+        anchorX,
+        anchorY,
+        ratio,
+      });
     }
     setRenderScale(nextScale);
   };
@@ -528,6 +588,15 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
         const scroller = scrollRef.current;
         const viewer = viewerRef.current;
         if (!scroller) return;
+        logPdfDebug("scrollAdjust:before", {
+          pendingMode: pending.mode,
+          scrollLeft: scroller.scrollLeft,
+          scrollTop: scroller.scrollTop,
+          scrollWidth: scroller.scrollWidth,
+          scrollHeight: scroller.scrollHeight,
+          clientWidth: scroller.clientWidth,
+          clientHeight: scroller.clientHeight,
+        });
         if (pending.mode === "page-anchor" && viewer) {
           const pages = Array.from(viewer.querySelectorAll<HTMLElement>(".page"));
           const pageEl = pages[pending.pageNumber - 1];
@@ -541,16 +610,53 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             scroller.scrollLeft + (pageRect.left - scrollerRect.left) + targetOffsetX - pending.midOffsetX;
           scroller.scrollTop =
             scroller.scrollTop + (pageRect.top - scrollerRect.top) + targetOffsetY - pending.midOffsetY;
+          logPdfDebug("scrollAdjust:after-page-anchor", {
+            pageNumber: pending.pageNumber,
+            targetOffsetX,
+            targetOffsetY,
+            scrollLeft: scroller.scrollLeft,
+            scrollTop: scroller.scrollTop,
+            maxScrollLeft: Math.max(0, scroller.scrollWidth - scroller.clientWidth),
+            maxScrollTop: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
+          });
           return;
         }
 
         if (pending.mode === "ratio") {
           scroller.scrollLeft = pending.anchorX * pending.ratio - pending.midOffsetX;
           scroller.scrollTop = pending.anchorY * pending.ratio - pending.midOffsetY;
+          logPdfDebug("scrollAdjust:after-ratio", {
+            anchorX: pending.anchorX,
+            anchorY: pending.anchorY,
+            ratio: pending.ratio,
+            scrollLeft: scroller.scrollLeft,
+            scrollTop: scroller.scrollTop,
+            maxScrollLeft: Math.max(0, scroller.scrollWidth - scroller.clientWidth),
+            maxScrollTop: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
+          });
         }
       });
     });
   }, [renderScale]);
+
+  useEffect(() => {
+    if (!debugEnabledRef.current) return;
+    const scroller = scrollRef.current;
+    const viewer = viewerRef.current;
+    const pageEls = viewer ? Array.from(viewer.querySelectorAll<HTMLElement>(".page")) : [];
+    const renderedCanvasCount = viewer ? viewer.querySelectorAll("canvas").length : 0;
+    logPdfDebug("scale:state", {
+      renderScale,
+      isMobile,
+      currentPage,
+      pageCountInDom: pageEls.length,
+      renderedCanvasCount,
+      scrollLeft: scroller?.scrollLeft ?? null,
+      scrollTop: scroller?.scrollTop ?? null,
+      maxScrollLeft: scroller ? Math.max(0, scroller.scrollWidth - scroller.clientWidth) : null,
+      maxScrollTop: scroller ? Math.max(0, scroller.scrollHeight - scroller.clientHeight) : null,
+    });
+  }, [renderScale, currentPage, isMobile]);
 
   if (loading) {
     return (
@@ -1221,10 +1327,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               tapRef.current = null;
             }}
           >
-            <div className="flex justify-center w-full">
+            <div className={isMobile ? "flex justify-center w-full" : "w-max min-w-full mx-auto"}>
               <div
                 ref={viewerRef}
-                className={`pdfViewer py-6 ${isMobile ? "space-y-1 w-full min-w-0 max-w-none" : "space-y-3 min-w-max max-w-4xl max-w-full"}`}
+                className={`pdfViewer py-6 ${isMobile ? "space-y-1 w-full min-w-0 max-w-none" : "space-y-3 min-w-max"}`}
                 style={
                   gesture.active
                     ? {
@@ -1587,9 +1693,10 @@ function LazyPdfPage({
       (entries) => {
         const entry = entries[0];
         const isIntersecting = Boolean(entry?.isIntersecting);
-        if (isMobile) {
+        if (isMobile || scale > 1) {
           // iOS can rapidly toggle intersection near viewport boundaries while scrolling.
-          // Keep pages mounted once rendered to avoid height churn and scroll-position jitter.
+          // While zoomed in, also keep desktop pages mounted once rendered to avoid
+          // mount/unmount churn that causes repeated renders and anchor instability.
           if (isIntersecting) setShouldRender(true);
           return;
         }
@@ -1601,7 +1708,7 @@ function LazyPdfPage({
 
     obs.observe(el);
     return () => obs.disconnect();
-  }, [scrollContainerRef, isMobile]);
+  }, [scrollContainerRef, isMobile, scale]);
 
   return (
     <div ref={hostRef}>
@@ -1649,6 +1756,15 @@ function PdfPage({
     } | null = null;
 
     const render = async () => {
+      const debug = isPdfDebugEnabled();
+      const renderStart = typeof performance !== "undefined" ? performance.now() : Date.now();
+      if (debug) {
+        console.log("[PdfDebug] page:render:start", {
+          pageNumber,
+          scale,
+          isMobile,
+        });
+      }
       const { PixelsPerInch, setLayerDimensions } = await import("pdfjs-dist");
       const page = await pdf.getPage(pageNumber);
       let itemTexts = itemTextsCacheRef?.current?.get(pageNumber);
@@ -1697,17 +1813,33 @@ function PdfPage({
       }
 
       const canvas = canvasRef.current;
-      const context = canvas.getContext("2d");
-      if (!context) return;
+      const renderCanvas = document.createElement("canvas");
+      const renderContext = renderCanvas.getContext("2d");
+      if (!renderContext) return;
 
-      canvas.width = Math.floor(viewport.width * outputScale);
-      canvas.height = Math.floor(viewport.height * outputScale);
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
+      renderCanvas.width = Math.floor(viewport.width * outputScale);
+      renderCanvas.height = Math.floor(viewport.height * outputScale);
 
       const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
-      renderTask = page.render({ canvas, canvasContext: context, viewport, transform });
+      renderTask = page.render({
+        canvas: renderCanvas,
+        canvasContext: renderContext,
+        viewport,
+        transform,
+      });
       await renderTask.promise;
+      if (cancelled || !canvasRef.current) return;
+
+      // Draw into an offscreen canvas first, then swap in one step to avoid blank-frame flicker.
+      canvas.width = renderCanvas.width;
+      canvas.height = renderCanvas.height;
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(renderCanvas, 0, 0);
 
       const { TextLayerBuilder } = await import("pdfjs-dist/web/pdf_viewer.mjs");
       if (cancelled) return;
@@ -1782,6 +1914,17 @@ function PdfPage({
       }) as unknown as { cancel?: () => void; render?: (opts: { viewport: unknown }) => Promise<unknown> };
 
       await textLayerBuilder?.render?.({ viewport });
+      if (debug) {
+        const renderEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
+        console.log("[PdfDebug] page:render:done", {
+          pageNumber,
+          scale,
+          isMobile,
+          viewportWidth: viewport.width,
+          viewportHeight: viewport.height,
+          durationMs: Math.round(renderEnd - renderStart),
+        });
+      }
     };
 
     render().catch(() => {});
@@ -1797,7 +1940,7 @@ function PdfPage({
     <div className="w-full flex justify-center">
       <div
         ref={pageContainerRef}
-        className="page relative bg-white max-w-[896px]"
+        className={`page relative bg-white ${isMobile ? "max-w-[896px]" : ""}`}
         style={
           isMobile
             ? {
