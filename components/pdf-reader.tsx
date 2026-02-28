@@ -1221,7 +1221,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             <div className="flex justify-center w-full">
               <div
                 ref={viewerRef}
-                className={`pdfViewer py-6 space-y-3 ${isMobile ? "w-full min-w-0 max-w-none" : "min-w-max max-w-4xl max-w-full"}`}
+                className={`pdfViewer py-6 ${isMobile ? "space-y-1 w-full min-w-0 max-w-none" : "space-y-3 min-w-max max-w-4xl max-w-full"}`}
                 style={
                   gesture.active
                     ? {
