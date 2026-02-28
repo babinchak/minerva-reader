@@ -1681,11 +1681,7 @@ function PdfPage({
 
       const pageContainer = pageContainerRef.current;
       pageContainer.style.setProperty("--scale-factor", viewport.scale.toString());
-      pageContainer.style.margin = "0 auto";
-      pageContainer.style.border = "0";
-      pageContainer.style.boxSizing = "border-box";
-      // On mobile, set exact rendered dimensions directly to avoid async width snapping.
-      // setLayerDimensions can apply rounding helpers that make the canvas appear inset.
+      // Keep mobile sizing deterministic; desktop can use PDF.js layer sizing.
       if (isMobile) {
         pageContainer.style.width = `${viewport.width}px`;
         pageContainer.style.height = `${viewport.height}px`;
