@@ -36,6 +36,8 @@ interface PdfReaderProps {
   initialBookmarks?: number[];
 }
 
+const MOBILE_PAGE_SIDE_MARGIN_PX = 16;
+
 export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,9 +120,9 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const [isAiPaneOpen, setIsAiPaneOpen] = useState(false);
   // Global PDF zoom (applies to ALL pages by re-rendering at a larger viewport scale).
   // This avoids per-page transforms that can cause "chopped" edges and makes scroll work naturally.
-  // On mobile, allow more zoom-out so pages load with visible left/right margins.
+  // On mobile, default to true fit-width so rendered pages match the layout shell.
   const MIN_RENDER_SCALE_DESKTOP = 0.7;
-  const MIN_RENDER_SCALE_MOBILE = 0.9;
+  const MIN_RENDER_SCALE_MOBILE = 1;
   const MIN_RENDER_SCALE = isMobile ? MIN_RENDER_SCALE_MOBILE : MIN_RENDER_SCALE_DESKTOP;
   const MAX_RENDER_SCALE = 4;
   const [renderScale, setRenderScale] = useState(1);
@@ -380,8 +382,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     setRenderScale((s) => clamp(s, MIN_RENDER_SCALE, MAX_RENDER_SCALE));
   }, [MIN_RENDER_SCALE]);
 
-  // On mobile, start zoomed out to minimum (small left/right margins) when the PDF loads.
-  // Must run after the clamp effect so we don't get overwritten back to 1.
+  // On mobile, initialize to min scale (fit-width by default).
+  // Must run after the clamp effect so we don't get overwritten.
   useEffect(() => {
     if (isMobile && pdfDoc) {
       setRenderScale(MIN_RENDER_SCALE_MOBILE);
@@ -403,9 +405,9 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
         scroller.scrollLeft = 0;
         return;
       }
-      // Keep fit-width view visually centered when a tiny overflow remains from rounding.
+      // Avoid introducing horizontal drift from tiny subpixel overflow.
       if (maxScrollLeft < 12) {
-        scroller.scrollLeft = maxScrollLeft / 2;
+        scroller.scrollLeft = 0;
       } else {
         // For larger overflow, keep scroll position valid but don't force recenter while zoomed in.
         scroller.scrollLeft = Math.min(Math.max(0, scroller.scrollLeft), maxScrollLeft);
@@ -1611,7 +1613,10 @@ function LazyPdfPage({
         />
       ) : (
         <div className="w-full flex justify-center">
-          <div className={`page relative shadow-sm border bg-white w-full ${isMobile ? "" : "max-w-4xl"}`}>
+          <div
+            className={`page relative shadow-sm border bg-white ${isMobile ? "max-w-[896px]" : "w-full max-w-4xl"}`}
+            style={isMobile ? { width: `calc(100% - ${MOBILE_PAGE_SIDE_MARGIN_PX * 2}px)` } : undefined}
+          >
             <div className="w-full" style={{ aspectRatio: "1 / 1.4142" }} />
           </div>
         </div>
@@ -1658,9 +1663,8 @@ function PdfPage({
         return;
       }
 
-      const MOBILE_SIDE_MARGIN_PX = 16;
       const scrollViewportWidth = scrollContainerRef?.current?.clientWidth ?? 0;
-      const mobileTargetWidth = Math.max(0, scrollViewportWidth - MOBILE_SIDE_MARGIN_PX * 2);
+      const mobileTargetWidth = Math.max(0, scrollViewportWidth - MOBILE_PAGE_SIDE_MARGIN_PX * 2);
       const rawWidth = isMobile && mobileTargetWidth > 0
         ? mobileTargetWidth
         : (pageContainerRef.current.parentElement?.clientWidth ?? 0);
@@ -1675,8 +1679,19 @@ function PdfPage({
       });
       const outputScale = window.devicePixelRatio || 1;
 
-      pageContainerRef.current.style.setProperty("--scale-factor", viewport.scale.toString());
-      setLayerDimensions(pageContainerRef.current, viewport);
+      const pageContainer = pageContainerRef.current;
+      pageContainer.style.setProperty("--scale-factor", viewport.scale.toString());
+      pageContainer.style.margin = "0 auto";
+      pageContainer.style.border = "0";
+      pageContainer.style.boxSizing = "border-box";
+      // On mobile, set exact rendered dimensions directly to avoid async width snapping.
+      // setLayerDimensions can apply rounding helpers that make the canvas appear inset.
+      if (isMobile) {
+        pageContainer.style.width = `${viewport.width}px`;
+        pageContainer.style.height = `${viewport.height}px`;
+      } else {
+        setLayerDimensions(pageContainer, viewport);
+      }
 
       const canvas = canvasRef.current;
       const context = canvas.getContext("2d");
@@ -1777,7 +1792,20 @@ function PdfPage({
 
   return (
     <div className="w-full flex justify-center">
-      <div ref={pageContainerRef} className="page relative shadow-sm border bg-white">
+      <div
+        ref={pageContainerRef}
+        className="page relative bg-white max-w-[896px]"
+        style={
+          isMobile
+            ? {
+                width: `calc(100% - ${MOBILE_PAGE_SIDE_MARGIN_PX * 2}px)`,
+                margin: "0 auto",
+                border: 0,
+                boxSizing: "border-box",
+              }
+            : undefined
+        }
+      >
         <div className="canvasWrapper">
           <canvas ref={canvasRef} className="pointer-events-none block" />
         </div>
