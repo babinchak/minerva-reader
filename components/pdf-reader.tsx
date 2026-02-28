@@ -36,7 +36,8 @@ interface PdfReaderProps {
   initialBookmarks?: number[];
 }
 
-const MOBILE_PAGE_SIDE_MARGIN_PX = 16;
+const MOBILE_PAGE_SIDE_MARGIN_PX = 2;
+const MOBILE_FIT_WIDTH_BUFFER_PX = 2;
 
 export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
@@ -126,6 +127,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const MIN_RENDER_SCALE = isMobile ? MIN_RENDER_SCALE_MOBILE : MIN_RENDER_SCALE_DESKTOP;
   const MAX_RENDER_SCALE = 4;
   const [renderScale, setRenderScale] = useState(1);
+  const isAtMobileMinScale = isMobile && renderScale <= MIN_RENDER_SCALE_MOBILE + 0.001;
   const [gesture, setGesture] = useState<{ active: boolean; scale: number; tx: number; ty: number }>({
     active: false,
     scale: 1,
@@ -1073,6 +1075,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             <div
             className="pdf-scroll-host absolute inset-0 overflow-auto bg-background"
             ref={scrollRef}
+            style={isAtMobileMinScale ? { overflowX: "hidden" } : undefined}
             onPointerDown={(e) => {
               if (!isMobile) return;
 
@@ -1664,14 +1667,18 @@ function PdfPage({
       }
 
       const scrollViewportWidth = scrollContainerRef?.current?.clientWidth ?? 0;
-      const mobileTargetWidth = Math.max(0, scrollViewportWidth - MOBILE_PAGE_SIDE_MARGIN_PX * 2);
+      const mobileTargetWidth = Math.max(
+        0,
+        scrollViewportWidth - MOBILE_PAGE_SIDE_MARGIN_PX * 2 - MOBILE_FIT_WIDTH_BUFFER_PX * 2,
+      );
       const rawWidth = isMobile && mobileTargetWidth > 0
         ? mobileTargetWidth
         : (pageContainerRef.current.parentElement?.clientWidth ?? 0);
       const containerWidth = Math.min(rawWidth || 896, 896);
       const baseViewport = page.getViewport({ scale: PixelsPerInch.PDF_TO_CSS_UNITS });
+      const fitFactorMin = isMobile ? 0.1 : 0.5;
       const fitFactor = containerWidth
-        ? clamp(containerWidth / baseViewport.width, 0.5, 2.5)
+        ? clamp(containerWidth / baseViewport.width, fitFactorMin, 2.5)
         : 1;
 
       const viewport = page.getViewport({
