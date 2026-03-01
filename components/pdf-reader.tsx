@@ -1758,9 +1758,14 @@ function LazyPdfPage({
   initialPage,
 }: PdfPageProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  // Pre-render pages 1, 2, and initialPage (for reading position restoration)
-  const shouldRenderInitially =
-    pageNumber <= 2 || (initialPage != null && initialPage >= 1 && pageNumber === initialPage);
+  // Pre-render pages 1, 2, and initialPage ±2 (for reading position restoration on desktop;
+  // viewport often shows 2+ pages above/below the target)
+  const inInitialPageRange =
+    initialPage != null &&
+    initialPage >= 1 &&
+    pageNumber >= Math.max(1, initialPage - 2) &&
+    pageNumber <= initialPage + 2;
+  const shouldRenderInitially = pageNumber <= 2 || inInitialPageRange;
   const [shouldRender, setShouldRender] = useState(shouldRenderInitially);
 
   useEffect(() => {
@@ -1777,6 +1782,9 @@ function LazyPdfPage({
           if (isIntersecting) setShouldRender(true);
           return;
         }
+        // Don't unmount pages in the initial page range on desktop scroll mode:
+        // they must stay rendered for the initial scroll-to-position to work.
+        if (!mobilePagedMode && inInitialPageRange && !isIntersecting) return;
         // Mobile paged + desktop: unmount when far from viewport to avoid memory bloat.
         // rootMargin keeps ~3–4 pages buffered each side before unmount.
         setShouldRender(isIntersecting);
@@ -1786,7 +1794,7 @@ function LazyPdfPage({
 
     obs.observe(el);
     return () => obs.disconnect();
-  }, [scrollContainerRef, isMobile, mobilePagedMode, scale]);
+  }, [scrollContainerRef, isMobile, mobilePagedMode, scale, inInitialPageRange]);
 
   return (
     <div
