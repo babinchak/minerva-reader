@@ -4,6 +4,7 @@ import { PwaRegister } from "@/components/pwa-register";
 import { CreditsRefreshOnSuccess } from "@/components/credits-refresh-on-success";
 import { ScrollLockRepair } from "@/components/scroll-lock-repair";
 import { ThemeVariantsProvider } from "@/components/theme-variants-provider";
+import { MobileConsoleMirror } from "@/components/mobile-console-mirror";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -68,6 +69,7 @@ export default function RootLayout({
         >
           <ThemeVariantsProvider>
             <PwaRegister />
+            <MobileConsoleMirror />
             <CreditsRefreshOnSuccess />
             <ScrollLockRepair />
             {children}
