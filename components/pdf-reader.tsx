@@ -1746,16 +1746,15 @@ function LazyPdfPage({
       (entries) => {
         const entry = entries[0];
         const isIntersecting = Boolean(entry?.isIntersecting);
-        if (isMobile || scale > 1) {
-          // iOS can rapidly toggle intersection near viewport boundaries while scrolling.
-          // While zoomed in, also keep desktop pages mounted once rendered to avoid
-          // mount/unmount churn that causes repeated renders and anchor instability.
+        if (!mobilePagedMode && scale > 1) {
+          // Desktop zoomed in: keep pages mounted once rendered to avoid anchor drift.
           if (isIntersecting) setShouldRender(true);
           return;
         }
+        // Mobile paged + desktop: unmount when far from viewport to avoid memory bloat.
+        // rootMargin keeps ~3–4 pages buffered each side before unmount.
         setShouldRender(isIntersecting);
       },
-      // Keep a wide buffer so nearby pages stay warm, but far pages unmount.
       { root, rootMargin: mobilePagedMode ? "0px 1400px" : "1400px 0px", threshold: 0 },
     );
 
