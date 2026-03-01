@@ -142,6 +142,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const MAX_RENDER_SCALE = 4;
   const [renderScale, setRenderScale] = useState(1);
   const isAtMobileMinScale = isMobile && renderScale <= MIN_RENDER_SCALE_MOBILE + 0.001;
+  const isMobilePagedMode = isMobile;
   const [gesture, setGesture] = useState<{ active: boolean; scale: number; tx: number; ty: number }>({
     active: false,
     scale: 1,
@@ -216,8 +217,24 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     if (pages.length === 0) return null;
 
     const scrollerRect = scroller.getBoundingClientRect();
-    const centerY = scrollerRect.top + scrollerRect.height / 2;
+    if (isMobilePagedMode) {
+      const centerX = scrollerRect.left + scrollerRect.width / 2;
+      let bestIdx = 0;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < pages.length; i += 1) {
+        const rect = pages[i].getBoundingClientRect();
+        const intersectsCenter = rect.left <= centerX && rect.right >= centerX;
+        const dist = intersectsCenter ? 0 : Math.min(Math.abs(rect.left - centerX), Math.abs(rect.right - centerX));
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = i;
+          if (dist === 0) break;
+        }
+      }
+      return bestIdx + 1;
+    }
 
+    const centerY = scrollerRect.top + scrollerRect.height / 2;
     let bestIdx = 0;
     let bestDist = Number.POSITIVE_INFINITY;
     for (let i = 0; i < pages.length; i += 1) {
@@ -331,8 +348,13 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     const el = pages[clamped - 1];
     const scrollerRect = scroller.getBoundingClientRect();
     const pageRect = el.getBoundingClientRect();
-    const deltaY = pageRect.top - scrollerRect.top;
-    scroller.scrollTop = scroller.scrollTop + deltaY - 12;
+    if (isMobilePagedMode) {
+      const deltaX = pageRect.left - scrollerRect.left;
+      scroller.scrollLeft = scroller.scrollLeft + deltaX;
+    } else {
+      const deltaY = pageRect.top - scrollerRect.top;
+      scroller.scrollTop = scroller.scrollTop + deltaY - 12;
+    }
     setCurrentPage(clamped);
     setPageInput(String(clamped));
   };
@@ -1189,10 +1211,20 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
           )}
           <div className="relative flex-1 min-h-0 bg-background">
             <div
-            className="pdf-scroll-host absolute inset-0 overflow-auto bg-background"
-            ref={scrollRef}
-            style={isAtMobileMinScale ? { overflowX: "hidden" } : undefined}
-            onPointerDown={(e) => {
+              className={`pdf-scroll-host absolute inset-0 bg-background ${
+                isMobilePagedMode
+                  ? "overflow-x-auto overflow-y-hidden overscroll-contain snap-x snap-mandatory"
+                  : "overflow-auto"
+              }`}
+              ref={scrollRef}
+              style={
+                isMobilePagedMode
+                  ? { touchAction: "pan-x pan-y" }
+                  : isAtMobileMinScale
+                    ? { overflowX: "hidden" }
+                    : undefined
+              }
+              onPointerDown={(e) => {
               if (!isMobile) return;
 
               // Global pinch-to-zoom (two pointers) across ALL pages.
@@ -1336,11 +1368,15 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               setGesture({ active: false, scale: 1, tx: 0, ty: 0 });
               tapRef.current = null;
             }}
-          >
-            <div className={isMobile ? "flex justify-center w-full" : "w-max min-w-full mx-auto"}>
+            >
+              <div className={isMobilePagedMode ? "w-full h-full" : isMobile ? "flex justify-center w-full" : "w-max min-w-full mx-auto"}>
               <div
                 ref={viewerRef}
-                className={`pdfViewer py-6 ${isMobile ? "space-y-1 w-full min-w-0 max-w-none" : "space-y-3 min-w-max"}`}
+                className={`pdfViewer ${
+                  isMobilePagedMode
+                    ? "flex h-full w-full items-center py-0"
+                    : `py-6 ${isMobile ? "space-y-1 w-full min-w-0 max-w-none" : "space-y-3 min-w-max"}`
+                }`}
                 style={
                   gesture.active
                     ? {
@@ -1360,11 +1396,12 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     scale={renderScale}
                     scrollContainerRef={scrollRef}
                     isMobile={isMobile}
+                    mobilePagedMode={isMobilePagedMode}
                     itemTextsCacheRef={itemTextsCacheRef}
                   />
                 ))}
               </div>
-            </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1684,6 +1721,7 @@ interface PdfPageProps {
   scale?: number;
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
   isMobile?: boolean;
+  mobilePagedMode?: boolean;
   itemTextsCacheRef?: RefObject<Map<number, string[]>>;
 }
 
@@ -1693,6 +1731,7 @@ function LazyPdfPage({
   scale = 1,
   scrollContainerRef,
   isMobile,
+  mobilePagedMode,
   itemTextsCacheRef,
 }: PdfPageProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -1717,15 +1756,18 @@ function LazyPdfPage({
         setShouldRender(isIntersecting);
       },
       // Keep a wide buffer so nearby pages stay warm, but far pages unmount.
-      { root, rootMargin: "1400px 0px", threshold: 0 },
+      { root, rootMargin: mobilePagedMode ? "0px 1400px" : "1400px 0px", threshold: 0 },
     );
 
     obs.observe(el);
     return () => obs.disconnect();
-  }, [scrollContainerRef, isMobile, scale]);
+  }, [scrollContainerRef, isMobile, mobilePagedMode, scale]);
 
   return (
-    <div ref={hostRef}>
+    <div
+      ref={hostRef}
+      className={mobilePagedMode ? "w-full h-full shrink-0 snap-start flex items-center justify-center" : undefined}
+    >
       {shouldRender ? (
         <PdfPage
           pdf={pdf}
@@ -1733,6 +1775,7 @@ function LazyPdfPage({
           scale={scale}
           scrollContainerRef={scrollContainerRef}
           isMobile={isMobile}
+          mobilePagedMode={mobilePagedMode}
           itemTextsCacheRef={itemTextsCacheRef}
         />
       ) : (
@@ -1755,6 +1798,7 @@ function PdfPage({
   scale = 1,
   scrollContainerRef,
   isMobile,
+  mobilePagedMode,
   itemTextsCacheRef,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1797,15 +1841,29 @@ function PdfPage({
       }
 
       const scrollViewportWidth = scrollContainerRef?.current?.clientWidth ?? 0;
+      const scrollViewportHeight = scrollContainerRef?.current?.clientHeight ?? 0;
       const mobileTargetWidth = Math.max(
         0,
         scrollViewportWidth - MOBILE_PAGE_SIDE_MARGIN_PX * 2 - MOBILE_FIT_WIDTH_BUFFER_PX * 2,
       );
-      const rawWidth = isMobile && mobileTargetWidth > 0
-        ? mobileTargetWidth
-        : (pageContainerRef.current.parentElement?.clientWidth ?? 0);
-      const containerWidth = Math.min(rawWidth || 896, 896);
       const baseViewport = page.getViewport({ scale: PixelsPerInch.PDF_TO_CSS_UNITS });
+      const pageAspect = baseViewport.height / Math.max(1, baseViewport.width);
+      const mobileHeightLimitedWidth =
+        isMobile && scrollViewportHeight > 0
+          ? Math.max(0, (scrollViewportHeight - MOBILE_PAGE_SIDE_MARGIN_PX * 2) / Math.max(0.1, pageAspect))
+          : 0;
+      const mobileFittedWidth =
+        isMobile && mobileTargetWidth > 0
+          ? mobileHeightLimitedWidth > 0
+            ? Math.min(mobileTargetWidth, mobileHeightLimitedWidth)
+            : mobileTargetWidth
+          : 0;
+      const rawWidth = isMobile && mobileFittedWidth > 0
+        ? mobileFittedWidth
+        : isMobile && mobileTargetWidth > 0
+          ? mobileTargetWidth
+          : (pageContainerRef.current.parentElement?.clientWidth ?? 0);
+      const containerWidth = Math.min(rawWidth || 896, 896);
       const fitFactorMin = isMobile ? 0.1 : 0.5;
       const fitFactor = containerWidth
         ? clamp(containerWidth / baseViewport.width, fitFactorMin, 2.5)
@@ -1951,7 +2009,7 @@ function PdfPage({
   }, [pdf, pageNumber, scale, isMobile, scrollContainerRef, itemTextsCacheRef]);
 
   return (
-    <div className="w-full flex justify-center">
+    <div className={mobilePagedMode ? "w-full h-full flex items-center justify-center" : "w-full flex justify-center"}>
       <div
         ref={pageContainerRef}
         className={`page relative bg-white ${isMobile ? "max-w-[896px]" : ""}`}
