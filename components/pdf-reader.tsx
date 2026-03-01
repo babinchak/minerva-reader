@@ -64,6 +64,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const aiPaneContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [currentPage, setCurrentPage] = useState(initialPage ?? 1);
   const [pageInput, setPageInput] = useState(String(initialPage ?? 1));
@@ -561,22 +562,31 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   }, [pdfUrl, bookId]);
 
   useEffect(() => {
+    if (!isMobile) return;
     // iOS Safari emits non-standard gesture events for pinch.
-    // Prevent default so pinching the PDF doesn't trigger browser/OS gestures.
-    const el = scrollRef.current;
-    if (!el) return;
+    // Prevent default so pinching the reader chrome doesn't trigger browser/OS zoom.
+    const gestureSafeElements = [
+      scrollRef.current,
+      toolbarRef.current,
+      aiPaneContainerRef.current,
+    ].filter((el): el is HTMLDivElement => Boolean(el));
+    if (gestureSafeElements.length === 0) return;
     const prevent = (e: Event) => {
       if (typeof e.cancelable === "boolean" && e.cancelable) e.preventDefault();
     };
-    el.addEventListener("gesturestart", prevent, { passive: false });
-    el.addEventListener("gesturechange", prevent, { passive: false });
-    el.addEventListener("gestureend", prevent, { passive: false });
+    for (const el of gestureSafeElements) {
+      el.addEventListener("gesturestart", prevent, { passive: false });
+      el.addEventListener("gesturechange", prevent, { passive: false });
+      el.addEventListener("gestureend", prevent, { passive: false });
+    }
     return () => {
-      el.removeEventListener("gesturestart", prevent);
-      el.removeEventListener("gesturechange", prevent);
-      el.removeEventListener("gestureend", prevent);
+      for (const el of gestureSafeElements) {
+        el.removeEventListener("gesturestart", prevent);
+        el.removeEventListener("gesturechange", prevent);
+        el.removeEventListener("gestureend", prevent);
+      }
     };
-  }, []);
+  }, [isMobile, chromeVisible]);
 
   useEffect(() => {
     const pending = pendingScrollAdjustRef.current;
@@ -1007,7 +1017,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                   "absolute left-0 right-0 z-50 grid grid-cols-[1fr_auto_1fr] items-center px-4 border-b border-border/60 bg-background/95 backdrop-blur text-foreground py-2 transition-opacity duration-200",
                   chromeVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
                 ].join(" ")}
-                style={{ top: mobileSafeTop }}
+                style={{ top: mobileSafeTop, touchAction: "pan-x pan-y" }}
                 aria-hidden={!chromeVisible}
               >
                 <div className="min-w-0 flex items-center gap-2 justify-self-start">
@@ -1360,7 +1370,11 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
         </div>
       </div>
 
-      <div className="relative h-full flex-none">
+      <div
+        ref={aiPaneContainerRef}
+        className="relative h-full flex-none"
+        style={isMobile ? { touchAction: "pan-x pan-y" } : undefined}
+      >
         {/* Mobile: AI drawer follows the same chrome/menu toggle as the top bar. */}
         {(!isMobile || chromeVisible) && (
           <AIAssistant
