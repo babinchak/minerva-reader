@@ -257,6 +257,25 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     if (!isEditingPage) setPageInput(String(n));
   };
 
+  // Restore reading position: scroll to initialPage when PDF loads
+  const hasScrolledToInitialRef = useRef(false);
+  const goToPageRef = useRef<(pageNumber: number) => void>(() => {});
+  useEffect(() => {
+    if (!pdfDoc || loading || hasScrolledToInitialRef.current) return;
+    const page = initialPage ?? 1;
+    if (page <= 1) {
+      hasScrolledToInitialRef.current = true;
+      return;
+    }
+    hasScrolledToInitialRef.current = true;
+    // Wait for layout to settle (mobile scale init, etc.) before scrolling
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        goToPageRef.current(page);
+      });
+    });
+  }, [pdfDoc, loading, initialPage]);
+
   useEffect(() => {
     // Keep current page in sync as we scroll.
     // Re-run when isTocOpen changes: on mobile, the reader (and scroll div) unmount when TOC opens,
@@ -287,7 +306,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     const page = pendingTocPageRef.current;
     pendingTocPageRef.current = null;
     requestAnimationFrame(() => {
-      goToPage(page);
+      goToPageRef.current(page);
     });
   }, [isMobile, isTocOpen]);
 
@@ -358,6 +377,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     setCurrentPage(clamped);
     setPageInput(String(clamped));
   };
+  goToPageRef.current = goToPage;
 
   const commitPageInput = () => {
     const parsed = Number.parseInt(pageInput, 10);
@@ -1398,6 +1418,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     isMobile={isMobile}
                     mobilePagedMode={isMobilePagedMode}
                     itemTextsCacheRef={itemTextsCacheRef}
+                    initialPage={initialPage}
                   />
                 ))}
               </div>
@@ -1723,6 +1744,7 @@ interface PdfPageProps {
   isMobile?: boolean;
   mobilePagedMode?: boolean;
   itemTextsCacheRef?: RefObject<Map<number, string[]>>;
+  initialPage?: number;
 }
 
 function LazyPdfPage({
@@ -1733,9 +1755,13 @@ function LazyPdfPage({
   isMobile,
   mobilePagedMode,
   itemTextsCacheRef,
+  initialPage,
 }: PdfPageProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
+  // Pre-render pages 1, 2, and initialPage (for reading position restoration)
+  const shouldRenderInitially =
+    pageNumber <= 2 || (initialPage != null && initialPage >= 1 && pageNumber === initialPage);
+  const [shouldRender, setShouldRender] = useState(shouldRenderInitially);
 
   useEffect(() => {
     const el = hostRef.current;
