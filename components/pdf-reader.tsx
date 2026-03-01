@@ -52,6 +52,19 @@ function isPdfDebugEnabled() {
   }
 }
 
+/** Verbose logs (page:render:*, scale:state, scrollAdjust) - opt-in to avoid console spam. */
+function isPdfDebugVerboseEnabled() {
+  if (!isPdfDebugEnabled()) return false;
+  try {
+    const query = new URLSearchParams(window.location.search);
+    if (query.has("pdfDebugVerbose")) return true;
+    if (window.localStorage.getItem("pdfDebugVerbose") === "1") return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
@@ -143,29 +156,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const [renderScale, setRenderScale] = useState(1);
   const isAtMobileMinScale = isMobile && renderScale <= MIN_RENDER_SCALE_MOBILE + 0.001;
   const isMobilePagedMode = isMobile;
-  const [gesture, setGesture] = useState<{ active: boolean; scale: number; tx: number; ty: number }>({
-    active: false,
-    scale: 1,
-    tx: 0,
-    ty: 0,
-  });
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
-  const pinchStartRef = useRef<
-    | {
-        startRenderScale: number;
-        startDist: number;
-        anchorX: number;
-        anchorY: number;
-        scrollLeft: number;
-        scrollTop: number;
-        scrollRectLeft: number;
-        scrollRectTop: number;
-        lastMidOffsetX: number;
-        lastMidOffsetY: number;
-      }
-    | null
-  >(null);
-  const lastCombinedScaleRef = useRef<number>(1);
   const pendingScrollAdjustRef = useRef<
     | {
         mode: "ratio";
@@ -174,6 +165,13 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
         midOffsetX: number;
         midOffsetY: number;
         ratio: number;
+      }
+    | {
+        mode: "relative";
+        scrollLeft: number;
+        scrollTop: number;
+        scrollWidth: number;
+        scrollHeight: number;
       }
     | {
         mode: "page-anchor";
@@ -200,7 +198,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   useEffect(() => {
     debugEnabledRef.current = isPdfDebugEnabled();
     if (!debugEnabledRef.current) return;
-    console.log("[PdfDebug] enabled. Dev mode logs by default; prod: use ?pdfDebug=1 or localStorage.pdfDebug=1");
+    console.log("[PdfDebug] enabled. For verbose page/scroll logs: ?pdfDebugVerbose=1 or localStorage.pdfDebugVerbose=1");
   }, []);
 
   useEffect(() => {
@@ -277,6 +275,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   }, [pdfDoc, loading, initialPage]);
 
   useEffect(() => {
+    // Mobile single-page: no scroll-based page navigation; use currentPage state.
+    if (isMobilePagedMode) return;
     // Keep current page in sync as we scroll.
     // Re-run when isTocOpen changes: on mobile, the reader (and scroll div) unmount when TOC opens,
     // so we must re-attach the listener when returning to the reader.
@@ -298,7 +298,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
       scroller.removeEventListener("scroll", onScroll);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfDoc, loading, isEditingPage, isTocOpen]);
+  }, [pdfDoc, loading, isEditingPage, isTocOpen, isMobilePagedMode]);
 
   // When closing mobile TOC, scroll to the page that was selected (reader was unmounted during selection).
   useEffect(() => {
@@ -358,6 +358,12 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   };
 
   const goToPage = (pageNumber: number) => {
+    if (isMobilePagedMode && pdfDoc) {
+      const clamped = Math.max(1, Math.min(pageNumber, pdfDoc.numPages));
+      setCurrentPage(clamped);
+      setPageInput(String(clamped));
+      return;
+    }
     const viewer = viewerRef.current;
     const scroller = scrollRef.current;
     if (!viewer || !scroller) return;
@@ -367,13 +373,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     const el = pages[clamped - 1];
     const scrollerRect = scroller.getBoundingClientRect();
     const pageRect = el.getBoundingClientRect();
-    if (isMobilePagedMode) {
-      const deltaX = pageRect.left - scrollerRect.left;
-      scroller.scrollLeft = scroller.scrollLeft + deltaX;
-    } else {
-      const deltaY = pageRect.top - scrollerRect.top;
-      scroller.scrollTop = scroller.scrollTop + deltaY - 12;
-    }
+    const deltaY = pageRect.top - scrollerRect.top;
+    scroller.scrollTop = scroller.scrollTop + deltaY - 12;
     setCurrentPage(clamped);
     setPageInput(String(clamped));
   };
@@ -497,6 +498,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
 
   useEffect(() => {
     if (!isMobile) return;
+    if (isMobilePagedMode) return;
     if (!pdfDoc) return;
     if (renderScale > MIN_RENDER_SCALE_MOBILE + 0.001) return;
 
@@ -518,7 +520,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
         scroller.scrollLeft = Math.min(Math.max(0, scroller.scrollLeft), maxScrollLeft);
       }
     });
-  }, [isMobile, pdfDoc, renderScale, MIN_RENDER_SCALE_MOBILE]);
+  }, [isMobile, isMobilePagedMode, pdfDoc, renderScale, MIN_RENDER_SCALE_MOBILE]);
 
   // iOS safe-area support is surprisingly inconsistent across Safari vs in-app webviews.
   // Avoid CSS `max()` here: if unsupported, the whole value becomes invalid and `top` falls back,
@@ -603,43 +605,19 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     };
   }, [pdfUrl, bookId]);
 
-  useEffect(() => {
-    if (!isMobile) return;
-    // iOS Safari emits non-standard gesture events for pinch.
-    // Prevent default so pinching the reader chrome doesn't trigger browser/OS zoom.
-    const gestureSafeElements = [
-      scrollRef.current,
-      toolbarRef.current,
-      aiPaneContainerRef.current,
-    ].filter((el): el is HTMLDivElement => Boolean(el));
-    if (gestureSafeElements.length === 0) return;
-    const prevent = (e: Event) => {
-      if (typeof e.cancelable === "boolean" && e.cancelable) e.preventDefault();
-    };
-    for (const el of gestureSafeElements) {
-      el.addEventListener("gesturestart", prevent, { passive: false });
-      el.addEventListener("gesturechange", prevent, { passive: false });
-      el.addEventListener("gestureend", prevent, { passive: false });
-    }
-    return () => {
-      for (const el of gestureSafeElements) {
-        el.removeEventListener("gesturestart", prevent);
-        el.removeEventListener("gesturechange", prevent);
-        el.removeEventListener("gestureend", prevent);
-      }
-    };
-  }, [isMobile, chromeVisible]);
+  // No custom gesture prevention on mobile - let Safari handle pinch zoom natively.
 
   useEffect(() => {
+    if (isMobilePagedMode) return;
     const pending = pendingScrollAdjustRef.current;
     if (!pending) return;
     pendingScrollAdjustRef.current = null;
 
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const scroller = scrollRef.current;
-        const viewer = viewerRef.current;
-        if (!scroller) return;
+    const doScrollAdjust = () => {
+      const scroller = scrollRef.current;
+      const viewer = viewerRef.current;
+      if (!scroller) return;
+      if (isPdfDebugVerboseEnabled()) {
         logPdfDebug("scrollAdjust:before", {
           pendingMode: pending.mode,
           scrollLeft: scroller.scrollLeft,
@@ -649,19 +627,21 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
           clientWidth: scroller.clientWidth,
           clientHeight: scroller.clientHeight,
         });
-        if (pending.mode === "page-anchor" && viewer) {
-          const pages = Array.from(viewer.querySelectorAll<HTMLElement>(".page"));
-          const pageEl = pages[pending.pageNumber - 1];
-          if (!pageEl) return;
+      }
+      if (pending.mode === "page-anchor" && viewer) {
+        const pages = Array.from(viewer.querySelectorAll<HTMLElement>(".page"));
+        const pageEl = pages[pending.pageNumber - 1];
+        if (!pageEl) return;
 
-          const scrollerRect = scroller.getBoundingClientRect();
-          const pageRect = pageEl.getBoundingClientRect();
-          const targetOffsetX = pageRect.width * pending.pageOffsetXRatio;
-          const targetOffsetY = pageRect.height * pending.pageOffsetYRatio;
-          scroller.scrollLeft =
-            scroller.scrollLeft + (pageRect.left - scrollerRect.left) + targetOffsetX - pending.midOffsetX;
-          scroller.scrollTop =
-            scroller.scrollTop + (pageRect.top - scrollerRect.top) + targetOffsetY - pending.midOffsetY;
+        const scrollerRect = scroller.getBoundingClientRect();
+        const pageRect = pageEl.getBoundingClientRect();
+        const targetOffsetX = pageRect.width * pending.pageOffsetXRatio;
+        const targetOffsetY = pageRect.height * pending.pageOffsetYRatio;
+        scroller.scrollLeft =
+          scroller.scrollLeft + (pageRect.left - scrollerRect.left) + targetOffsetX - pending.midOffsetX;
+        scroller.scrollTop =
+          scroller.scrollTop + (pageRect.top - scrollerRect.top) + targetOffsetY - pending.midOffsetY;
+        if (isPdfDebugVerboseEnabled()) {
           logPdfDebug("scrollAdjust:after-page-anchor", {
             pageNumber: pending.pageNumber,
             targetOffsetX,
@@ -671,12 +651,65 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             maxScrollLeft: Math.max(0, scroller.scrollWidth - scroller.clientWidth),
             maxScrollTop: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
           });
-          return;
         }
+        return;
+      }
 
-        if (pending.mode === "ratio") {
-          scroller.scrollLeft = pending.anchorX * pending.ratio - pending.midOffsetX;
-          scroller.scrollTop = pending.anchorY * pending.ratio - pending.midOffsetY;
+      if (pending.mode === "relative") {
+        // Preserve relative position (same % through document) - prevents page jumps on mobile.
+        const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+        const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const ratioX =
+          pending.scrollWidth > 0 ? pending.scrollLeft / pending.scrollWidth : 0;
+        const ratioY =
+          pending.scrollHeight > 0 ? pending.scrollTop / pending.scrollHeight : 0;
+        const newScrollLeft = Math.max(
+          0,
+          Math.min(ratioX * scroller.scrollWidth, maxScrollLeft),
+        );
+        const newScrollTop = Math.max(
+          0,
+          Math.min(ratioY * scroller.scrollHeight, maxScrollTop),
+        );
+        scroller.scrollLeft = newScrollLeft;
+        scroller.scrollTop = newScrollTop;
+        logPdfDebug("pinch:scrollAdjust", {
+          mode: "relative",
+          ratioX,
+          ratioY,
+          beforeScrollLeft: pending.scrollLeft,
+          beforeScrollTop: pending.scrollTop,
+          afterScrollLeft: newScrollLeft,
+          afterScrollTop: newScrollTop,
+          scrollWidth: scroller.scrollWidth,
+          scrollHeight: scroller.scrollHeight,
+        });
+      } else if (pending.mode === "ratio") {
+        const beforeLeft = scroller.scrollLeft;
+        const beforeTop = scroller.scrollTop;
+        const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+        const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const rawScrollLeft = pending.anchorX * pending.ratio - pending.midOffsetX;
+        const rawScrollTop = pending.anchorY * pending.ratio - pending.midOffsetY;
+        const newScrollLeft = Math.max(0, Math.min(rawScrollLeft, maxScrollLeft));
+        const newScrollTop = Math.max(0, Math.min(rawScrollTop, maxScrollTop));
+        scroller.scrollLeft = newScrollLeft;
+        scroller.scrollTop = newScrollTop;
+        logPdfDebug("pinch:scrollAdjust", {
+          anchorX: pending.anchorX,
+          anchorY: pending.anchorY,
+          ratio: pending.ratio,
+          beforeScrollLeft: beforeLeft,
+          beforeScrollTop: beforeTop,
+          afterScrollLeft: scroller.scrollLeft,
+          afterScrollTop: scroller.scrollTop,
+          scrollWidth: scroller.scrollWidth,
+          scrollHeight: scroller.scrollHeight,
+          maxScrollLeft: Math.max(0, scroller.scrollWidth - scroller.clientWidth),
+          maxScrollTop,
+          clientWidth: scroller.clientWidth,
+        });
+        if (isPdfDebugVerboseEnabled()) {
           logPdfDebug("scrollAdjust:after-ratio", {
             anchorX: pending.anchorX,
             anchorY: pending.anchorY,
@@ -687,12 +720,20 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             maxScrollTop: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
           });
         }
-      });
-    });
-  }, [renderScale]);
+      }
+    };
+
+    // Mobile pinch: wait for page re-renders to settle (layout changes when scale changes).
+    // Desktop: 2 rAFs is enough.
+    if (isMobile && (pending.mode === "ratio" || pending.mode === "relative")) {
+      setTimeout(() => requestAnimationFrame(doScrollAdjust), 200);
+    } else {
+      requestAnimationFrame(() => requestAnimationFrame(doScrollAdjust));
+    }
+  }, [renderScale, isMobile, isMobilePagedMode]);
 
   useEffect(() => {
-    if (!debugEnabledRef.current) return;
+    if (!debugEnabledRef.current || !isPdfDebugVerboseEnabled()) return;
     const scroller = scrollRef.current;
     const viewer = viewerRef.current;
     const pageEls = viewer ? Array.from(viewer.querySelectorAll<HTMLElement>(".page")) : [];
@@ -1233,56 +1274,24 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             <div
               className={`pdf-scroll-host absolute inset-0 bg-background ${
                 isMobilePagedMode
-                  ? "overflow-x-auto overflow-y-hidden overscroll-contain snap-x snap-mandatory"
+                  ? "overscroll-contain"
                   : "overflow-auto"
               }`}
               ref={scrollRef}
               style={
                 isMobilePagedMode
-                  ? { touchAction: "pan-x pan-y" }
+                  ? {
+                      // Let Safari handle pinch zoom natively - touch-action: auto allows it.
+                      touchAction: "auto",
+                      overflow: "auto",
+                    }
                   : isAtMobileMinScale
                     ? { overflowX: "hidden" }
                     : undefined
               }
               onPointerDown={(e) => {
               if (!isMobile) return;
-
-              // Global pinch-to-zoom (two pointers) across ALL pages.
-              // This updates a temporary transform for responsive feedback,
-              // then commits the new `renderScale` on release (re-rendering all pages).
-              const scroller = scrollRef.current;
-              if (!scroller) return;
               pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-              if (pointersRef.current.size === 2) {
-                const pts = Array.from(pointersRef.current.values());
-                const dx = pts[0].x - pts[1].x;
-                const dy = pts[0].y - pts[1].y;
-                const dist = Math.hypot(dx, dy) || 1;
-                const midClientX = (pts[0].x + pts[1].x) / 2;
-                const midClientY = (pts[0].y + pts[1].y) / 2;
-                const scrollRect = scroller.getBoundingClientRect();
-
-                const anchorX = scroller.scrollLeft + (midClientX - scrollRect.left);
-                const anchorY = scroller.scrollTop + (midClientY - scrollRect.top);
-
-                pinchStartRef.current = {
-                  startRenderScale: renderScale,
-                  startDist: dist,
-                  anchorX,
-                  anchorY,
-                  scrollLeft: scroller.scrollLeft,
-                  scrollTop: scroller.scrollTop,
-                  scrollRectLeft: scrollRect.left,
-                  scrollRectTop: scrollRect.top,
-                  lastMidOffsetX: midClientX - scrollRect.left,
-                  lastMidOffsetY: midClientY - scrollRect.top,
-                };
-                lastCombinedScaleRef.current = renderScale;
-                setGesture({ active: true, scale: 1, tx: 0, ty: 0 });
-              }
-
-              // Only consider single-pointer taps for the center-toggle gesture.
               if (e.isPrimary === false) return;
               tapRef.current = {
                 pointerId: e.pointerId,
@@ -1294,77 +1303,33 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             }}
             onPointerMove={(e) => {
               if (!isMobile) return;
-
-              // Global pinch move
               if (pointersRef.current.has(e.pointerId)) {
                 pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-                const start = pinchStartRef.current;
-                if (start && pointersRef.current.size === 2) {
-                  const pts = Array.from(pointersRef.current.values());
-                  const midClientX = (pts[0].x + pts[1].x) / 2;
-                  const midClientY = (pts[0].y + pts[1].y) / 2;
-                  const dx = pts[0].x - pts[1].x;
-                  const dy = pts[0].y - pts[1].y;
-                  const dist = Math.hypot(dx, dy) || 1;
-
-                  const rawCombined = start.startRenderScale * (dist / start.startDist);
-                  const combined = clamp(rawCombined, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
-                  lastCombinedScaleRef.current = combined;
-
-                  const gScale = combined / start.startRenderScale;
-
-                  const midOffsetX = midClientX - start.scrollRectLeft;
-                  const midOffsetY = midClientY - start.scrollRectTop;
-                  start.lastMidOffsetX = midOffsetX;
-                  start.lastMidOffsetY = midOffsetY;
-
-                  // Keep the anchor point under the midpoint stable:
-                  // screenX = rectLeft + (tx + gScale*anchorX - scrollLeft)
-                  const tx = midOffsetX + start.scrollLeft - gScale * start.anchorX;
-                  const ty = midOffsetY + start.scrollTop - gScale * start.anchorY;
-                  setGesture({ active: true, scale: gScale, tx, ty });
-                }
               }
-
               const t = tapRef.current;
               if (!t || t.pointerId !== e.pointerId) return;
               if (Math.hypot(e.clientX - t.x, e.clientY - t.y) > 10) t.moved = true;
             }}
             onPointerUp={(e) => {
               if (!isMobile) return;
-
-              // End global pinch if needed (commit `renderScale` so all pages re-render).
-              if (pointersRef.current.has(e.pointerId)) {
-                pointersRef.current.delete(e.pointerId);
-                if (pointersRef.current.size < 2 && pinchStartRef.current) {
-                  const start = pinchStartRef.current;
-                  pinchStartRef.current = null;
-
-                  const nextRenderScale = clamp(
-                    lastCombinedScaleRef.current,
-                    MIN_RENDER_SCALE,
-                    MAX_RENDER_SCALE,
-                  );
-                  const ratio = nextRenderScale / start.startRenderScale;
-
-                  pendingScrollAdjustRef.current = {
-                    mode: "ratio",
-                    anchorX: start.anchorX,
-                    anchorY: start.anchorY,
-                    midOffsetX: start.lastMidOffsetX,
-                    midOffsetY: start.lastMidOffsetY,
-                    ratio,
-                  };
-
-                  setGesture({ active: false, scale: 1, tx: 0, ty: 0 });
-                  setRenderScale(nextRenderScale);
-                }
-              }
-
+              pointersRef.current.delete(e.pointerId);
               const t = tapRef.current;
               tapRef.current = null;
               if (!t || t.pointerId !== e.pointerId) return;
+
+              // Swipe-to-change-page (mobile single-page only): single-finger horizontal swipe
+              if (isMobilePagedMode && pdfDoc) {
+                const dx = e.clientX - t.x;
+                const dy = e.clientY - t.y;
+                if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+                  const nextPage = dx > 0
+                    ? Math.max(1, currentPage - 1)
+                    : Math.min(pdfDoc.numPages, currentPage + 1);
+                  setCurrentPage(nextPage);
+                  if (!isEditingPage) setPageInput(String(nextPage));
+                  return;
+                }
+              }
 
               const dt = Date.now() - t.t;
               if (t.moved || dt > 350) return;
@@ -1384,8 +1349,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             }}
             onPointerCancel={() => {
               pointersRef.current.clear();
-              pinchStartRef.current = null;
-              setGesture({ active: false, scale: 1, tx: 0, ty: 0 });
               tapRef.current = null;
             }}
             >
@@ -1397,30 +1360,35 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     ? "flex h-full w-full items-center py-0"
                     : `py-6 ${isMobile ? "space-y-1 w-full min-w-0 max-w-none" : "space-y-3 min-w-max"}`
                 }`}
-                style={
-                  gesture.active
-                    ? {
-                        transform: `translate3d(${gesture.tx}px, ${gesture.ty}px, 0) scale(${gesture.scale})`,
-                        transformOrigin: "0 0",
-                        willChange: "transform",
-                      }
-                    : undefined
-                }
                 onDoubleClick={() => setRenderScale(1)}
               >
-                {Array.from({ length: pdfDoc.numPages }, (_, idx) => (
-                  <LazyPdfPage
-                    key={idx + 1}
-                    pdf={pdfDoc}
-                    pageNumber={idx + 1}
-                    scale={renderScale}
-                    scrollContainerRef={scrollRef}
-                    isMobile={isMobile}
-                    mobilePagedMode={isMobilePagedMode}
-                    itemTextsCacheRef={itemTextsCacheRef}
-                    initialPage={initialPage}
-                  />
-                ))}
+                {isMobilePagedMode ? (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <PdfPage
+                      pdf={pdfDoc}
+                      pageNumber={currentPage}
+                      scale={renderScale}
+                      scrollContainerRef={scrollRef}
+                      isMobile={isMobile}
+                      mobilePagedMode={true}
+                      itemTextsCacheRef={itemTextsCacheRef}
+                    />
+                  </div>
+                ) : (
+                  Array.from({ length: pdfDoc.numPages }, (_, idx) => (
+                    <LazyPdfPage
+                      key={idx + 1}
+                      pdf={pdfDoc}
+                      pageNumber={idx + 1}
+                      scale={renderScale}
+                      scrollContainerRef={scrollRef}
+                      isMobile={isMobile}
+                      mobilePagedMode={isMobilePagedMode}
+                      itemTextsCacheRef={itemTextsCacheRef}
+                      initialPage={initialPage}
+                    />
+                  ))
+                )}
               </div>
               </div>
             </div>
@@ -1745,6 +1713,7 @@ interface PdfPageProps {
   mobilePagedMode?: boolean;
   itemTextsCacheRef?: RefObject<Map<number, string[]>>;
   initialPage?: number;
+  onRenderComplete?: () => void;
 }
 
 function LazyPdfPage({
@@ -1786,10 +1755,10 @@ function LazyPdfPage({
         // they must stay rendered for the initial scroll-to-position to work.
         if (!mobilePagedMode && inInitialPageRange && !isIntersecting) return;
         // Mobile paged + desktop: unmount when far from viewport to avoid memory bloat.
-        // rootMargin keeps ~3–4 pages buffered each side before unmount.
+        // Mobile single-page: buffer ~1 page each side for smooth swipes. Desktop: ~3–4 pages.
         setShouldRender(isIntersecting);
       },
-      { root, rootMargin: mobilePagedMode ? "0px 1400px" : "1400px 0px", threshold: 0 },
+      { root, rootMargin: mobilePagedMode ? "0px 450px" : "1400px 0px", threshold: 0 },
     );
 
     obs.observe(el);
@@ -1833,6 +1802,7 @@ function PdfPage({
   isMobile,
   mobilePagedMode,
   itemTextsCacheRef,
+  onRenderComplete,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerHostRef = useRef<HTMLDivElement | null>(null);
@@ -1847,9 +1817,9 @@ function PdfPage({
     } | null = null;
 
     const render = async () => {
-      const debug = isPdfDebugEnabled();
+      const debugVerbose = isPdfDebugVerboseEnabled();
       const renderStart = typeof performance !== "undefined" ? performance.now() : Date.now();
-      if (debug) {
+      if (debugVerbose) {
         console.log("[PdfDebug] page:render:start", {
           pageNumber,
           scale,
@@ -2019,7 +1989,7 @@ function PdfPage({
       }) as unknown as { cancel?: () => void; render?: (opts: { viewport: unknown }) => Promise<unknown> };
 
       await textLayerBuilder?.render?.({ viewport });
-      if (debug) {
+      if (debugVerbose) {
         const renderEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
         console.log("[PdfDebug] page:render:done", {
           pageNumber,
@@ -2030,6 +2000,9 @@ function PdfPage({
           durationMs: Math.round(renderEnd - renderStart),
         });
       }
+      if (!cancelled && onRenderComplete) {
+        onRenderComplete();
+      }
     };
 
     render().catch(() => {});
@@ -2039,7 +2012,7 @@ function PdfPage({
       if (renderTask?.cancel) renderTask.cancel();
       textLayerBuilder?.cancel?.();
     };
-  }, [pdf, pageNumber, scale, isMobile, scrollContainerRef, itemTextsCacheRef]);
+  }, [pdf, pageNumber, scale, isMobile, scrollContainerRef, itemTextsCacheRef, onRenderComplete]);
 
   return (
     <div className={mobilePagedMode ? "w-full h-full flex items-center justify-center" : "w-full flex justify-center"}>
