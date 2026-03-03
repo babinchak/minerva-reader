@@ -83,6 +83,11 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const [pageInput, setPageInput] = useState(String(initialPage ?? 1));
   const [isEditingPage, setIsEditingPage] = useState(false);
 
+  // Mobile paged mode: slide animation. We only commit currentPage after the animation ends to avoid glitches.
+  const [mobileTransitionToPage, setMobileTransitionToPage] = useState<number | null>(null);
+  const [mobileSlidePosition, setMobileSlidePosition] = useState<number>(0); // 0 = first slot, -50 = second slot (percent of strip width)
+  const [mobileSlideTransitionEnabled, setMobileSlideTransitionEnabled] = useState(false);
+
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<"normal" | "semantic">("normal");
   const [searchQuery, setSearchQuery] = useState("");
@@ -360,8 +365,22 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const goToPage = (pageNumber: number) => {
     if (isMobilePagedMode && pdfDoc) {
       const clamped = Math.max(1, Math.min(pageNumber, pdfDoc.numPages));
-      setCurrentPage(clamped);
-      setPageInput(String(clamped));
+      if (clamped === currentPage) return;
+      // Block new transition while one is in progress to prevent glitches
+      if (mobileTransitionToPage != null) return;
+      const direction = clamped > currentPage ? "next" : "prev";
+      const fromPosition = direction === "next" ? 0 : -50;
+      const toPosition = direction === "next" ? -50 : 0;
+      setMobileTransitionToPage(clamped);
+      setMobileSlidePosition(fromPosition);
+      setMobileSlideTransitionEnabled(false);
+      // Trigger slide after paint: enable transition then set target position
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setMobileSlideTransitionEnabled(true);
+          setMobileSlidePosition(toPosition);
+        });
+      });
       return;
     }
     const viewer = viewerRef.current;
@@ -1325,8 +1344,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                   const nextPage = dx > 0
                     ? Math.max(1, currentPage - 1)
                     : Math.min(pdfDoc.numPages, currentPage + 1);
-                  setCurrentPage(nextPage);
-                  if (!isEditingPage) setPageInput(String(nextPage));
+                  if (mobileTransitionToPage == null) goToPage(nextPage);
                   return;
                 }
               }
@@ -1363,17 +1381,73 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                 onDoubleClick={() => setRenderScale(1)}
               >
                 {isMobilePagedMode ? (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <PdfPage
-                      pdf={pdfDoc}
-                      pageNumber={currentPage}
-                      scale={renderScale}
-                      scrollContainerRef={scrollRef}
-                      isMobile={isMobile}
-                      mobilePagedMode={true}
-                      itemTextsCacheRef={itemTextsCacheRef}
-                    />
-                  </div>
+                  mobileTransitionToPage == null ? (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <PdfPage
+                        pdf={pdfDoc}
+                        pageNumber={currentPage}
+                        scale={renderScale}
+                        scrollContainerRef={scrollRef}
+                        isMobile={isMobile}
+                        mobilePagedMode={true}
+                        itemTextsCacheRef={itemTextsCacheRef}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-full w-full overflow-hidden">
+                      <div
+                        className="flex h-full w-full shrink-0"
+                        style={{
+                          width: "200%",
+                          transform: `translateX(${mobileSlidePosition}%)`,
+                          transition: mobileSlideTransitionEnabled
+                            ? "transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)"
+                            : "none",
+                        }}
+                        onTransitionEnd={() => {
+                          if (mobileTransitionToPage == null) return;
+                          setCurrentPage(mobileTransitionToPage);
+                          setPageInput(String(mobileTransitionToPage));
+                          setMobileTransitionToPage(null);
+                          setMobileSlidePosition(0);
+                          setMobileSlideTransitionEnabled(false);
+                        }}
+                      >
+                        {(() => {
+                          const toPage = mobileTransitionToPage;
+                          const next = toPage > currentPage;
+                          const leftPage = next ? currentPage : toPage;
+                          const rightPage = next ? toPage : currentPage;
+                          return (
+                            <>
+                              <div className="flex h-full w-1/2 shrink-0 items-center justify-center">
+                                <PdfPage
+                                  pdf={pdfDoc}
+                                  pageNumber={leftPage}
+                                  scale={renderScale}
+                                  scrollContainerRef={scrollRef}
+                                  isMobile={isMobile}
+                                  mobilePagedMode={true}
+                                  itemTextsCacheRef={itemTextsCacheRef}
+                                />
+                              </div>
+                              <div className="flex h-full w-1/2 shrink-0 items-center justify-center">
+                                <PdfPage
+                                  pdf={pdfDoc}
+                                  pageNumber={rightPage}
+                                  scale={renderScale}
+                                  scrollContainerRef={scrollRef}
+                                  isMobile={isMobile}
+                                  mobilePagedMode={true}
+                                  itemTextsCacheRef={itemTextsCacheRef}
+                                />
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )
                 ) : (
                   Array.from({ length: pdfDoc.numPages }, (_, idx) => (
                     <LazyPdfPage
