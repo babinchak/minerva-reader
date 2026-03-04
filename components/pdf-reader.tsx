@@ -624,7 +624,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     };
   }, [pdfUrl, bookId]);
 
-  // No custom gesture prevention on mobile - let Safari handle pinch zoom natively.
+  // Mobile: native pinch zoom disabled via touch-action on scroll host; use app zoom buttons instead.
 
   useEffect(() => {
     if (isMobilePagedMode) return;
@@ -1290,6 +1290,44 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             </>
           )}
           <div className="relative flex-1 min-h-0 bg-background">
+            {/* Mobile: floating zoom buttons, top-right overlay on PDF, visible only when chrome is active */}
+            {isMobile && (
+              <div
+                className={[
+                  "fixed z-40 flex flex-col gap-1 rounded-lg border border-border bg-background backdrop-blur-sm p-1 shadow-md transition-opacity duration-200",
+                  "text-foreground [&_button]:text-foreground [&_button:hover]:bg-accent [&_button:hover]:text-accent-foreground",
+                  chromeVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
+                ].join(" ")}
+                style={{
+                  top: "calc(env(safe-area-inset-top, 0px) + 56px + 8px)",
+                  right: 12,
+                  left: "auto",
+                  touchAction: "manipulation",
+                }}
+                aria-hidden={!chromeVisible}
+              >
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 border-border bg-background"
+                  onClick={() => zoomBy(ZOOM_STEP)}
+                  aria-label="Zoom in"
+                  title="Zoom in"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 border-border bg-background"
+                  onClick={() => zoomBy(-ZOOM_STEP)}
+                  aria-label="Zoom out"
+                  title="Zoom out"
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             <div
               className={`pdf-scroll-host absolute inset-0 bg-background ${
                 isMobilePagedMode
@@ -1300,8 +1338,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               style={
                 isMobilePagedMode
                   ? {
-                      // Let Safari handle pinch zoom natively - touch-action: auto allows it.
-                      touchAction: "auto",
+                      // Disable native pinch zoom; use app zoom buttons instead.
+                      touchAction: "pan-x pan-y",
                       overflow: "auto",
                     }
                   : isAtMobileMinScale
