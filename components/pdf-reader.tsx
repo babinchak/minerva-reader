@@ -1374,6 +1374,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               tapRef.current = null;
               if (!t || t.pointerId !== e.pointerId) return;
 
+              // Skip swipe/tap handling when user was selecting text (avoids page change on highlight end)
+              const sel = window.getSelection();
+              if (sel && sel.toString().trim().length > 0) return;
+
               // Swipe-to-change-page (mobile single-page only): single-finger horizontal swipe
               if (isMobilePagedMode && pdfDoc) {
                 const dx = e.clientX - t.x;
