@@ -1394,14 +1394,19 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               const target = e.target as HTMLElement | null;
               if (target?.closest("button,a,input,textarea,select,[role='button']")) return;
 
-              // Only toggle when tapping near the center of the viewport.
-              const cx0 = window.innerWidth * 0.25;
-              const cx1 = window.innerWidth * 0.75;
-              const cy0 = window.innerHeight * 0.25;
-              const cy1 = window.innerHeight * 0.75;
-              if (e.clientX < cx0 || e.clientX > cx1 || e.clientY < cy0 || e.clientY > cy1) return;
-
-              setChromeVisible((v) => !v);
+              // Mobile tap zones: left third = prev, right third = next, middle third = toggle UI
+              const w = window.innerWidth;
+              const third = w / 3;
+              const x = e.clientX;
+              if (x < third && pdfDoc) {
+                const prevPage = Math.max(1, currentPage - 1);
+                if (prevPage !== currentPage && mobileTransitionToPage == null) goToPage(prevPage);
+              } else if (x > third * 2 && pdfDoc) {
+                const nextPage = Math.min(pdfDoc.numPages, currentPage + 1);
+                if (nextPage !== currentPage && mobileTransitionToPage == null) goToPage(nextPage);
+              } else {
+                setChromeVisible((v) => !v);
+              }
             }}
             onPointerCancel={() => {
               pointersRef.current.clear();
