@@ -1413,19 +1413,19 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
               tapRef.current = null;
             }}
             >
-              <div className={isMobilePagedMode ? "w-full h-full" : isMobile ? "flex justify-center w-full" : "w-max min-w-full mx-auto"}>
+              <div className={isMobilePagedMode ? `w-full ${isAtMobileMinScale ? "h-full" : "min-h-full"}` : isMobile ? "flex justify-center w-full" : "w-max min-w-full mx-auto"}>
               <div
                 ref={viewerRef}
                 className={`pdfViewer ${
                   isMobilePagedMode
-                    ? "flex h-full w-full items-center py-0"
+                    ? `flex w-full items-center justify-center py-0 ${isAtMobileMinScale ? "h-full" : "min-h-full"}`
                     : `py-6 ${isMobile ? "space-y-1 w-full min-w-0 max-w-none" : "space-y-3 min-w-max"}`
                 }`}
                 onDoubleClick={() => setRenderScale(1)}
               >
                 {isMobilePagedMode ? (
                   mobileTransitionToPage == null ? (
-                    <div className="flex h-full w-full items-center justify-center">
+                    <div className={`flex w-full items-center justify-center ${isAtMobileMinScale ? "h-full" : "min-h-full"}`}>
                       <PdfPage
                         pdf={pdfDoc}
                         pageNumber={currentPage}
@@ -1433,6 +1433,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                         scrollContainerRef={scrollRef}
                         isMobile={isMobile}
                         mobilePagedMode={true}
+                        fitViewport={isAtMobileMinScale}
                         itemTextsCacheRef={itemTextsCacheRef}
                       />
                     </div>
@@ -1471,6 +1472,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                                   scrollContainerRef={scrollRef}
                                   isMobile={isMobile}
                                   mobilePagedMode={true}
+                                  fitViewport={isAtMobileMinScale}
                                   itemTextsCacheRef={itemTextsCacheRef}
                                 />
                               </div>
@@ -1482,6 +1484,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                                   scrollContainerRef={scrollRef}
                                   isMobile={isMobile}
                                   mobilePagedMode={true}
+                                  fitViewport={isAtMobileMinScale}
                                   itemTextsCacheRef={itemTextsCacheRef}
                                 />
                               </div>
@@ -1828,6 +1831,7 @@ interface PdfPageProps {
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
   isMobile?: boolean;
   mobilePagedMode?: boolean;
+  fitViewport?: boolean;
   itemTextsCacheRef?: RefObject<Map<number, string[]>>;
   initialPage?: number;
   onRenderComplete?: () => void;
@@ -1918,6 +1922,7 @@ function PdfPage({
   scrollContainerRef,
   isMobile,
   mobilePagedMode,
+  fitViewport,
   itemTextsCacheRef,
   onRenderComplete,
 }: PdfPageProps) {
@@ -2132,7 +2137,7 @@ function PdfPage({
   }, [pdf, pageNumber, scale, isMobile, scrollContainerRef, itemTextsCacheRef, onRenderComplete]);
 
   return (
-    <div className={mobilePagedMode ? "w-full h-full flex items-center justify-center" : "w-full flex justify-center"}>
+    <div className={mobilePagedMode ? `w-full flex items-center justify-center ${fitViewport ? "h-full" : "min-h-full shrink-0"}` : "w-full flex justify-center"}>
       <div
         ref={pageContainerRef}
         className={`page relative bg-white ${isMobile ? "max-w-[896px]" : ""}`}
