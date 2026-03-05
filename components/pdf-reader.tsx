@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { AIAssistant } from "@/components/ai-assistant";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
+import { hapticLight } from "@/lib/haptic";
 import { getCachedPdf, setCachedPdf } from "@/lib/pdf-cache";
 
 type PDFDocumentLoadingTask = {
@@ -129,6 +130,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
 
   const toggleBookmark = () => {
     if (initialBookmarks === undefined) return;
+    hapticLight();
     const page = currentPage;
     setBookmarks((prev) => {
       const wasBookmarked = prev.includes(page);
@@ -948,7 +950,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     variant="ghost"
                     size="icon"
                     className="-ml-2 shrink-0"
-                    onClick={() => router.back()}
+                    onClick={() => {
+                      hapticLight();
+                      router.back();
+                    }}
                     aria-label="Back"
                   >
                     <ArrowLeft className="h-5 w-5" />
@@ -1156,7 +1161,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
                     variant="ghost"
                     size="icon"
                     className="-ml-2 shrink-0 text-foreground hover:bg-accent/80 hover:text-accent-foreground"
-                    onClick={() => router.back()}
+                    onClick={() => {
+                      hapticLight();
+                      router.back();
+                    }}
                     aria-label="Back"
                   >
                     <ArrowLeft className="h-5 w-5" />

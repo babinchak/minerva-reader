@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIAgentPanel, type AIAgentPanelProps } from "@/components/ai-agent-pane";
+import { hapticSnap } from "@/lib/haptic";
 
 type MobileDrawerMode = "closed" | "quick" | "half" | "full";
 
@@ -212,7 +213,10 @@ export function AIBottomDrawer({
     snapToMode(heightPx, velocityY);
   };
 
-  const close = () => setMode(selectionExists || minMode === "quick" ? "quick" : "closed");
+  const close = () => {
+    hapticSnap();
+    setMode(selectionExists || minMode === "quick" ? "quick" : "closed");
+  };
 
   const showBackdrop = mode === "half" || mode === "full" || (isDragging && heightPx > quickHeight);
 

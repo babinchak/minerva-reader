@@ -15,6 +15,7 @@ import {
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useAppSelector, useAppDispatch, setActionOpen } from "@edrlab/thorium-web/epub";
+import { hapticLight } from "@/lib/haptic";
 
 interface EpubReaderToolbarProps {
   onRequestAiRun: (action: "page" | "selection") => void;
@@ -85,7 +86,10 @@ export function EpubReaderToolbar({
           variant="ghost"
           size="icon"
           className="-ml-2 shrink-0"
-          onClick={() => router.back()}
+          onClick={() => {
+            hapticLight();
+            router.back();
+          }}
           aria-label="Back"
         >
           <ArrowLeft className="h-5 w-5" />

@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { hapticLight, hapticHeader } from "@/lib/haptic";
 
 const DEFAULT_MAX_EXPLAIN_SELECTION_CHARS = 4000;
 const MAX_EXPLAIN_SELECTION_CHARS = (() => {
@@ -836,7 +837,10 @@ export function AIAgentPanel({
     if (!input.trim() || isLoading) return;
     if (sendingRef.current) return;
     sendingRef.current = true;
+    hapticLight();
     onActionStart?.();
+    // "Streaming started" – satisfying burst in same sync stack (only way to work on iOS)
+    hapticHeader();
 
     const userInput = input;
     setInput("");
@@ -1191,7 +1195,6 @@ export function AIAgentPanel({
   const handleExplain = useCallback(async (action: "page" | "selection") => {
     let msgCount = 0;
     if (!bookId || isLoading) return;
-    onActionStart?.();
 
     const isPdf = bookType === "pdf";
     if (!rawManifest && !isPdf) return;
@@ -1211,6 +1214,10 @@ export function AIAgentPanel({
     const isExplainPage = action === "page";
     const isExplainSelectionNow = action === "selection";
     if (isExplainSelectionNow && !selectionExists) return;
+
+    hapticLight();
+    onActionStart?.();
+    hapticHeader();
 
     // If action says "page", but we are in an EPUB, we do a best-effort visible-context extraction.
     // For PDF we use the existing page-context logic.

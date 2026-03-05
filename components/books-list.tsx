@@ -1,7 +1,6 @@
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { createClient } from "@/lib/supabase/server";
-import { BookOpen, User } from "lucide-react";
-import Link from "next/link";
+import { BookCard } from "@/components/book-card";
 
 /** Format author string for display: split by pipe, join with ", " */
 function formatAuthorDisplay(author: string | null): string {
@@ -69,34 +68,13 @@ export async function BooksList() {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
       {userBooks.map((book) => (
-        <Link
+        <BookCard
           key={book.id}
-          href={`/read/${book.id}`}
-          className="group flex flex-col rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50"
-        >
-          <div className="mb-3 aspect-[2/3] w-full overflow-hidden rounded-md bg-muted shadow-sm">
-            {book.coverUrl ? (
-              <img
-                src={book.coverUrl}
-                alt={`Cover of ${book.title}`}
-                className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <BookOpen className="h-12 w-12 text-muted-foreground" />
-              </div>
-            )}
-          </div>
-          <h3 className="line-clamp-2 font-medium text-foreground group-hover:text-primary">
-            {book.title}
-          </h3>
-          {book.author && (
-            <p className="mt-0.5 line-clamp-1 flex items-center gap-1 text-xs text-muted-foreground">
-              <User className="h-3 w-3 shrink-0" />
-              <span className="truncate">{formatAuthorDisplay(book.author)}</span>
-            </p>
-          )}
-        </Link>
+          id={book.id}
+          title={book.title}
+          authorDisplay={formatAuthorDisplay(book.author)}
+          coverUrl={book.coverUrl}
+        />
       ))}
     </div>
   );
