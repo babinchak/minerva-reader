@@ -1720,63 +1720,59 @@ export function AIAgentPanel({
                 isLastMessage &&
                 message.role === "assistant" &&
                 !message.content.trim();
-              return (
-            <div
-              key={message.id}
-              className={`flex flex-col gap-2 ${message.role === "user" ? "items-end" : "items-start"}`}
-            >
-              {message.role === "assistant" &&
-                message.toolCalls &&
-                message.toolCalls.length > 0 && (
-                  <div className="w-full max-w-[80%] text-left">
-                    <ToolCallSteps toolCalls={message.toolCalls} />
+              if (message.role === "user") {
+                return (
+                  <div key={message.id} className="flex flex-col gap-2 items-end">
+                    <div className="flex justify-end w-full max-w-[85%]">
+                      <Card className="p-3 bg-primary text-primary-foreground">
+                        <p className="text-sm whitespace-pre-wrap break-words">
+                          {message.content}
+                        </p>
+                        {message.selectionPositionLabel && (
+                          <div className="mt-2">
+                            <span
+                              title={message.selectionPositionTitle}
+                              className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium text-primary-foreground/80 border-primary-foreground/40 bg-primary-foreground/10"
+                            >
+                              {message.selectionPositionLabel}
+                            </span>
+                          </div>
+                        )}
+                      </Card>
+                    </div>
                   </div>
-                )}
-              <div
-                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"} w-full max-w-[80%]`}
-              >
-                <Card
-                  className={`p-3 ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground select-text"
-                  }`}
-                >
-                  {message.role === "assistant" ? (
-                    <>
-                      {message.content.trim() ? (
-                        <Markdown content={message.content} />
-                      ) : isStreaming ? (
-                        <div className="flex gap-1">
-                          <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
-                          <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
-                          <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="text-sm whitespace-pre-wrap break-words">
-                      {message.content}
-                    </p>
-                  )}
-                  {message.selectionPositionLabel && (
-                    <div className="mt-2">
-                      <span
-                        title={message.selectionPositionTitle}
-                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
-                          message.role === "user"
-                            ? "text-primary-foreground/80"
-                            : "text-foreground/80"
-                        } border-primary/40 bg-primary/10`}
-                      >
-                        {message.selectionPositionLabel}
-                      </span>
+                );
+              }
+              return (
+                <div key={message.id} className="flex flex-col gap-2 w-full">
+                  {message.toolCalls && message.toolCalls.length > 0 && (
+                    <div className="w-full text-left">
+                      <ToolCallSteps toolCalls={message.toolCalls} />
                     </div>
                   )}
-                </Card>
-              </div>
-            </div>
-          );
+                  <div className="w-full text-foreground select-text">
+                    {message.content.trim() ? (
+                      <Markdown content={message.content} />
+                    ) : isStreaming ? (
+                      <div className="flex gap-1">
+                        <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
+                        <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
+                        <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
+                      </div>
+                    ) : null}
+                    {message.selectionPositionLabel && (
+                      <div className="mt-2">
+                        <span
+                          title={message.selectionPositionTitle}
+                          className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium text-foreground/80 border-border bg-muted"
+                        >
+                          {message.selectionPositionLabel}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
             });
           })()}
         </div>
