@@ -4,7 +4,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Upload, CheckCircle2, XCircle, Loader2, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import { CREDITS_REFRESH_EVENT } from '@/lib/credits-refresh';
 
@@ -16,6 +24,7 @@ export function UploadBookForm({
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [alreadyInLibraryOpen, setAlreadyInLibraryOpen] = useState(false);
   const [uploadLimit, setUploadLimit] = useState<{
     booksUploadedThisWeek: number;
     booksUploadLimit: number;
@@ -74,11 +83,12 @@ export function UploadBookForm({
         throw new Error(data.error || 'Upload failed');
       }
 
-      setMessage(data.duplicate 
-        ? `Book already exists: ${data.message}`
-        : `Success: ${data.message}`
-      );
-      onSuccess?.();
+      if (data.alreadyInLibrary) {
+        setAlreadyInLibraryOpen(true);
+      } else {
+        setMessage(data.duplicate ? data.message : `Success: ${data.message}`);
+        onSuccess?.();
+      }
       setFile(null);
       const fileInput = document.getElementById('book-file') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
@@ -155,6 +165,23 @@ export function UploadBookForm({
               <p className="text-sm">{error}</p>
             </div>
           )}
+
+          <Dialog open={alreadyInLibraryOpen} onOpenChange={setAlreadyInLibraryOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5" />
+                  Already in library
+                </DialogTitle>
+                <DialogDescription>
+                  You already have this book in your library. No need to upload it again.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button onClick={() => setAlreadyInLibraryOpen(false)}>OK</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </form>
   );
 

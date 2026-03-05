@@ -101,7 +101,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         book_id: existingBook.id,
         duplicate: true,
-        message: "Book already exists and has been added to your library"
+        alreadyInLibrary: !!existingLink,
+        message: existingLink
+          ? "You already have this book in your library"
+          : "Book already exists and has been added to your library",
       });
     }
 
