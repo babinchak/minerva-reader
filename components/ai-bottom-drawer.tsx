@@ -290,8 +290,8 @@ export function AIBottomDrawer({
               showSelectionChip={panelVisibility.showChip}
               onClose={close}
               onActionStart={() => {
-                // If the user runs an action from the quick state, expand so they can see the response.
-                if (mode === "quick") setMode("half");
+                // When user sends a message (Explain selection, typed question, etc.), expand to full so they can see the response.
+                if (mode === "quick" || mode === "half") setMode("full");
               }}
               className="flex-1 flex flex-col min-h-0"
             />
