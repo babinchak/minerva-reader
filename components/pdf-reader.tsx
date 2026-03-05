@@ -215,6 +215,13 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     setChromeVisible(!isMobile);
   }, [isMobile]);
 
+  useEffect(() => {
+    // Mobile: when user selects text and UI is hidden, show it so Explain selection is visible.
+    if (isMobile && !chromeVisible && selectionExists) {
+      setChromeVisible(true);
+    }
+  }, [isMobile, chromeVisible, selectionExists]);
+
   const getCurrentPageNumberFromViewport = () => {
     const scroller = scrollRef.current;
     const viewer = viewerRef.current;
