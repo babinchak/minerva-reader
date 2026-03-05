@@ -20,8 +20,8 @@ export interface AIBottomDrawerProps
    */
   initialMode?: MobileDrawerMode;
   /**
-   * Prevent the drawer from being fully closed (useful for "peek" UIs).
-   * Defaults to "closed".
+   * Prevent the drawer from being fully closed. "quick" keeps the input visible.
+   * Defaults to "quick" so users can always access the AI.
    */
   minMode?: Extract<MobileDrawerMode, "closed" | "quick">;
 }
@@ -39,7 +39,7 @@ const SNAP_DURATION_MS = 280;
 export function AIBottomDrawer({
   selectedText,
   initialMode,
-  minMode = "closed",
+  minMode = "quick",
   ...panelProps
 }: AIBottomDrawerProps) {
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
@@ -60,7 +60,8 @@ export function AIBottomDrawer({
   }, [minMode, selectionExists]);
 
   const handleHeight = 24;
-  const quickHeight = 168;
+  /** Tighter fit: handle + input row + padding + chip when present (~24 + 76–92) */
+  const quickHeight = 116;
 
   const heights = useMemo(() => {
     const vh = typeof window !== "undefined" ? window.innerHeight : 800;

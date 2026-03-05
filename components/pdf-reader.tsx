@@ -1562,7 +1562,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
             bookType="pdf"
             currentPage={currentPage}
             pdfDocument={pdfDoc}
-            mobileDrawerMinMode={selectionExists ? "quick" : "closed"}
+            mobileDrawerMinMode="quick"
             requestRun={aiRequest}
             requestOpen={openAiRequest}
             onOpenChange={(open) => setIsAiPaneOpen(open)}
