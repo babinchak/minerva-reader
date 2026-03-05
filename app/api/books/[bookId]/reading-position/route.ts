@@ -50,10 +50,17 @@ export async function PATCH(
       .eq("user_id", user.id)
       .eq("book_id", bookId)
       .select("current_page, reading_position, updated_at")
-      .single();
+      .maybeSingle();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { error: "Book not found in your library" },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json(data);
