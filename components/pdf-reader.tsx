@@ -193,8 +193,12 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const tapRef = useRef<{ pointerId: number; x: number; y: number; t: number; moved: boolean } | null>(
     null,
   );
-  /** When changing pages on mobile while zoomed, preserve scroll position so user doesn't re-adjust margins. */
-  const mobileScrollToRestoreRef = useRef<{ scrollLeft: number; scrollTop: number } | null>(null);
+  /** When changing pages on mobile while zoomed: preserve scrollLeft; for next page, scroll Y to top so user reads from top. */
+  const mobileScrollToRestoreRef = useRef<{
+    scrollLeft: number;
+    scrollTop: number;
+    direction: "next" | "prev";
+  } | null>(null);
   const itemTextsCacheRef = useRef<Map<number, string[]>>(new Map());
   const debugEnabledRef = useRef(false);
   const logPdfDebug = (event: string, payload?: Record<string, unknown>) => {
@@ -398,15 +402,16 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
       if (clamped === currentPage) return true;
       // Block new transition while one is in progress to prevent glitches
       if (mobileTransitionToPage != null) return false;
-      // Preserve scroll position when zoomed so user doesn't re-adjust margins each page
+      const direction = clamped > currentPage ? "next" : "prev";
+      // Preserve scrollLeft; for next page, Y goes to top so user reads from top; for prev, preserve both
       const scroller = scrollRef.current;
       if (scroller) {
         mobileScrollToRestoreRef.current = {
           scrollLeft: scroller.scrollLeft,
           scrollTop: scroller.scrollTop,
+          direction,
         };
       }
-      const direction = clamped > currentPage ? "next" : "prev";
       const fromPosition = direction === "next" ? 0 : -50;
       const toPosition = direction === "next" ? -50 : 0;
       setMobileTransitionToPage(clamped);
@@ -809,20 +814,20 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     });
   }, [renderScale, currentPage, isMobile]);
 
-  // Restore scroll position after mobile page change (preserves zoom/margin view when tapping prev/next)
+  // Restore scroll position after mobile page change: preserve X; for next page, Y to top; for prev, preserve both
   useEffect(() => {
     const toRestore = mobileScrollToRestoreRef.current;
     if (!toRestore || !isMobilePagedMode) return;
     mobileScrollToRestoreRef.current = null;
     const scroller = scrollRef.current;
     if (!scroller) return;
-    // Wait for new page to render and layout; mobile PDF pages may render async
     const id = setTimeout(() => {
       requestAnimationFrame(() => {
         const maxLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
         const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
         scroller.scrollLeft = Math.min(toRestore.scrollLeft, maxLeft);
-        scroller.scrollTop = Math.min(toRestore.scrollTop, maxTop);
+        scroller.scrollTop =
+          toRestore.direction === "next" ? 0 : Math.min(toRestore.scrollTop, maxTop);
       });
     }, 100);
     return () => clearTimeout(id);
