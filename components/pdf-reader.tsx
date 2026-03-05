@@ -191,6 +191,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
   const tapRef = useRef<{ pointerId: number; x: number; y: number; t: number; moved: boolean } | null>(
     null,
   );
+  /** When changing pages on mobile while zoomed, preserve scroll position so user doesn't re-adjust margins. */
+  const mobileScrollToRestoreRef = useRef<{ scrollLeft: number; scrollTop: number } | null>(null);
   const itemTextsCacheRef = useRef<Map<number, string[]>>(new Map());
   const debugEnabledRef = useRef(false);
   const logPdfDebug = (event: string, payload?: Record<string, unknown>) => {
@@ -368,6 +370,14 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
       if (clamped === currentPage) return;
       // Block new transition while one is in progress to prevent glitches
       if (mobileTransitionToPage != null) return;
+      // Preserve scroll position when zoomed so user doesn't re-adjust margins each page
+      const scroller = scrollRef.current;
+      if (scroller) {
+        mobileScrollToRestoreRef.current = {
+          scrollLeft: scroller.scrollLeft,
+          scrollTop: scroller.scrollTop,
+        };
+      }
       const direction = clamped > currentPage ? "next" : "prev";
       const fromPosition = direction === "next" ? 0 : -50;
       const toPosition = direction === "next" ? -50 : 0;
@@ -769,6 +779,25 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
       maxScrollTop: scroller ? Math.max(0, scroller.scrollHeight - scroller.clientHeight) : null,
     });
   }, [renderScale, currentPage, isMobile]);
+
+  // Restore scroll position after mobile page change (preserves zoom/margin view when tapping prev/next)
+  useEffect(() => {
+    const toRestore = mobileScrollToRestoreRef.current;
+    if (!toRestore || !isMobilePagedMode) return;
+    mobileScrollToRestoreRef.current = null;
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    // Wait for new page to render and layout; mobile PDF pages may render async
+    const id = setTimeout(() => {
+      requestAnimationFrame(() => {
+        const maxLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+        const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        scroller.scrollLeft = Math.min(toRestore.scrollLeft, maxLeft);
+        scroller.scrollTop = Math.min(toRestore.scrollTop, maxTop);
+      });
+    }, 100);
+    return () => clearTimeout(id);
+  }, [currentPage, isMobilePagedMode]);
 
   if (loading) {
     return (
