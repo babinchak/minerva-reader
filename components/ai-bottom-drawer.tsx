@@ -61,17 +61,21 @@ export function AIBottomDrawer({
 
   const handleHeight = 24;
   /** Tighter fit: handle + input row + padding (no chip on mobile) */
-  const quickHeight = 96;
+  const quickHeightBase = 96;
+  /** When selection exists, Explain button appears above input – need extra height */
+  const quickHeightWithSelection = 144;
+  const quickHeight = selectionExists ? quickHeightWithSelection : quickHeightBase;
 
   const heights = useMemo(() => {
     const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+    const qh = selectionExists ? quickHeightWithSelection : quickHeightBase;
     return {
       closed: handleHeight,
-      quick: quickHeight,
+      quick: qh,
       half: Math.round(vh * 0.55),
       full: vh, // Full viewport – covers toolbar for max AI real estate
     } satisfies Record<MobileDrawerMode, number>;
-  }, []);
+  }, [selectionExists]);
 
   const [heightPx, setHeightPx] = useState<number>(() => {
     if (typeof window === "undefined") return heights.closed;
@@ -80,13 +84,14 @@ export function AIBottomDrawer({
 
   const [isDragging, setIsDragging] = useState(false);
 
-  // Update height when mode changes or viewport changes.
+  // Update height when mode changes, viewport changes, or selection (affects quick height).
   useEffect(() => {
     const update = () => {
       const vh = window.innerHeight;
+      const qh = selectionExists ? quickHeightWithSelection : quickHeightBase;
       const newHeights = {
         closed: handleHeight,
-        quick: quickHeight,
+        quick: qh,
         half: Math.round(vh * 0.55),
         full: vh,
       } satisfies Record<MobileDrawerMode, number>;
@@ -95,7 +100,7 @@ export function AIBottomDrawer({
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, [mode]);
+  }, [mode, selectionExists]);
 
   const draggingRef = useRef<{
     startY: number;

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight } from "lucide-react";
+import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -1795,6 +1795,22 @@ export function AIAgentPanel({
                   ? "Using selected text for context"
                   : `Using page ${currentPage} for context`}
               </button>
+            </div>
+          )}
+          {!showMessages && trimmedSelectedText && (
+            <div className="mb-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => handleExplain("selection")}
+                disabled={isLoading}
+                className="w-full justify-center"
+                aria-label="Explain selection"
+              >
+                <Highlighter className="h-4 w-4 mr-2" />
+                Explain selection
+              </Button>
             </div>
           )}
           <div className="flex gap-2">
