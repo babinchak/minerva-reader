@@ -153,6 +153,7 @@ function DesktopAIAssistant({
       autoRun,
       hideInputUntilFirstResponse: true,
       includeSelectionContextOnSend: true,
+      showSelectionChip: true,
       onClose: () => setIsOpen(false),
       onActionComplete: handleActionComplete,
     }),

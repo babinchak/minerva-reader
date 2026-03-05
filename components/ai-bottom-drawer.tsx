@@ -60,8 +60,8 @@ export function AIBottomDrawer({
   }, [minMode, selectionExists]);
 
   const handleHeight = 24;
-  /** Tighter fit: handle + input row + padding + chip when present (~24 + 76–92) */
-  const quickHeight = 116;
+  /** Tighter fit: handle + input row + padding (no chip on mobile) */
+  const quickHeight = 96;
 
   const heights = useMemo(() => {
     const vh = typeof window !== "undefined" ? window.innerHeight : 800;
@@ -226,12 +226,12 @@ export function AIBottomDrawer({
       return { showHeader: false, showMessages: false, showChip: false };
     }
     if (mode === "quick") {
-      return { showHeader: false, showMessages: false, showChip: true };
+      return { showHeader: false, showMessages: false, showChip: false };
     }
     if (mode === "half") {
-      return { showHeader: true, showMessages: true, showChip: selectionExists };
+      return { showHeader: true, showMessages: true, showChip: false };
     }
-    return { showHeader: true, showMessages: true, showChip: selectionExists };
+    return { showHeader: true, showMessages: true, showChip: false };
   })();
 
   return (

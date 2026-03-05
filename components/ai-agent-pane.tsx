@@ -1662,7 +1662,7 @@ export function AIAgentPanel({
       {showMessages && messages.length === 0 && (
         <div className="flex-1 flex flex-col justify-start pt-4 px-4 min-h-0">
           <div className="space-y-4 max-w-full">
-              {(trimmedSelectedText || (currentPage && currentPage >= 1)) && (
+              {showSelectionChip && (trimmedSelectedText || (currentPage && currentPage >= 1)) && (
                 <div className="flex justify-center">
                   <button
                     type="button"
@@ -1785,7 +1785,7 @@ export function AIAgentPanel({
       {/* Input (bottom: when chat has messages, or in compact mode when showMessages is false) */}
       {((showMessages && messages.length > 0) || !showMessages) && (
         <div className="p-4 border-t border-border shrink-0">
-          {(trimmedSelectedText || (currentPage && currentPage >= 1)) && (
+          {showSelectionChip && (trimmedSelectedText || (currentPage && currentPage >= 1)) && (
             <div className="mb-2">
               <button
                 type="button"
