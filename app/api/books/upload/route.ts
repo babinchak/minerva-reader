@@ -52,15 +52,16 @@ export async function POST(request: NextRequest) {
     const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
     console.log("[UPLOAD] Hash calculated:", hashHex.substring(0, 16) + "...");
     
-    // Check for duplicate by SHA256
+    // Check for duplicate by SHA256 (use service client - RLS may hide books
+    // the user removed from library, but we need to find them for re-add)
     console.log("[UPLOAD] Checking for duplicates...");
-    const { data: existingBook, error: checkError } = await supabase
+    const { data: existingBook, error: checkError } = await serviceSupabase
       .from("books")
       .select("id, title")
       .eq("file_checksum", hashHex)
-      .single();
-    
-    if (checkError && checkError.code !== "PGRST116") { // PGRST116 = no rows returned
+      .maybeSingle();
+
+    if (checkError) {
       console.error("[UPLOAD] Database error checking duplicates:", checkError);
       return NextResponse.json({ 
         error: "Database error", 
@@ -71,17 +72,17 @@ export async function POST(request: NextRequest) {
     // If duplicate exists, link to user_books
     if (existingBook) {
       console.log("[UPLOAD] Duplicate found:", existingBook.id);
-      // Check if user already has access
-      const { data: existingLink } = await supabase
+      // Check if user already has access (service client for consistency with RLS)
+      const { data: existingLink } = await serviceSupabase
         .from("user_books")
         .select("id")
         .eq("user_id", user.id)
         .eq("book_id", existingBook.id)
-        .single();
-      
+        .maybeSingle();
+
       // Link if not already linked
       if (!existingLink) {
-        const { error: linkError } = await supabase
+        const { error: linkError } = await serviceSupabase
           .from("user_books")
           .insert({
             user_id: user.id,
@@ -243,23 +244,23 @@ export async function POST(request: NextRequest) {
         );
 
         // Re-check for the book (it might have been created by another request)
-        const { data: raceConditionBook } = await supabase
+        const { data: raceConditionBook } = await serviceSupabase
           .from("books")
           .select("id, title")
           .eq("file_checksum", hashHex)
-          .single();
+          .maybeSingle();
 
         if (raceConditionBook) {
           // Link to user_books
-          const { data: existingLink } = await supabase
+          const { data: existingLink } = await serviceSupabase
             .from("user_books")
             .select("id")
             .eq("user_id", user.id)
             .eq("book_id", raceConditionBook.id)
-            .single();
+            .maybeSingle();
 
           if (!existingLink) {
-            await supabase.from("user_books").insert({
+            await serviceSupabase.from("user_books").insert({
               user_id: user.id,
               book_id: raceConditionBook.id,
             });
