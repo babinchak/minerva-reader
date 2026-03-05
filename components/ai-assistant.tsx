@@ -30,6 +30,10 @@ export interface AIAssistantProps {
    * Called when the desktop AI pane opens or closes. Used to hide toolbar buttons (e.g. "Ask Minerva") when the pane is open.
    */
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Called when the EPUB AI pane width changes (for toolbar to resize). Only used when bookType is "epub".
+   */
+  onPaneWidthChange?: (width: number) => void;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -64,6 +68,7 @@ function DesktopAIAssistant({
   requestRun = null,
   requestOpen = null,
   onOpenChange,
+  onPaneWidthChange,
 }: AIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const openedViaRequestRunRef = useRef(false);
@@ -135,6 +140,15 @@ function DesktopAIAssistant({
     resizingRef.current = null;
   };
 
+  // EPUB: notify parent of pane width so toolbar can resize
+  useEffect(() => {
+    if (!isPdf && isOpen) {
+      onPaneWidthChange?.(dockWidth);
+    } else {
+      onPaneWidthChange?.(0);
+    }
+  }, [isPdf, isOpen, dockWidth, onPaneWidthChange]);
+
   const handleActionComplete = useCallback(() => {
     if (openedViaRequestRunRef.current) {
       openedViaRequestRunRef.current = false;
@@ -198,10 +212,22 @@ function DesktopAIAssistant({
             className="fixed inset-0 z-40 bg-black/20"
             onClick={() => setIsOpen(false)}
           />
-          <AIAgentPanel
-            {...panelProps}
-            className="fixed right-0 top-0 z-50 h-full w-96 bg-background border-l border-border shadow-lg flex flex-col select-text"
-          />
+          <div
+            className="fixed right-0 top-0 z-50 h-full flex flex-col bg-background border-l border-border shadow-lg select-text transition-[width] duration-200 ease-out"
+            style={{ width: dockWidth }}
+          >
+            <div
+              className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
+              onPointerDown={startResize}
+              onPointerMove={moveResize}
+              onPointerUp={endResize}
+              onPointerCancel={endResize}
+              aria-label="Resize AI panel"
+              role="separator"
+              aria-orientation="vertical"
+            />
+            <AIAgentPanel {...panelProps} className="h-full w-full flex flex-col min-w-0" />
+          </div>
         </>
       )}
     </>
