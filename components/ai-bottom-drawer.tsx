@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIAgentPanel, type AIAgentPanelProps } from "@/components/ai-agent-pane";
 
 type MobileDrawerMode = "closed" | "quick" | "half" | "full";
@@ -29,6 +29,12 @@ export interface AIBottomDrawerProps
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
+
+/** Velocity threshold (px/ms) above which we snap in the fling direction. */
+const VELOCITY_THRESHOLD = 0.3;
+
+/** Transition duration for snap animation (ms). */
+const SNAP_DURATION_MS = 280;
 
 export function AIBottomDrawer({
   selectedText,
@@ -62,7 +68,7 @@ export function AIBottomDrawer({
       closed: handleHeight,
       quick: quickHeight,
       half: Math.round(vh * 0.55),
-      full: Math.round(vh * 0.9),
+      full: vh, // Full viewport – covers toolbar for max AI real estate
     } satisfies Record<MobileDrawerMode, number>;
   }, []);
 
@@ -70,6 +76,8 @@ export function AIBottomDrawer({
     if (typeof window === "undefined") return heights.closed;
     return heights[mode];
   });
+
+  const [isDragging, setIsDragging] = useState(false);
 
   // Update height when mode changes or viewport changes.
   useEffect(() => {
@@ -79,7 +87,7 @@ export function AIBottomDrawer({
         closed: handleHeight,
         quick: quickHeight,
         half: Math.round(vh * 0.55),
-        full: Math.round(vh * 0.9),
+        full: vh,
       } satisfies Record<MobileDrawerMode, number>;
       setHeightPx(newHeights[mode]);
     };
@@ -92,59 +100,125 @@ export function AIBottomDrawer({
     startY: number;
     startHeight: number;
     pointerId: number;
+    velocitySamples: Array<{ y: number; t: number }>;
   } | null>(null);
 
-  const maxHeight = typeof window !== "undefined" ? Math.round(window.innerHeight * 0.92) : 900;
+  const didDragRef = useRef(false);
+
+  const maxHeight = typeof window !== "undefined" ? window.innerHeight : 900;
   const minHeight = handleHeight;
 
-  const snapToMode = (h: number) => {
-    const vh = window.innerHeight;
-    const half = Math.round(vh * 0.55);
-    const full = Math.round(vh * 0.9);
+  /** Ordered snap points (closed/quick depending on min, then half, full). */
+  const snapPoints = useMemo(() => {
+    const min = selectionExists || minMode === "quick" ? "quick" : "closed";
+    const order: MobileDrawerMode[] = ["closed", "quick", "half", "full"];
+    const startIdx = order.indexOf(min);
+    return order.slice(startIdx) as MobileDrawerMode[];
+  }, [selectionExists, minMode]);
 
-    const candidates: Array<{ mode: MobileDrawerMode; height: number }> = [
-      {
-        mode: selectionExists || minMode === "quick" ? "quick" : "closed",
-        height: selectionExists || minMode === "quick" ? quickHeight : handleHeight,
-      },
-      { mode: "half", height: half },
-      { mode: "full", height: full },
-    ];
+  const snapToMode = useCallback(
+    (currentHeight: number, velocityY: number) => {
+      const vh = window.innerHeight;
+      const h = {
+        closed: handleHeight,
+        quick: quickHeight,
+        half: Math.round(vh * 0.55),
+        full: vh,
+      };
 
-    let best = candidates[0];
-    for (const c of candidates) {
-      if (Math.abs(c.height - h) < Math.abs(best.height - h)) best = c;
-    }
-    setMode(best.mode);
-  };
+      const points = snapPoints.map((m) => ({ mode: m, height: h[m] }));
+
+      // Velocity: positive = dragging down (finger moving down), negative = dragging up
+      const flingDown = velocityY > VELOCITY_THRESHOLD;
+      const flingUp = velocityY < -VELOCITY_THRESHOLD;
+
+      let target: { mode: MobileDrawerMode; height: number };
+
+      if (flingDown || flingUp) {
+        // Find which snap band we're in (for velocity-based direction)
+        let idx = 0;
+        for (let i = 0; i < points.length; i++) {
+          if (currentHeight < points[i].height) break;
+          idx = i;
+        }
+        if (flingDown) idx = Math.max(0, idx - 1);
+        else idx = Math.min(points.length - 1, idx + 1);
+        target = points[idx];
+      } else {
+        // Snap to nearest
+        target = points[0];
+        for (const p of points) {
+          if (Math.abs(p.height - currentHeight) < Math.abs(target.height - currentHeight)) {
+            target = p;
+          }
+        }
+      }
+
+      setMode(target.mode);
+    },
+    [snapPoints]
+  );
 
   const onHandlePointerDown = (e: React.PointerEvent) => {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    didDragRef.current = false;
+    setIsDragging(true);
     draggingRef.current = {
       startY: e.clientY,
       startHeight: heightPx,
       pointerId: e.pointerId,
+      velocitySamples: [{ y: e.clientY, t: performance.now() }],
     };
   };
 
   const onHandlePointerMove = (e: React.PointerEvent) => {
     const drag = draggingRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
+    didDragRef.current = true;
     const delta = drag.startY - e.clientY; // up = positive
     const next = clamp(drag.startHeight + delta, minHeight, maxHeight);
     setHeightPx(next);
+
+    // Track velocity (keep last ~100ms of samples)
+    const samples = drag.velocitySamples;
+    samples.push({ y: e.clientY, t: performance.now() });
+    const cutoff = performance.now() - 100;
+    while (samples.length > 2 && samples[1].t < cutoff) samples.shift();
   };
 
   const onHandlePointerUp = (e: React.PointerEvent) => {
     const drag = draggingRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
+
+    const samples = drag.velocitySamples;
+    let velocityY = 0;
+    if (samples.length >= 2) {
+      const recent = samples[samples.length - 1];
+      const older = samples[0];
+      const dt = recent.t - older.t;
+      if (dt > 0) {
+        velocityY = (recent.y - older.y) / dt; // positive = finger moving down
+      }
+    }
+
     draggingRef.current = null;
-    snapToMode(heightPx);
+    setIsDragging(false);
+    snapToMode(heightPx, velocityY);
   };
 
   const close = () => setMode(selectionExists || minMode === "quick" ? "quick" : "closed");
 
-  const showBackdrop = mode === "half" || mode === "full";
+  const showBackdrop = mode === "half" || mode === "full" || (isDragging && heightPx > quickHeight);
+
+  // Backdrop opacity: interpolate during drag, full when snapped to half/full
+  const backdropOpacity = (() => {
+    if (mode === "half" || mode === "full") return 0.3;
+    if (isDragging && heightPx > quickHeight) {
+      const range = heights.full - quickHeight;
+      return Math.min(0.3, ((heightPx - quickHeight) / range) * 0.3);
+    }
+    return 0.3;
+  })();
 
   const panelVisibility = (() => {
     if (mode === "closed") {
@@ -166,13 +240,17 @@ export function AIBottomDrawer({
           type="button"
           aria-label="Close AI assistant"
           onClick={close}
-          className="fixed inset-0 z-40 bg-black/30"
+          className="fixed inset-0 z-40"
+          style={{ backgroundColor: `rgba(0,0,0,${backdropOpacity})` }}
         />
       )}
 
       <div
         className="fixed bottom-0 left-0 right-0 z-50"
-        style={{ height: `${heightPx}px` }}
+        style={{
+          height: `${heightPx}px`,
+          transition: isDragging ? "none" : `height ${SNAP_DURATION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+        }}
       >
         <div className="h-full w-full rounded-t-2xl border-t border-border bg-background shadow-2xl flex flex-col overflow-hidden min-h-0">
           {/* Pill / handle */}
@@ -186,6 +264,7 @@ export function AIBottomDrawer({
             tabIndex={0}
             aria-label="Drag to open AI assistant"
             onClick={() => {
+              if (didDragRef.current) return;
               // Tap to expand to half.
               if (mode === "closed") setMode(selectionExists ? "quick" : "half");
               else if (mode === "quick") setMode("half");
