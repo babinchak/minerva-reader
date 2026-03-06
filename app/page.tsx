@@ -1,13 +1,114 @@
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { AuthButton } from "@/components/auth-button";
+import { BookCard } from "@/components/book-card";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LibraryView } from "@/components/library-view";
 import { UpgradeCta } from "@/components/upgrade-cta";
+import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
+import { createServiceClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Suspense } from "react";
 import { BookOpen } from "lucide-react";
+
+function formatAuthorDisplay(author: string | null): string {
+  if (!author) return "";
+  return author
+    .split(AUTHOR_DELIMITER)
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+async function SignedOutCuratedPreview() {
+  const supabase = createServiceClient();
+  const { data: books, error } = await supabase
+    .from("books")
+    .select("id, title, author, cover_path, book_type, created_at")
+    .eq("is_curated", true)
+    .order("title")
+    .limit(8);
+
+  if (error) {
+    return (
+      <section className="w-full max-w-7xl rounded-xl border border-dashed border-border bg-muted/20 px-6 py-10 text-center">
+        <p className="text-sm text-muted-foreground">
+          Curated books are temporarily unavailable. You can still explore the full
+          collection from the browse page.
+        </p>
+        <div className="mt-4">
+          <Link
+            href="/browse"
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+          >
+            View curated library
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
+  if (!books?.length) {
+    return null;
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const curatedBooks = books.map((book) => ({
+    id: book.id,
+    title: book.title ?? "",
+    authorDisplay: formatAuthorDisplay(book.author),
+    coverUrl:
+      book.cover_path && supabaseUrl
+        ? `${supabaseUrl}/storage/v1/object/public/covers/${book.cover_path}`
+        : null,
+    bookType:
+      book.book_type === "pdf"
+        ? "pdf" as const
+        : book.book_type === "epub"
+          ? "epub" as const
+          : null,
+  }));
+
+  return (
+    <section className="w-full max-w-7xl space-y-6">
+      <div className="flex flex-col gap-4 text-left sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            Start reading now
+          </p>
+          <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
+            Curated Library Preview
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
+            A small selection of public domain books you can open immediately. Sign
+            up when you want your own uploads and a personal library.
+          </p>
+        </div>
+        <Link
+          href="/browse"
+          className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+        >
+          View all curated books
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+        {curatedBooks.map((book) => (
+          <BookCard
+            key={book.id}
+            id={book.id}
+            title={book.title}
+            authorDisplay={book.authorDisplay}
+            coverUrl={book.coverUrl}
+            bookType={book.bookType}
+            showRemove={false}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
 
 async function HomeContent({
   showUpgrade,
@@ -45,26 +146,30 @@ async function HomeContent({
 
   // User is not logged in - show landing page with browse CTA
   return (
-    <div className="flex flex-col items-center gap-6 text-center">
-      <BookOpen className="h-16 w-16 text-muted-foreground" />
-      <h1 className="text-4xl font-bold text-foreground">Minerva Reader</h1>
-      <p className="text-lg text-muted-foreground max-w-md">
-        Your personal EPUB and PDF library. Upload and read your books in one place.
-      </p>
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Link
-          href="/browse"
-          className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          Browse curated library
-        </Link>
-        <Suspense>
-          <AuthButton />
-        </Suspense>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Sign up to upload your own books and get more AI features.
-      </p>
+    <div className="w-full max-w-7xl space-y-16">
+      <section className="flex flex-col items-center gap-6 px-4 pt-8 text-center sm:pt-12">
+        <BookOpen className="h-16 w-16 text-muted-foreground" />
+        <h1 className="text-4xl font-bold text-foreground">Minerva Reader</h1>
+        <p className="max-w-md text-lg text-muted-foreground">
+          Your personal EPUB and PDF library. Upload and read your books in one place.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Link
+            href="/browse"
+            className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Browse curated library
+          </Link>
+          <Suspense>
+            <AuthButton />
+          </Suspense>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Sign up to upload your own books and get more AI features.
+        </p>
+      </section>
+
+      <SignedOutCuratedPreview />
     </div>
   );
 }
