@@ -6,7 +6,11 @@ import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { BookCard } from "@/components/book-card";
 import { LibrarySortControls } from "@/components/library-sort-controls";
 import { UploadBookDialog } from "@/components/upload-book-dialog";
-import type { LibrarySortType, LibrarySortDir } from "@/components/library-sort-controls";
+import type {
+  LibraryBookFilter,
+  LibrarySortDir,
+  LibrarySortType,
+} from "@/components/library-sort-controls";
 
 export interface LibraryBook {
   id: string;
@@ -28,36 +32,45 @@ export function LibraryWithBooks({
   books,
   initialSort = "dateAdded",
   initialDir = "desc",
+  initialFilter = "all",
 }: {
   books: LibraryBook[];
   initialSort?: LibrarySortType;
   initialDir?: LibrarySortDir;
+  initialFilter?: LibraryBookFilter;
 }) {
   const [sort, setSort] = useState<LibrarySortType>(initialSort);
   const [dir, setDir] = useState<LibrarySortDir>(initialDir);
+  const [filter, setFilter] = useState<LibraryBookFilter>(initialFilter);
 
   useEffect(() => {
     document.cookie =
-      `${LIBRARY_SORT_COOKIE}=${encodeURIComponent(JSON.stringify({ sort, dir }))}; ` +
+      `${LIBRARY_SORT_COOKIE}=${encodeURIComponent(
+        JSON.stringify({ sort, dir, filter })
+      )}; ` +
       "path=/; max-age=31536000; samesite=lax";
-  }, [sort, dir]);
+  }, [sort, dir, filter]);
 
-  const sortedBooks = useMemo(() => {
+  const visibleBooks = useMemo(() => {
+    const filteredBooks =
+      filter === "all"
+        ? books
+        : books.filter((book) => book.bookType === filter);
     const asc = dir === "asc";
     if (sort === "dateAdded") {
-      return [...books].sort((a, b) => {
+      return [...filteredBooks].sort((a, b) => {
         const da = new Date(a.dateAdded).getTime();
         const db = new Date(b.dateAdded).getTime();
         return asc ? da - db : db - da;
       });
     }
-    return [...books].sort((a, b) => {
+    return [...filteredBooks].sort((a, b) => {
       const ta = (a.title ?? "").toLowerCase();
       const tb = (b.title ?? "").toLowerCase();
       const cmp = ta.localeCompare(tb);
       return asc ? cmp : -cmp;
     });
-  }, [books, sort, dir]);
+  }, [books, sort, dir, filter]);
 
   return (
     <div className="w-full max-w-7xl space-y-6">
@@ -69,10 +82,12 @@ export function LibraryWithBooks({
           <LibrarySortControls
             sort={sort}
             dir={dir}
+            filter={filter}
             onSortChange={(s, d) => {
               setSort(s);
               setDir(d);
             }}
+            onFilterChange={setFilter}
           />
           <UploadBookDialog />
           <Link
@@ -84,18 +99,24 @@ export function LibraryWithBooks({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-        {sortedBooks.map((book) => (
-          <BookCard
-            key={book.id}
-            id={book.id}
-            title={book.title ?? ""}
-            authorDisplay={formatAuthorDisplay(book.author)}
-            coverUrl={book.coverUrl}
-            bookType={book.bookType}
-          />
-        ))}
-      </div>
+      {visibleBooks.length > 0 ? (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {visibleBooks.map((book) => (
+            <BookCard
+              key={book.id}
+              id={book.id}
+              title={book.title ?? ""}
+              authorDisplay={formatAuthorDisplay(book.author)}
+              coverUrl={book.coverUrl}
+              bookType={book.bookType}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+          No books match this filter.
+        </div>
+      )}
     </div>
   );
 }

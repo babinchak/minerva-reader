@@ -4,26 +4,40 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { LibraryWithBooks } from "@/components/library-grid-with-sort";
 import { UploadBookDialog } from "@/components/upload-book-dialog";
-import type { LibrarySortDir, LibrarySortType } from "@/components/library-sort-controls";
+import type {
+  LibraryBookFilter,
+  LibrarySortDir,
+  LibrarySortType,
+} from "@/components/library-sort-controls";
 
 const LIBRARY_SORT_COOKIE = "librarySortPreferences";
 
 function getInitialLibrarySort(cookieValue: string | undefined): {
   sort: LibrarySortType;
   dir: LibrarySortDir;
+  filter: LibraryBookFilter;
 } {
-  const fallback = { sort: "dateAdded" as const, dir: "desc" as const };
+  const fallback = {
+    sort: "dateAdded" as const,
+    dir: "desc" as const,
+    filter: "all" as const,
+  };
   if (!cookieValue) return fallback;
 
   try {
     const parsed = JSON.parse(cookieValue) as {
       sort?: LibrarySortType;
       dir?: LibrarySortDir;
+      filter?: LibraryBookFilter;
     };
 
     return {
       sort: parsed.sort === "title" ? "title" : "dateAdded",
       dir: parsed.dir === "asc" ? "asc" : "desc",
+      filter:
+        parsed.filter === "epub" || parsed.filter === "pdf"
+          ? parsed.filter
+          : "all",
     };
   } catch {
     return fallback;
@@ -101,6 +115,7 @@ export async function LibraryView() {
           books={books}
           initialSort={initialSortState.sort}
           initialDir={initialSortState.dir}
+          initialFilter={initialSortState.filter}
         />
       ) : (
         <>
