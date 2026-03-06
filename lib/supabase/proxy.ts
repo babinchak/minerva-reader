@@ -62,7 +62,9 @@ export async function updateSession(request: NextRequest) {
     // Chat APIs (enforce access per-request; anonymous allowed for curated books)
     !request.nextUrl.pathname.startsWith("/api/chat") &&
     // Book metadata for AI pane (anonymous allowed for curated books)
-    !request.nextUrl.pathname.startsWith("/api/books/")
+    !request.nextUrl.pathname.startsWith("/api/books/") &&
+    // Credits (returns freeBetaMode for anonymous; needed for Deep mode toggle)
+    !request.nextUrl.pathname.startsWith("/api/credits")
   ) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();

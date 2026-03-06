@@ -9,6 +9,7 @@ import {
   canMakeRequest,
   countAgenticRequestsToday,
   AGENTIC_ESTIMATED_CENTS,
+  isFreeBetaMode,
 } from "@/lib/credits";
 import { recordUsage, costCentsFromTokens } from "@/lib/usage";
 
@@ -48,20 +49,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Anonymous: only allow for curated books
+    // Anonymous: allow for curated books, or when FREE_BETA_MODE
     if (!user) {
-      if (!bookId) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      if (isFreeBetaMode()) {
+        // Free beta: allow anonymous Deep mode (with or without book)
+      } else {
+        if (!bookId) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        const { data: book } = await serviceSupabase
+          .from("books")
+          .select("is_curated, vectors_processed_at")
+          .eq("id", bookId)
+          .single();
+        if (!book?.is_curated) {
+          return NextResponse.json({ error: "Access denied to this book" }, { status: 403 });
+        }
       }
-      const { data: book } = await serviceSupabase
-        .from("books")
-        .select("is_curated, vectors_processed_at")
-        .eq("id", bookId)
-        .single();
-      if (!book?.is_curated) {
-        return NextResponse.json({ error: "Access denied to this book" }, { status: 403 });
-      }
-      // Anonymous curated: continue with vectorsReady from book
     }
 
     const tier = await getTier(user?.id ?? null);

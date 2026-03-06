@@ -511,35 +511,67 @@ export function AIAgentPanel({
     [onActionComplete]
   );
 
+  const [authChecked, setAuthChecked] = useState(false);
+
   // Fetch current user
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUserId(user?.id ?? null);
+      setAuthChecked(true);
     };
     init();
   }, [supabase]);
 
-  // Anonymous: force fast mode only
-  useEffect(() => {
-    if (!userId && chatMode === "agentic") setChatMode("fast");
-  }, [userId, chatMode]);
+  const anonChatKey = `minerva-anon-chat-${bookId ?? "general"}`;
 
-  // Credits/tier info (for Deep mode limits and display)
+  // Anonymous: load ephemeral chat from sessionStorage (once we know we're anonymous)
+  useEffect(() => {
+    if (!authChecked || userId !== null || !bookId) return;
+    try {
+      const raw = sessionStorage.getItem(anonChatKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as AIMessage[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const restored = parsed.map((m) => ({
+            ...m,
+            timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+          }));
+          setMessages(restored);
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, [authChecked, userId, bookId, anonChatKey]);
+
+  // Anonymous: persist ephemeral chat to sessionStorage when messages change
+  useEffect(() => {
+    if (!userId && messages.length > 0 && typeof window !== "undefined") {
+      try {
+        const toStore = messages.map((m) => ({
+          ...m,
+          timestamp: m.timestamp?.toISOString?.() ?? new Date().toISOString(),
+        }));
+        sessionStorage.setItem(anonChatKey, JSON.stringify(toStore));
+      } catch {
+        // Ignore quota/parse errors
+      }
+    }
+  }, [userId, messages, anonChatKey]);
+
+  // Credits/tier info (for Deep mode limits and display). Fetch for both logged-in and anonymous (freeBetaMode).
   const [creditsInfo, setCreditsInfo] = useState<{
     tier: string;
     agenticToday: number;
     agenticLimit: number;
     balance: number;
+    freeBetaMode?: boolean;
   } | null>(null);
 
   // Dialog shown when user runs out of credits
   const [creditsExhaustedDialogOpen, setCreditsExhaustedDialogOpen] = useState(false);
   useEffect(() => {
-    if (!userId) {
-      setCreditsInfo(null);
-      return;
-    }
     fetch(`/api/credits?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) =>
@@ -549,12 +581,18 @@ export function AIAgentPanel({
               agenticToday: d.agenticToday ?? 0,
               agenticLimit: d.agenticLimit ?? 5,
               balance: d.balance ?? 0,
+              freeBetaMode: d.freeBetaMode ?? false,
             }
           : null
       )
       .then(setCreditsInfo)
       .catch(() => setCreditsInfo(null));
   }, [userId]);
+
+  // Anonymous: force fast mode only (unless FREE_BETA_MODE)
+  useEffect(() => {
+    if (!userId && chatMode === "agentic" && !creditsInfo?.freeBetaMode) setChatMode("fast");
+  }, [userId, chatMode, creditsInfo?.freeBetaMode]);
 
   // Processing status: summaries and vectors (both improve AI context quality)
   const [processingStatus, setProcessingStatus] = useState<{
@@ -632,9 +670,10 @@ export function AIAgentPanel({
   }, [userId, bookId, supabase]);
 
   // Load messages when selecting a chat (skip while sending/streaming to avoid overwriting optimistic messages)
+  // Anonymous: never clear on !activeChatId - we keep ephemeral messages in state (and sessionStorage)
   useEffect(() => {
     if (!activeChatId) {
-      setMessages([]);
+      if (userId) setMessages([]);
       return;
     }
     if (isLoading) return;
@@ -678,6 +717,13 @@ export function AIAgentPanel({
   const handleNewChat = () => {
     setActiveChatId(null);
     setMessages([]);
+    if (!userId && typeof window !== "undefined") {
+      try {
+        sessionStorage.removeItem(`minerva-anon-chat-${bookId ?? "general"}`);
+      } catch {
+        // Ignore
+      }
+    }
   };
 
   const handleSelectChat = (chatId: string) => {
@@ -1611,41 +1657,43 @@ export function AIAgentPanel({
               >
                 <Plus className="h-4 w-4" />
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-foreground"
-                    aria-label="Recent chats"
-                    title="Recent chats"
-                  >
-                    <Clock className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
-                  {chats.length === 0 ? (
-                    <div className="px-2 py-4 text-sm text-muted-foreground">
-                      No recent chats
-                    </div>
-                  ) : (
-                    chats.map((chat) => (
-                      <DropdownMenuItem
-                        key={chat.id}
-                        onClick={() => handleSelectChat(chat.id)}
-                        className="flex items-center gap-2"
-                      >
-                        <MessageSquare className="h-4 w-4 shrink-0" />
-                        <span className="truncate min-w-0">
-                          {chat.title?.trim() || new Date(chat.created_at).toLocaleDateString()}
-                        </span>
-                      </DropdownMenuItem>
-                    ))
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {userId && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-foreground"
+                      aria-label="Recent chats"
+                      title="Recent chats"
+                    >
+                      <Clock className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+                    {chats.length === 0 ? (
+                      <div className="px-2 py-4 text-sm text-muted-foreground">
+                        No recent chats
+                      </div>
+                    ) : (
+                      chats.map((chat) => (
+                        <DropdownMenuItem
+                          key={chat.id}
+                          onClick={() => handleSelectChat(chat.id)}
+                          className="flex items-center gap-2"
+                        >
+                          <MessageSquare className="h-4 w-4 shrink-0" />
+                          <span className="truncate min-w-0">
+                            {chat.title?.trim() || new Date(chat.created_at).toLocaleDateString()}
+                          </span>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               <div className="flex items-center gap-1.5">
-                {!userId ? (
+                {!userId && creditsInfo && !creditsInfo.freeBetaMode ? (
                   <span className="text-xs text-muted-foreground" title="Sign in for Deep mode">
                     Sign in for Deep mode
                   </span>

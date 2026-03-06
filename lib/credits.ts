@@ -83,11 +83,11 @@ export function isFreeBetaMode(): boolean {
 
 /**
  * Resolve tier from user. Anonymous if no user.
- * In free beta mode, authenticated users are treated as paid.
+ * In free beta mode, authenticated users and anonymous are treated as paid (premium model, Deep mode).
  */
 export async function getTier(userId: string | null): Promise<UserTier> {
-  if (!userId) return "anonymous";
   if (isFreeBetaMode()) return "paid";
+  if (!userId) return "anonymous";
 
   const supabase = createServiceClient();
   const { data } = await supabase

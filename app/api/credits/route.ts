@@ -16,16 +16,17 @@ export async function GET() {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
+      const freeBeta = isFreeBetaMode();
       return NextResponse.json({
-        tier: "anonymous",
-        freeBetaMode: isFreeBetaMode(),
+        tier: freeBeta ? "paid" : "anonymous",
+        freeBetaMode: freeBeta,
         balance: 0,
         balanceCents: 0,
         monthlyAllowance: 0,
         allowanceCents: 0,
         booksUploadedThisWeek: 0,
         agenticToday: 0,
-        agenticLimit: 0,
+        agenticLimit: freeBeta ? 999999 : 0,
         allowanceResetAt: null,
         onDemandLimitType: "disabled",
         onDemandLimitCents: 1000,
