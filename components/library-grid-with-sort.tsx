@@ -14,6 +14,7 @@ export interface LibraryBook {
   author: string | null;
   coverUrl: string | null;
   dateAdded: string;
+  bookType: "epub" | "pdf" | null;
 }
 
 const LIBRARY_SORT_COOKIE = "librarySortPreferences";
@@ -91,6 +92,7 @@ export function LibraryWithBooks({
             title={book.title ?? ""}
             authorDisplay={formatAuthorDisplay(book.author)}
             coverUrl={book.coverUrl}
+            bookType={book.bookType}
           />
         ))}
       </div>

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { BookOpen, MoreVertical, Trash2, User } from "lucide-react";
 import { hapticLight } from "@/lib/haptic";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,9 +18,16 @@ interface BookCardProps {
   title: string;
   authorDisplay: string;
   coverUrl: string | null;
+  bookType: "epub" | "pdf" | null;
 }
 
-export function BookCard({ id, title, authorDisplay, coverUrl }: BookCardProps) {
+export function BookCard({
+  id,
+  title,
+  authorDisplay,
+  coverUrl,
+  bookType,
+}: BookCardProps) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
 
@@ -41,14 +49,14 @@ export function BookCard({ id, title, authorDisplay, coverUrl }: BookCardProps) 
 
   return (
     <div
-      className={`group flex flex-col rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50 transition-opacity ${
+      className={`group flex h-full flex-col rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50 transition-opacity ${
         isRemoving ? "pointer-events-none opacity-0" : ""
       }`}
     >
       <a
         href={`/read/${id}`}
         onClick={() => hapticLight()}
-        className="flex flex-col"
+        className="flex flex-1 flex-col"
       >
         <div className="mb-3 aspect-[2/3] w-full overflow-hidden rounded-md bg-muted shadow-sm">
           {coverUrl ? (
@@ -63,17 +71,29 @@ export function BookCard({ id, title, authorDisplay, coverUrl }: BookCardProps) 
             </div>
           )}
         </div>
-        <h3 className="line-clamp-2 font-medium text-foreground group-hover:text-primary">
-          {title}
-        </h3>
-        {authorDisplay && (
-          <p className="mt-0.5 line-clamp-1 flex items-center gap-1 text-xs text-muted-foreground">
-            <User className="h-3 w-3 shrink-0" />
-            <span className="truncate">{authorDisplay}</span>
-          </p>
-        )}
+        <div className="flex-1">
+          <h3 className="line-clamp-2 font-medium text-foreground group-hover:text-primary">
+            {title}
+          </h3>
+          {authorDisplay && (
+            <p className="mt-0.5 line-clamp-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <User className="h-3 w-3 shrink-0" />
+              <span className="truncate">{authorDisplay}</span>
+            </p>
+          )}
+        </div>
       </a>
-      <div className="mt-2 flex h-9 items-center justify-end">
+      <div className="mt-2 flex h-9 items-center justify-between">
+        {bookType ? (
+          <Badge
+            variant="outline"
+            className="border-border px-2 py-0 text-[10px] uppercase tracking-wide text-muted-foreground"
+          >
+            {bookType}
+          </Badge>
+        ) : (
+          <div />
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

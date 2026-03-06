@@ -55,12 +55,19 @@ export async function LibraryView() {
 
   const hasBooks = userBookRows && userBookRows.length > 0;
 
-  let books: { id: string; title: string | null; author: string | null; coverUrl: string | null; dateAdded: string }[] = [];
+  let books: {
+    id: string;
+    title: string | null;
+    author: string | null;
+    coverUrl: string | null;
+    dateAdded: string;
+    bookType: "epub" | "pdf" | null;
+  }[] = [];
   if (hasBooks && userBookRows) {
     const bookIds = userBookRows.map((r) => r.book_id);
     const { data: booksData, error: booksError } = await supabase
       .from("books")
-      .select("id, title, author, cover_path")
+      .select("id, title, author, cover_path, book_type")
       .in("id", bookIds);
 
     if (booksError) {
@@ -83,6 +90,7 @@ export async function LibraryView() {
         ? `${supabaseUrl}/storage/v1/object/public/covers/${book.cover_path}`
         : null,
       dateAdded: dateAddedMap.get(book.id) ?? "",
+      bookType: book.book_type === "pdf" ? "pdf" : book.book_type === "epub" ? "epub" : null,
     }));
   }
 
