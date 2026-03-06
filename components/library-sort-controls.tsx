@@ -18,11 +18,6 @@ const SORT_TYPE_OPTIONS: { value: LibrarySortType; label: string; icon: React.Re
   { value: "title", label: "Title", icon: <ArrowDownAZ className="h-4 w-4" /> },
 ];
 
-const SORT_DIR_OPTIONS: { value: LibrarySortDir; label: string; icon: React.ReactNode }[] = [
-  { value: "desc", label: "Descending", icon: <ArrowDownAZ className="h-4 w-4" /> },
-  { value: "asc", label: "Ascending", icon: <ArrowUpAZ className="h-4 w-4" /> },
-];
-
 function SortDropdown<T extends string>({
   options,
   value,
@@ -92,6 +87,8 @@ export function LibrarySortControls({
     router.push(`/?${params.toString()}`);
   };
 
+  const toggleDir = () => updateParams({ dir: dir === "asc" ? "desc" : "asc" });
+
   return (
     <div className="flex items-center gap-2">
       <SortDropdown
@@ -100,12 +97,21 @@ export function LibrarySortControls({
         onSelect={(v) => updateParams({ sort: v })}
         aria-label="Sort by"
       />
-      <SortDropdown
-        options={SORT_DIR_OPTIONS}
-        value={dir}
-        onSelect={(v) => updateParams({ dir: v })}
-        aria-label="Sort direction"
-      />
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={toggleDir}
+        aria-label={dir === "asc" ? "Ascending – click to switch to descending" : "Descending – click to switch to ascending"}
+        className="inline-flex items-center gap-2 border-input bg-background"
+        title={dir === "asc" ? "Ascending (click to toggle)" : "Descending (click to toggle)"}
+      >
+        {dir === "asc" ? (
+          <ArrowUpAZ className="h-4 w-4" />
+        ) : (
+          <ArrowDownAZ className="h-4 w-4" />
+        )}
+        <span className="hidden sm:inline">{dir === "asc" ? "Asc" : "Desc"}</span>
+      </Button>
     </div>
   );
 }
