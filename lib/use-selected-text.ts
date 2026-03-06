@@ -45,9 +45,56 @@ export function useSelectedText(): string {
       });
     };
 
-    document.addEventListener("selectionchange", handleSelection);
+    const watchedDocs = new Set<Document>();
+    const iframeLoadHandlers = new Map<HTMLIFrameElement, () => void>();
+
+    const attachSelectionListener = (targetDoc: Document | null | undefined) => {
+      if (!targetDoc || watchedDocs.has(targetDoc)) return;
+      targetDoc.addEventListener("selectionchange", handleSelection);
+      watchedDocs.add(targetDoc);
+    };
+
+    const attachIframeSelectionListener = (iframe: HTMLIFrameElement) => {
+      if (iframeLoadHandlers.has(iframe)) return;
+
+      const handleIframeLoad = () => {
+        try {
+          attachSelectionListener(iframe.contentDocument ?? iframe.contentWindow?.document);
+        } catch {
+          // Ignore cross-origin or inaccessible iframe documents.
+        }
+      };
+
+      iframe.addEventListener("load", handleIframeLoad);
+      iframeLoadHandlers.set(iframe, handleIframeLoad);
+      handleIframeLoad();
+    };
+
+    const syncIframeSelectionListeners = () => {
+      const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+      for (const iframe of iframes) {
+        if (iframe instanceof HTMLIFrameElement) {
+          attachIframeSelectionListener(iframe);
+        }
+      }
+    };
+
+    attachSelectionListener(document);
+    syncIframeSelectionListeners();
+
+    const observer = new MutationObserver(() => {
+      syncIframeSelectionListeners();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
     return () => {
-      document.removeEventListener("selectionchange", handleSelection);
+      observer.disconnect();
+      watchedDocs.forEach((targetDoc) => {
+        targetDoc.removeEventListener("selectionchange", handleSelection);
+      });
+      iframeLoadHandlers.forEach((handler, iframe) => {
+        iframe.removeEventListener("load", handler);
+      });
     };
   }, []);
 
