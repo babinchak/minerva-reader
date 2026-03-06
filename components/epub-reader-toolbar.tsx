@@ -21,8 +21,6 @@ interface EpubReaderToolbarProps {
   onRequestAiRun: (action: "page" | "selection") => void;
   onRequestAiOpen: () => void;
   isAiPaneOpen: boolean;
-  /** Width of the AI pane when open; toolbar shrinks to avoid overlap */
-  aiPaneWidth?: number;
 }
 
 /** Formats EPUB position from Thorium timeline for display in the toolbar */
@@ -63,7 +61,6 @@ export function EpubReaderToolbar({
   onRequestAiRun,
   onRequestAiOpen,
   isAiPaneOpen,
-  aiPaneWidth = 0,
 }: EpubReaderToolbarProps) {
   const router = useRouter();
   const selectedText = useSelectedText();
@@ -82,13 +79,8 @@ export function EpubReaderToolbar({
     dispatch(setActionOpen({ key: "toc", isOpen: true }));
   }, [dispatch]);
 
-  const toolbarPaddingRight = isAiPaneOpen && aiPaneWidth > 0 ? aiPaneWidth : 0;
-
   return (
-    <div
-      className="relative grid grid-cols-[1fr_auto_1fr] items-center px-4 py-2 border-b bg-background text-foreground shrink-0 transition-[padding] duration-200 ease-out"
-      style={{ paddingRight: toolbarPaddingRight > 0 ? toolbarPaddingRight : undefined }}
-    >
+    <div className="relative grid grid-cols-[1fr_auto_1fr] items-center px-4 py-2 border-b bg-background text-foreground shrink-0">
       <div className="min-w-0 flex items-center gap-2 justify-self-start">
         <Button
           variant="ghost"

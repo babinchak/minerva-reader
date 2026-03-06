@@ -110,7 +110,6 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
   const openAiNonceRef = useRef(0);
   const [openAiRequest, setOpenAiRequest] = useState<{ nonce: number } | null>(null);
   const [isAiPaneOpen, setIsAiPaneOpen] = useState(false);
-  const [aiPaneWidth, setAiPaneWidth] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -155,10 +154,9 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
                 setOpenAiRequest({ nonce: openAiNonceRef.current });
               }}
               isAiPaneOpen={isAiPaneOpen}
-              aiPaneWidth={aiPaneWidth}
             />
-            <div className="flex flex-1 relative min-h-0">
-              <div className="h-full w-full">
+            <div className="flex flex-1 relative min-h-0 min-w-0">
+              <div className="flex-1 min-w-0 h-full">
                 <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
               </div>
               <AIAssistant
@@ -169,7 +167,6 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
                 requestRun={aiRequest}
                 requestOpen={openAiRequest}
                 onOpenChange={setIsAiPaneOpen}
-                onPaneWidthChange={setAiPaneWidth}
               />
             </div>
 
