@@ -73,6 +73,7 @@ export interface RecordUsageResult {
 /**
  * Record usage and deduct from allowance/on-demand.
  * Returns result with success, included (from allowance vs on-demand), and costCents.
+ * In free beta mode: no deduction, returns costCents for display (nothing shown as included).
  */
 export async function recordUsage(params: RecordUsageParams): Promise<RecordUsageResult> {
   const {
@@ -86,6 +87,11 @@ export async function recordUsage(params: RecordUsageParams): Promise<RecordUsag
   } = params;
 
   if (costCents <= 0) return { success: true, included: true, costCents: 0 };
+
+  const { isFreeBetaMode } = await import("@/lib/credits");
+  if (isFreeBetaMode()) {
+    return { success: true, included: false, costCents };
+  }
 
   const supabase = createServiceClient();
   const { ensureUserCredits } = await import("@/lib/credits");

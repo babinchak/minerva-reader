@@ -1,5 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { isFreeBetaMode } from "@/lib/credits";
+import { costCentsFromTokens } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -69,8 +71,14 @@ export async function GET(req: NextRequest) {
         .range(offset, offset + limit - 1);
 
       if (!chatError && chatMessages) {
+        const freeBeta = isFreeBetaMode();
         for (const m of chatMessages) {
           const tokens = (m.input_tokens ?? 0) + (m.output_tokens ?? 0);
+          const inputT = m.input_tokens ?? 0;
+          const outputT = m.output_tokens ?? 0;
+          const model = m.model ?? "gpt-5-mini";
+          const isAgentic = m.chat_mode === "agentic";
+          const costCents = m.cost_cents ?? (inputT + outputT > 0 ? costCentsFromTokens(model, inputT, outputT, isAgentic) : undefined);
           chatRecords.push({
             id: m.id,
             date: m.created_at,
@@ -79,8 +87,8 @@ export async function GET(req: NextRequest) {
             inputTokens: m.input_tokens ?? undefined,
             outputTokens: m.output_tokens ?? undefined,
             tokens: tokens > 0 ? tokens : undefined,
-            included: m.usage_included ?? true,
-            costCents: m.usage_included ? undefined : (m.cost_cents ?? undefined),
+            included: freeBeta ? false : (m.usage_included ?? true),
+            costCents: freeBeta ? (costCents ?? 0) : (m.usage_included ? undefined : (m.cost_cents ?? undefined)),
             referenceId: m.chat_id,
             title: chatTitleMap.get(m.chat_id),
             bookTitle: chatBookMap.get(m.chat_id),
@@ -103,12 +111,13 @@ export async function GET(req: NextRequest) {
       console.error("Usage API books error:", booksError);
     }
 
+    const freeBeta = isFreeBetaMode();
     const uploadRecords: UsageRecordDisplay[] = (books ?? []).map((b) => ({
       id: `upload-${b.id}`,
       date: b.created_at,
       usageType: "upload" as const,
-      included: b.processing_cost_included ?? true,
-      costCents: b.processing_cost_included ? undefined : (b.processing_cost_cents ?? undefined),
+      included: freeBeta ? false : (b.processing_cost_included ?? true),
+      costCents: freeBeta ? (b.processing_cost_cents ?? 0) : (b.processing_cost_included ? undefined : (b.processing_cost_cents ?? undefined)),
       referenceId: b.id,
       title: b.title ?? "Book upload",
     }));
@@ -148,8 +157,8 @@ export async function GET(req: NextRequest) {
         id: `upload-legacy-${bookId}`,
         date,
         usageType: "upload" as const,
-        included,
-        costCents: included ? undefined : costCents,
+        included: freeBeta ? false : included,
+        costCents: freeBeta ? costCents : (included ? undefined : costCents),
         referenceId: bookId,
         title: bookMap.get(bookId) ?? "Book upload",
       })

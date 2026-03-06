@@ -1,7 +1,7 @@
 import { extractPdfMetadata } from "@/lib/pdf-metadata";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getTier, countBooksUploadedThisWeek } from "@/lib/credits";
+import { getTier, countBooksUploadedThisWeek, isFreeBetaMode } from "@/lib/credits";
 
 export async function POST(request: NextRequest) {
   console.log("[UPLOAD] Request received");
@@ -108,9 +108,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Not a duplicate - check free tier weekly limit (3 books/week)
+    // Not a duplicate - check free tier weekly limit (3 books/week). Bypass in free beta.
     const tier = await getTier(user.id);
-    if (tier === "free") {
+    if (tier === "free" && !isFreeBetaMode()) {
       const uploadedThisWeek = await countBooksUploadedThisWeek(user.id);
       if (uploadedThisWeek >= 3) {
         return NextResponse.json(

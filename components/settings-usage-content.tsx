@@ -12,6 +12,7 @@ type OnDemandLimitType = "disabled" | "fixed" | "unlimited";
 
 interface CreditsInfo {
   tier: string;
+  freeBetaMode?: boolean;
   balance: number;
   balanceCents: number;
   monthlyAllowance: number;
@@ -155,9 +156,20 @@ export function UsageContent() {
   }
 
   const isPaid = info.tier === "paid";
+  const freeBetaMode = info.freeBetaMode ?? false;
 
   return (
     <div className="space-y-6">
+      {freeBetaMode && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-6">
+            <p className="text-sm text-foreground">
+              <strong>Free beta</strong> — All usage is currently free. Prices shown below reflect what these would cost at launch.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {!isPaid && (
         <Card>
           <CardHeader>
@@ -198,7 +210,7 @@ export function UsageContent() {
         </Card>
       )}
 
-      {isPaid && (
+      {isPaid && !freeBetaMode && (
         <>
           <Card>
             <CardHeader>
@@ -318,44 +330,6 @@ export function UsageContent() {
             </CardContent>
           </Card>
         </>
-      )}
-
-      {!isPaid && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Uploads
-            </CardTitle>
-            <CardDescription>
-              Books uploaded this week
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-foreground">
-              {info.booksUploadedThisWeek} / {info.booksUploadLimit}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {!isPaid && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              AI requests
-            </CardTitle>
-            <CardDescription>
-              Agentic AI requests today
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-foreground">
-              {info.agenticToday} / {info.agenticLimit}
-            </p>
-          </CardContent>
-        </Card>
       )}
 
       {isPaid && (
@@ -499,6 +473,44 @@ export function UsageContent() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {!isPaid && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Uploads
+            </CardTitle>
+            <CardDescription>
+              Books uploaded this week
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-foreground">
+              {info.booksUploadedThisWeek} / {info.booksUploadLimit}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isPaid && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              AI requests
+            </CardTitle>
+            <CardDescription>
+              Agentic AI requests today
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-foreground">
+              {info.agenticToday} / {info.agenticLimit}
+            </p>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

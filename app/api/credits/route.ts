@@ -6,6 +6,7 @@ import {
   countBooksUploadedThisWeek,
   countAgenticRequestsToday,
   CREDITS_OVERAGE_CENTS_PER_1000,
+  isFreeBetaMode,
 } from "@/lib/credits";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export async function GET() {
     if (authError || !user) {
       return NextResponse.json({
         tier: "anonymous",
+        freeBetaMode: isFreeBetaMode(),
         balance: 0,
         balanceCents: 0,
         monthlyAllowance: 0,
@@ -43,6 +45,7 @@ export async function GET() {
     return NextResponse.json(
       {
         tier,
+        freeBetaMode: isFreeBetaMode(),
         balance: credits?.balance ?? 0,
         balanceCents: credits?.balanceCents ?? 0,
         monthlyAllowance: credits?.monthlyAllowance ?? 0,

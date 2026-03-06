@@ -77,9 +77,19 @@ export default async function Home({
   const params = await searchParams;
   const showUpgrade = params.upgrade === "1" || params.topup === "1";
 
+  const freeBetaMode = (() => {
+    const v = process.env.FREE_BETA_MODE;
+    return !!(v && (v === "1" || v.toLowerCase() === "true" || v.toLowerCase() === "yes"));
+  })();
+
   return (
     <main className="min-h-screen flex flex-col items-center text-foreground">
       <div className="flex-1 w-full flex flex-col gap-4 items-center">
+        {freeBetaMode && (
+          <div className="w-full bg-primary/10 border-b border-primary/20 py-2 px-4 text-center text-sm text-foreground">
+            <strong>Free beta</strong> — Book vectorization and AI usage free during beta.
+          </div>
+        )}
         <nav className="w-full flex justify-center border-b border-border h-16 shrink-0">
           <div className="w-full max-w-7xl flex justify-between items-center p-3 px-5 text-sm">
             <div className="flex gap-5 items-center font-semibold">

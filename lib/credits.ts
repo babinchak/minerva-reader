@@ -75,11 +75,19 @@ function getCreditRate(model: string): { input: number; output: number } {
   return MODEL_CREDIT_RATES[model] ?? DEFAULT_RATE;
 }
 
+/** True when FREE_BETA_MODE env var is set (e.g. "1" or "true"). */
+export function isFreeBetaMode(): boolean {
+  const v = process.env.FREE_BETA_MODE;
+  return !!(v && (v === "1" || v.toLowerCase() === "true" || v.toLowerCase() === "yes"));
+}
+
 /**
  * Resolve tier from user. Anonymous if no user.
+ * In free beta mode, authenticated users are treated as paid.
  */
 export async function getTier(userId: string | null): Promise<UserTier> {
   if (!userId) return "anonymous";
+  if (isFreeBetaMode()) return "paid";
 
   const supabase = createServiceClient();
   const { data } = await supabase
@@ -272,6 +280,7 @@ export async function getUsageMode(userId: string): Promise<UsageMode | null> {
 
 /**
  * Check if user can make a request.
+ * - Free beta mode: always allow.
  * - Included mode (balance > 0): always allow.
  * - On-demand mode (balance <= 0): use canAffordCents with estimated cost.
  */
@@ -279,6 +288,7 @@ export async function canMakeRequest(
   userId: string,
   estimatedCostCents: number
 ): Promise<boolean> {
+  if (isFreeBetaMode()) return true;
   const credits = await getCredits(userId);
   if (!credits) return false;
   if (credits.balanceCents > 0) return true; // included mode - no cost check
