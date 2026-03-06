@@ -300,8 +300,8 @@ export async function POST(request: NextRequest) {
 
     if (linkError) {
       console.error("[UPLOAD] Error linking book to user:", linkError);
-      // Clean up: delete book and storage file
-      await supabase.from("books").delete().eq("id", bookId);
+      // Clean up: delete book and storage file (service client bypasses RLS; no DELETE policy for books)
+      await serviceSupabase.from("books").delete().eq("id", bookId);
       await serviceSupabase.storage.from(bucketName).remove([storagePath]);
       
       return NextResponse.json({ 
