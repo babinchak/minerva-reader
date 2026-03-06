@@ -18,6 +18,8 @@ interface BookCardProps {
   authorDisplay: string;
   coverUrl: string | null;
   bookType: "epub" | "pdf" | null;
+  /** When false, hides the remove-from-library dropdown. Default true. */
+  showRemove?: boolean;
 }
 
 export function BookCard({
@@ -26,6 +28,7 @@ export function BookCard({
   authorDisplay,
   coverUrl,
   bookType,
+  showRemove = true,
 }: BookCardProps) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
@@ -90,28 +93,32 @@ export function BookCard({
         ) : (
           <div />
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0 -mr-1"
-              aria-label="Book options"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={handleRemove}
-              disabled={isRemoving}
-              className="text-destructive focus:text-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-              {isRemoving ? "Removing…" : "Remove from library"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {showRemove ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 -mr-1"
+                aria-label="Book options"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={handleRemove}
+                disabled={isRemoving}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+                {isRemoving ? "Removing…" : "Remove from library"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div />
+        )}
       </div>
     </div>
   );
