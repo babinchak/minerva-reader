@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BookOpen, MoreVertical, Trash2, User } from "lucide-react";
@@ -46,7 +45,7 @@ export function BookCard({ id, title, authorDisplay, coverUrl }: BookCardProps) 
         isRemoving ? "pointer-events-none opacity-0" : ""
       }`}
     >
-      <Link
+      <a
         href={`/read/${id}`}
         onClick={() => hapticLight()}
         className="flex flex-col"
@@ -73,7 +72,7 @@ export function BookCard({ id, title, authorDisplay, coverUrl }: BookCardProps) 
             <span className="truncate">{authorDisplay}</span>
           </p>
         )}
-      </Link>
+      </a>
       <div className="mt-2 flex h-9 items-center justify-end">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

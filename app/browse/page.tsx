@@ -137,7 +137,7 @@ export default async function BrowsePage() {
             <CardContent>
               <div className="space-y-4">
                 {curatedBooks.map((book) => (
-                  <Link
+                  <a
                     key={book.id}
                     href={`/read/${book.id}`}
                     className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer block"
@@ -164,7 +164,7 @@ export default async function BrowsePage() {
                         </div>
                       )}
                     </div>
-                  </Link>
+                  </a>
                 ))}
               </div>
             </CardContent>
