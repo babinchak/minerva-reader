@@ -55,7 +55,10 @@ export async function updateSession(request: NextRequest) {
     // Stripe webhooks are server-to-server, no auth cookies
     !request.nextUrl.pathname.startsWith("/api/stripe/webhook") &&
     !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
+    !request.nextUrl.pathname.startsWith("/auth") &&
+    // Curated library and reading curated books (read page enforces access per-book)
+    !request.nextUrl.pathname.startsWith("/browse") &&
+    !request.nextUrl.pathname.startsWith("/read/")
   ) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
