@@ -33,7 +33,7 @@ export interface UserCredits {
 export const TIER_MODELS = {
   anonymous: process.env.OPENAI_MODEL_ANONYMOUS || "gpt-5-mini",
   free: process.env.OPENAI_MODEL_FREE || "gpt-5-mini",
-  paid: process.env.OPENAI_MODEL_PAID || "gpt-5.4",
+  paid: process.env.OPENAI_MODEL_PAID || "gpt-5.2",
 } as const;
 
 /** Monthly allowance per tier (credits). */
