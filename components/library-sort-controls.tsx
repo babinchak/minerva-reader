@@ -32,7 +32,7 @@ function SortDropdown<T extends string>({
   const current = options.find((o) => o.value === value) ?? options[0];
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
