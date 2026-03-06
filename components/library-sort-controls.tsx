@@ -69,14 +69,23 @@ function SortDropdown<T extends string>({
 export function LibrarySortControls({
   sort = "dateAdded",
   dir = "desc",
+  onSortChange,
 }: {
   sort?: LibrarySortType;
   dir?: LibrarySortDir;
+  /** When provided, uses callback instead of URL - for instant in-memory sorting */
+  onSortChange?: (sort: LibrarySortType, dir: LibrarySortDir) => void;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const updateParams = (updates: { sort?: LibrarySortType; dir?: LibrarySortDir }) => {
+    if (onSortChange) {
+      const newSort = updates.sort ?? sort;
+      const newDir = updates.dir ?? dir;
+      onSortChange(newSort, newDir);
+      return;
+    }
     const params = new URLSearchParams(searchParams.toString());
     if (updates.sort !== undefined) params.set("sort", updates.sort);
     if (updates.dir !== undefined) params.set("dir", updates.dir);
