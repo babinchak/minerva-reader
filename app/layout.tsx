@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "next-themes";
 import { PwaRegister } from "@/components/pwa-register";
 import { CreditsRefreshOnSuccess } from "@/components/credits-refresh-on-success";
@@ -73,6 +74,7 @@ export default function RootLayout({
             <CreditsRefreshOnSuccess />
             <ScrollLockRepair />
             {children}
+            <Analytics />
           </ThemeVariantsProvider>
         </ThemeProvider>
       </body>
