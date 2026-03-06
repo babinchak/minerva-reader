@@ -5,7 +5,6 @@ import { useState } from "react";
 import { BookOpen, MoreVertical, Trash2, User } from "lucide-react";
 import { hapticLight } from "@/lib/haptic";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,7 +48,7 @@ export function BookCard({
 
   return (
     <div
-      className={`group flex h-full flex-col rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50 transition-opacity ${
+      className={`group flex h-full flex-col rounded-lg border bg-card px-3 pt-3 pb-2 transition-colors hover:bg-accent/50 transition-opacity ${
         isRemoving ? "pointer-events-none opacity-0" : ""
       }`}
     >
@@ -58,12 +57,12 @@ export function BookCard({
         onClick={() => hapticLight()}
         className="flex flex-1 flex-col"
       >
-        <div className="mb-3 aspect-[2/3] w-full overflow-hidden rounded-md bg-muted shadow-sm">
+        <div className="relative mb-3 aspect-[2/3] w-full flex-none overflow-hidden rounded-md bg-muted shadow-sm">
           {coverUrl ? (
             <img
               src={coverUrl}
               alt={`Cover of ${title}`}
-              className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+              className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
@@ -72,25 +71,22 @@ export function BookCard({
           )}
         </div>
         <div className="flex-1">
-          <h3 className="line-clamp-2 font-medium text-foreground group-hover:text-primary">
+          <h3 className="min-h-[2.75rem] line-clamp-2 font-medium text-foreground group-hover:text-primary">
             {title}
           </h3>
           {authorDisplay && (
-            <p className="mt-0.5 line-clamp-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <p className="mt-0 line-clamp-1 flex items-center gap-1 text-xs text-muted-foreground">
               <User className="h-3 w-3 shrink-0" />
               <span className="truncate">{authorDisplay}</span>
             </p>
           )}
         </div>
       </a>
-      <div className="mt-2 flex h-9 items-center justify-between">
+      <div className="mt-1 flex h-8 items-center justify-between">
         {bookType ? (
-          <Badge
-            variant="outline"
-            className="border-border px-2 py-0 text-[10px] uppercase tracking-wide text-muted-foreground"
-          >
+          <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
             {bookType}
-          </Badge>
+          </span>
         ) : (
           <div />
         )}
@@ -99,7 +95,7 @@ export function BookCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 shrink-0 -mr-1"
+              className="h-8 w-8 shrink-0 -mr-1"
               aria-label="Book options"
             >
               <MoreVertical className="h-4 w-4" />
