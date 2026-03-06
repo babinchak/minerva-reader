@@ -64,7 +64,9 @@ export async function updateSession(request: NextRequest) {
     // Book metadata for AI pane (anonymous allowed for curated books)
     !request.nextUrl.pathname.startsWith("/api/books/") &&
     // Credits (returns freeBetaMode for anonymous; needed for Deep mode toggle)
-    !request.nextUrl.pathname.startsWith("/api/credits")
+    !request.nextUrl.pathname.startsWith("/api/credits") &&
+    // Admin API (returns 401/403 for non-admin; needs to reach handler for JSON response)
+    !request.nextUrl.pathname.startsWith("/api/admin/")
   ) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
