@@ -1,10 +1,40 @@
 import { createClient } from "@/lib/supabase/server";
 import { BookOpen } from "lucide-react";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { LibraryWithBooks } from "@/components/library-grid-with-sort";
 import { UploadBookDialog } from "@/components/upload-book-dialog";
+import type { LibrarySortDir, LibrarySortType } from "@/components/library-sort-controls";
+
+const LIBRARY_SORT_COOKIE = "librarySortPreferences";
+
+function getInitialLibrarySort(cookieValue: string | undefined): {
+  sort: LibrarySortType;
+  dir: LibrarySortDir;
+} {
+  const fallback = { sort: "dateAdded" as const, dir: "desc" as const };
+  if (!cookieValue) return fallback;
+
+  try {
+    const parsed = JSON.parse(cookieValue) as {
+      sort?: LibrarySortType;
+      dir?: LibrarySortDir;
+    };
+
+    return {
+      sort: parsed.sort === "title" ? "title" : "dateAdded",
+      dir: parsed.dir === "asc" ? "asc" : "desc",
+    };
+  } catch {
+    return fallback;
+  }
+}
 
 export async function LibraryView() {
+  const cookieStore = await cookies();
+  const initialSortState = getInitialLibrarySort(
+    cookieStore.get(LIBRARY_SORT_COOKIE)?.value
+  );
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -59,7 +89,11 @@ export async function LibraryView() {
   return (
     <div className="w-full max-w-7xl space-y-6">
       {hasBooks ? (
-        <LibraryWithBooks books={books} />
+        <LibraryWithBooks
+          books={books}
+          initialSort={initialSortState.sort}
+          initialDir={initialSortState.dir}
+        />
       ) : (
         <>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

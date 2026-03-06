@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { BookCard } from "@/components/book-card";
 import { LibrarySortControls } from "@/components/library-sort-controls";
@@ -16,14 +16,30 @@ export interface LibraryBook {
   dateAdded: string;
 }
 
+const LIBRARY_SORT_COOKIE = "librarySortPreferences";
+
 function formatAuthorDisplay(author: string | null): string {
   if (!author) return "";
   return author.split(AUTHOR_DELIMITER).map((a) => a.trim()).filter(Boolean).join(", ");
 }
 
-export function LibraryWithBooks({ books }: { books: LibraryBook[] }) {
-  const [sort, setSort] = useState<LibrarySortType>("dateAdded");
-  const [dir, setDir] = useState<LibrarySortDir>("desc");
+export function LibraryWithBooks({
+  books,
+  initialSort = "dateAdded",
+  initialDir = "desc",
+}: {
+  books: LibraryBook[];
+  initialSort?: LibrarySortType;
+  initialDir?: LibrarySortDir;
+}) {
+  const [sort, setSort] = useState<LibrarySortType>(initialSort);
+  const [dir, setDir] = useState<LibrarySortDir>(initialDir);
+
+  useEffect(() => {
+    document.cookie =
+      `${LIBRARY_SORT_COOKIE}=${encodeURIComponent(JSON.stringify({ sort, dir }))}; ` +
+      "path=/; max-age=31536000; samesite=lax";
+  }, [sort, dir]);
 
   const sortedBooks = useMemo(() => {
     const asc = dir === "asc";
