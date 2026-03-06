@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createAgentGraph } from "@/lib/agent/graph";
 import { streamAgentToSSE } from "@/lib/agent/stream";
 import { HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
@@ -35,39 +35,8 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const tier = await getTier(user.id);
-
-    // Free tier: 5 deep mode questions per day
-    if (tier === "free") {
-      const agenticToday = await countAgenticRequestsToday(user.id);
-      if (agenticToday >= 5) {
-        return NextResponse.json(
-          {
-            error: "Deep mode limit reached",
-            message:
-              "Free tier allows 5 deep mode questions per day. Upgrade to Pro for unlimited.",
-          },
-          { status: 403 }
-        );
-      }
-    }
-
-    // Included mode: allow. On-demand mode: check can afford ~$1 for Deep mode.
-    const canAfford = await canMakeRequest(user.id, AGENTIC_ESTIMATED_CENTS);
-    if (!canAfford) {
-      return NextResponse.json(
-        {
-          error: "Insufficient credits",
-          message: "You've run out of credits. Upgrade or add more to continue.",
-        },
-        { status: 402 }
-      );
-    }
+    const serviceSupabase = createServiceClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
     const body = (await req.json()) as { messages?: unknown; bookId?: string; chatId?: string };
     const { messages: rawMessages, bookId, chatId } = body;
@@ -79,23 +48,80 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let vectorsReady = false;
-    if (bookId) {
-      const { data: userBook } = await supabase
-        .from("user_books")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("book_id", bookId)
-        .single();
-      if (!userBook) {
-        return NextResponse.json({ error: "Access denied to this book" }, { status: 403 });
+    // Anonymous: only allow for curated books
+    if (!user) {
+      if (!bookId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      const { data: book } = await supabase
+      const { data: book } = await serviceSupabase
         .from("books")
-        .select("vectors_processed_at")
+        .select("is_curated, vectors_processed_at")
         .eq("id", bookId)
         .single();
-      vectorsReady = Boolean(book?.vectors_processed_at);
+      if (!book?.is_curated) {
+        return NextResponse.json({ error: "Access denied to this book" }, { status: 403 });
+      }
+      // Anonymous curated: continue with vectorsReady from book
+    }
+
+    const tier = await getTier(user?.id ?? null);
+
+    // Logged-in: enforce limits and access
+    if (user) {
+      // Free tier: 5 deep mode questions per day
+      if (tier === "free") {
+        const agenticToday = await countAgenticRequestsToday(user.id);
+        if (agenticToday >= 5) {
+          return NextResponse.json(
+            {
+              error: "Deep mode limit reached",
+              message:
+                "Free tier allows 5 deep mode questions per day. Upgrade to Pro for unlimited.",
+            },
+            { status: 403 }
+          );
+        }
+      }
+
+      // Included mode: allow. On-demand mode: check can afford ~$1 for Deep mode.
+      const canAfford = await canMakeRequest(user.id, AGENTIC_ESTIMATED_CENTS);
+      if (!canAfford) {
+        return NextResponse.json(
+          {
+            error: "Insufficient credits",
+            message: "You've run out of credits. Upgrade or add more to continue.",
+          },
+          { status: 402 }
+        );
+      }
+    }
+
+    let vectorsReady = false;
+    if (bookId) {
+      if (user) {
+        const { data: userBook } = await supabase
+          .from("user_books")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("book_id", bookId)
+          .single();
+        const { data: curatedBook } = await serviceSupabase
+          .from("books")
+          .select("is_curated, vectors_processed_at")
+          .eq("id", bookId)
+          .single();
+        if (!userBook && !curatedBook?.is_curated) {
+          return NextResponse.json({ error: "Access denied to this book" }, { status: 403 });
+        }
+        vectorsReady = Boolean(curatedBook?.vectors_processed_at);
+      } else {
+        const { data: book } = await serviceSupabase
+          .from("books")
+          .select("vectors_processed_at")
+          .eq("id", bookId)
+          .single();
+        vectorsReady = Boolean(book?.vectors_processed_at);
+      }
     }
 
     const messages = rawMessages as IncomingMessage[];
@@ -111,7 +137,7 @@ export async function POST(req: NextRequest) {
 
     const model = getModelForTier(tier);
     const estimatedCents = AGENTIC_ESTIMATED_CENTS;
-    const graph = createAgentGraph(bookId ?? null, user.id, {
+    const graph = createAgentGraph(bookId ?? null, user?.id ?? null, {
       vectorsReady,
       model,
     });
@@ -133,15 +159,18 @@ export async function POST(req: NextRequest) {
                 capturedInputTokens != null && capturedOutputTokens != null
                   ? costCentsFromTokens(model, capturedInputTokens, capturedOutputTokens, true)
                   : estimatedCents;
-              const result = await recordUsage({
-                userId: user.id,
-                costCents,
-                usageType: "chat",
-                model,
-                inputTokens: capturedInputTokens ?? undefined,
-                outputTokens: capturedOutputTokens ?? undefined,
-                referenceId: chatId,
-              });
+              const result =
+                user
+                  ? await recordUsage({
+                      userId: user.id,
+                      costCents,
+                      usageType: "chat",
+                      model,
+                      inputTokens: capturedInputTokens ?? undefined,
+                      outputTokens: capturedOutputTokens ?? undefined,
+                      referenceId: chatId,
+                    })
+                  : { success: false, costCents, included: true };
               controller.enqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({

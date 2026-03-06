@@ -10,7 +10,7 @@ export interface AgentToolsOptions {
 
 export function createAgentTools(
   bookId: string | null,
-  userId: string,
+  userId: string | null,
   options?: AgentToolsOptions
 ) {
   const vectorsReady = options?.vectorsReady ?? false;

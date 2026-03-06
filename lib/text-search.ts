@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 export interface TextSearchResult {
   content_text: string;
@@ -19,22 +19,33 @@ export interface TextSearchOptions {
 
 export async function textSearch(
   bookId: string,
-  userId: string,
+  userId: string | null,
   query: string,
   limit = 10,
   options?: TextSearchOptions
 ): Promise<{ results: TextSearchResult[]; error?: string }> {
   const supabase = await createClient();
+  const serviceSupabase = createServiceClient();
 
-  const { data: userBook } = await supabase
-    .from("user_books")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("book_id", bookId)
-    .single();
-
-  if (!userBook) {
-    return { results: [], error: "Access denied to this book" };
+  if (userId) {
+    const { data: userBook } = await supabase
+      .from("user_books")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("book_id", bookId)
+      .single();
+    if (!userBook) {
+      return { results: [], error: "Access denied to this book" };
+    }
+  } else {
+    const { data: book } = await serviceSupabase
+      .from("books")
+      .select("is_curated")
+      .eq("id", bookId)
+      .single();
+    if (!book?.is_curated) {
+      return { results: [], error: "Access denied to this book" };
+    }
   }
 
   const maxResults = Math.min(Math.max(1, limit), 50);
@@ -59,7 +70,8 @@ export async function textSearch(
   const escapeForRegex = (s: string) =>
     s.replace(/[\\[\](){}?*+^$.|]/g, "\\$&");
 
-  let queryBuilder = supabase
+  const db = userId ? supabase : serviceSupabase;
+  let queryBuilder = db
     .from("embedding_sections")
     .select("id, content_text, start_position, end_position")
     .eq("book_id", bookId);

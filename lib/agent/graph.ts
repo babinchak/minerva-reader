@@ -28,7 +28,7 @@ export interface AgentGraphOptions {
 
 export function createAgentGraph(
   bookId: string | null,
-  userId: string,
+  userId: string | null,
   options?: AgentGraphOptions
 ) {
   const vectorsReady = options?.vectorsReady ?? false;

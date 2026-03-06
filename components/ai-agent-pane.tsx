@@ -563,6 +563,7 @@ export function AIAgentPanel({
   } | null>(null);
 
   // Fetch book metadata and processing status when bookId is available; poll while incomplete
+  // Uses API route so anonymous users can access curated books (direct Supabase hits RLS and returns 406)
   useEffect(() => {
     if (!bookId) {
       setProcessingStatus(null);
@@ -572,13 +573,14 @@ export function AIAgentPanel({
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
     const poll = async () => {
-      const { data, error } = await supabase
-        .from("books")
-        .select("title, author, summaries_processed_at, vectors_processed_at")
-        .eq("id", bookId)
-        .single();
-
-      if (!error && data) {
+      const res = await fetch(`/api/books/${bookId}/metadata`);
+      if (res.ok) {
+        const data = (await res.json()) as {
+          title?: string;
+          author?: string;
+          summaries_processed_at?: string | null;
+          vectors_processed_at?: string | null;
+        };
         const summariesReady = Boolean(data.summaries_processed_at);
         const vectorsReady = Boolean(data.vectors_processed_at);
         setBookTitle(data.title || "");
@@ -606,7 +608,7 @@ export function AIAgentPanel({
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [bookId, supabase]);
+  }, [bookId]);
 
   // Fetch chats for user (filter by bookId when in a book)
   useEffect(() => {

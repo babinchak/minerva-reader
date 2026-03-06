@@ -17,8 +17,8 @@ export default async function ReadBookPage({ params }: PageProps) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Fetch the book (include is_curated for anonymous access)
-  const { data: book, error: bookError } = await supabase
+  // Fetch the book with service client so anonymous users can access curated books (RLS blocks user client when not logged in)
+  const { data: book, error: bookError } = await serviceSupabase
     .from("books")
     .select("id, uploaded_by, book_type, storage_path, file_name, title, is_curated")
     .eq("id", bookId)

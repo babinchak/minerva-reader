@@ -58,7 +58,11 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/auth") &&
     // Curated library and reading curated books (read page enforces access per-book)
     !request.nextUrl.pathname.startsWith("/browse") &&
-    !request.nextUrl.pathname.startsWith("/read/")
+    !request.nextUrl.pathname.startsWith("/read/") &&
+    // Chat APIs (enforce access per-request; anonymous allowed for curated books)
+    !request.nextUrl.pathname.startsWith("/api/chat") &&
+    // Book metadata for AI pane (anonymous allowed for curated books)
+    !request.nextUrl.pathname.startsWith("/api/books/")
   ) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();

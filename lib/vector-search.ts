@@ -130,7 +130,7 @@ export interface PassageContentResult {
 export async function getPassageContent(
   bookId: string,
   sectionIds: string[],
-  userId: string
+  userId: string | null
 ): Promise<{ passages: PassageContentResult[]; error?: string }> {
   if (sectionIds.length === 0) {
     return { passages: [] };
@@ -138,16 +138,27 @@ export async function getPassageContent(
   const uniqueIds = [...new Set(sectionIds)].slice(0, 20);
 
   try {
-    const userClient = await createClient();
-    const { data: userBook } = await userClient
-      .from("user_books")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("book_id", bookId)
-      .single();
-
-    if (!userBook) {
-      return { passages: [], error: "Access denied to this book" };
+    if (userId) {
+      const userClient = await createClient();
+      const { data: userBook } = await userClient
+        .from("user_books")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("book_id", bookId)
+        .single();
+      if (!userBook) {
+        return { passages: [], error: "Access denied to this book" };
+      }
+    } else {
+      const serviceSupabase = createServiceClient();
+      const { data: book } = await serviceSupabase
+        .from("books")
+        .select("is_curated")
+        .eq("id", bookId)
+        .single();
+      if (!book?.is_curated) {
+        return { passages: [], error: "Access denied to this book" };
+      }
     }
 
     const supabase = createServiceClient();
