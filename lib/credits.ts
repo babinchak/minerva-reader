@@ -33,7 +33,7 @@ export interface UserCredits {
 export const TIER_MODELS = {
   anonymous: process.env.OPENAI_MODEL_ANONYMOUS || "gpt-5-mini",
   free: process.env.OPENAI_MODEL_FREE || "gpt-5-mini",
-  paid: process.env.OPENAI_MODEL_PAID || "gpt-5.2",
+  paid: process.env.OPENAI_MODEL_PAID || "gpt-5.4",
 } as const;
 
 /** Monthly allowance per tier (credits). */
@@ -51,6 +51,7 @@ export const MODEL_CREDIT_RATES: Record<string, { input: number; output: number 
   "gpt-5-nano": { input: 0.05, output: 0.1 },
   "gpt-5": { input: 0.5, output: 1.0 },
   "gpt-5.2": { input: 0.5, output: 1.0 },
+  "gpt-5.4": { input: 0.5, output: 1.0 },
 };
 
 /** Agentic multiplier (tool calls add overhead). */

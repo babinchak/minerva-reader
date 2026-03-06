@@ -17,6 +17,7 @@ const MODEL_CENTS_PER_1M: Record<string, { input: number; output: number }> = {
   "gpt-5-nano": { input: 10, output: 80 },
   "gpt-5": { input: 175, output: 1400 },
   "gpt-5.2": { input: 175, output: 1400 },
+  "gpt-5.4": { input: 175, output: 1400 },
   "text-embedding-3-small": { input: 2, output: 0 },
   "text-embedding-3-large": { input: 13, output: 0 },
 };
