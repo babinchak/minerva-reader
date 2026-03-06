@@ -205,30 +205,22 @@ function DesktopAIAssistant({
       )}
 
       {isOpen && !isPdf && (
-        <>
-          <button
-            type="button"
-            aria-label="Close AI assistant"
-            className="fixed inset-0 z-40 bg-black/20"
-            onClick={() => setIsOpen(false)}
-          />
+        <div
+          className="fixed right-0 top-0 z-50 h-full flex flex-col bg-background border-l border-border shadow-lg select-text transition-[width] duration-200 ease-out"
+          style={{ width: dockWidth }}
+        >
           <div
-            className="fixed right-0 top-0 z-50 h-full flex flex-col bg-background border-l border-border shadow-lg select-text transition-[width] duration-200 ease-out"
-            style={{ width: dockWidth }}
-          >
-            <div
-              className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
-              onPointerDown={startResize}
-              onPointerMove={moveResize}
-              onPointerUp={endResize}
-              onPointerCancel={endResize}
-              aria-label="Resize AI panel"
-              role="separator"
-              aria-orientation="vertical"
-            />
-            <AIAgentPanel {...panelProps} className="h-full w-full flex flex-col min-w-0" />
-          </div>
-        </>
+            className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
+            onPointerDown={startResize}
+            onPointerMove={moveResize}
+            onPointerUp={endResize}
+            onPointerCancel={endResize}
+            aria-label="Resize AI panel"
+            role="separator"
+            aria-orientation="vertical"
+          />
+          <AIAgentPanel {...panelProps} className="h-full w-full flex flex-col min-w-0" />
+        </div>
       )}
     </>
   );
