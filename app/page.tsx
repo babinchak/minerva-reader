@@ -71,18 +71,18 @@ async function SignedOutCuratedPreview() {
   }));
 
   return (
-    <section className="w-full max-w-7xl space-y-6">
-      <div className="flex flex-col gap-4 text-left sm:flex-row sm:items-end sm:justify-between">
+    <section className="w-full max-w-7xl space-y-5">
+      <div className="flex flex-col gap-3 text-left sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium uppercase tracking-[0.18em] text-muted-foreground">
             Start reading now
           </p>
           <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
-            Curated Library Preview
+            Curated Library
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            A small selection of public domain books you can open immediately. Sign
-            up when you want your own uploads and a personal library.
+            A small selection of public domain books you can open immediately, with
+            your own uploads waiting when you sign up.
           </p>
         </div>
         <Link
@@ -117,11 +117,16 @@ async function HomeContent({
 }) {
   if (!hasEnvVars) {
     return (
-      <div className="flex flex-col items-center gap-4 text-center">
+      <div className="mx-auto flex max-w-4xl flex-col items-center gap-5 text-center">
         <BookOpen className="h-16 w-16 text-muted-foreground" />
-        <h1 className="text-4xl font-bold text-foreground">Minerva Reader</h1>
-        <p className="text-lg text-muted-foreground max-w-md">
-          Your personal EPUB and PDF library. Upload and read your books in one place.
+        <h1 className="max-w-3xl text-4xl font-bold text-foreground">
+          <span className="block">Instant answers in context.</span>
+          <span className="block">Deep search across the book.</span>
+        </h1>
+        <p className="max-w-2xl text-lg text-muted-foreground">
+          Highlight any passage for an instant explanation in context, or switch to
+          deep mode for broader answers grounded in the book and relevant web
+          results.
         </p>
         <Suspense>
           <AuthButton />
@@ -146,12 +151,17 @@ async function HomeContent({
 
   // User is not logged in - show landing page with browse CTA
   return (
-    <div className="w-full max-w-7xl space-y-16">
-      <section className="flex flex-col items-center gap-6 px-4 pt-8 text-center sm:pt-12">
+    <div className="w-full max-w-7xl space-y-12 sm:space-y-14">
+      <section className="mx-auto flex max-w-4xl flex-col items-center gap-5 px-4 pt-10 text-center sm:pt-14">
         <BookOpen className="h-16 w-16 text-muted-foreground" />
-        <h1 className="text-4xl font-bold text-foreground">Minerva Reader</h1>
-        <p className="max-w-md text-lg text-muted-foreground">
-          Your personal EPUB and PDF library. Upload and read your books in one place.
+        <h1 className="max-w-3xl text-4xl font-bold text-foreground sm:text-5xl">
+          <span className="block">Instant answers in context.</span>
+          <span className="block">Deep search across the book.</span>
+        </h1>
+        <p className="max-w-2xl text-lg text-muted-foreground">
+          Highlight any passage for an instant explanation in context, or switch to
+          deep mode for broader answers grounded in the book and relevant web
+          results.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link
@@ -165,7 +175,7 @@ async function HomeContent({
           </Suspense>
         </div>
         <p className="text-sm text-muted-foreground">
-          Sign up to upload your own books and get more AI features.
+          Sign up to upload your own books and save a personal library.
         </p>
       </section>
 
