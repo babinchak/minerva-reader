@@ -1,6 +1,7 @@
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { createClient } from "@/lib/supabase/server";
 import { BookCard } from "@/components/book-card";
+import type { LibrarySortType, LibrarySortDir } from "@/components/library-sort-controls";
 
 /** Format author string for display: split by pipe, join with ", " */
 function formatAuthorDisplay(author: string | null): string {
@@ -8,7 +9,13 @@ function formatAuthorDisplay(author: string | null): string {
   return author.split(AUTHOR_DELIMITER).map((a) => a.trim()).filter(Boolean).join(", ");
 }
 
-export async function BooksList() {
+export async function BooksList({
+  sort = "dateAdded",
+  dir = "desc",
+}: {
+  sort?: LibrarySortType;
+  dir?: LibrarySortDir;
+}) {
   const supabase = await createClient();
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
@@ -16,9 +23,9 @@ export async function BooksList() {
     return null;
   }
 
-  const { data: userBookLinks, error: linksError } = await supabase
+  const { data: userBookRows, error: linksError } = await supabase
     .from("user_books")
-    .select("book_id")
+    .select("book_id, created_at, updated_at")
     .eq("user_id", user.id);
 
   if (linksError) {
@@ -29,16 +36,15 @@ export async function BooksList() {
     );
   }
 
-  if (!userBookLinks || userBookLinks.length === 0) {
+  if (!userBookRows || userBookRows.length === 0) {
     return null; // Caller renders empty state
   }
 
-  const bookIds = userBookLinks.map((link) => link.book_id);
+  const bookIds = userBookRows.map((r) => r.book_id);
   const { data: books, error: booksError } = await supabase
     .from("books")
-    .select("id, title, author, created_at, cover_path")
-    .in("id", bookIds)
-    .order("created_at", { ascending: false });
+    .select("id, title, author, cover_path")
+    .in("id", bookIds);
 
   if (booksError) {
     return (
@@ -48,8 +54,12 @@ export async function BooksList() {
     );
   }
 
+  const dateAddedMap = new Map(
+    userBookRows.map((r) => [r.book_id, r.created_at ?? r.updated_at ?? ""])
+  );
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const userBooks = (books || []).map((book) => {
+  let userBooks = (books || []).map((book) => {
     const coverUrl = book.cover_path && supabaseUrl
       ? `${supabaseUrl}/storage/v1/object/public/covers/${book.cover_path}`
       : null;
@@ -58,8 +68,26 @@ export async function BooksList() {
       title: book.title,
       author: book.author,
       coverUrl,
+      dateAdded: dateAddedMap.get(book.id) ?? "",
     };
   });
+
+  // Sort by type and direction
+  const asc = dir === "asc";
+  if (sort === "dateAdded") {
+    userBooks = [...userBooks].sort((a, b) => {
+      const da = new Date(a.dateAdded).getTime();
+      const db = new Date(b.dateAdded).getTime();
+      return asc ? da - db : db - da;
+    });
+  } else {
+    userBooks = [...userBooks].sort((a, b) => {
+      const ta = (a.title ?? "").toLowerCase();
+      const tb = (b.title ?? "").toLowerCase();
+      const cmp = ta.localeCompare(tb);
+      return asc ? cmp : -cmp;
+    });
+  }
 
   if (userBooks.length === 0) {
     return null;

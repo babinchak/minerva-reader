@@ -11,8 +11,12 @@ import { BookOpen } from "lucide-react";
 
 async function HomeContent({
   showUpgrade,
+  sort,
+  dir,
 }: {
   showUpgrade: boolean;
+  sort?: "dateAdded" | "title";
+  dir?: "asc" | "desc";
 }) {
   if (!hasEnvVars) {
     return (
@@ -37,7 +41,7 @@ async function HomeContent({
       <div className="w-full max-w-7xl space-y-6">
         {showUpgrade && <UpgradeCta />}
         <Suspense>
-          <LibraryView />
+          <LibraryView sort={sort} dir={dir} />
         </Suspense>
       </div>
     );
@@ -72,10 +76,12 @@ async function HomeContent({
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ upgrade?: string; topup?: string }>;
+  searchParams: Promise<{ upgrade?: string; topup?: string; sort?: string; dir?: string }>;
 }) {
   const params = await searchParams;
   const showUpgrade = params.upgrade === "1" || params.topup === "1";
+  const sort = (params.sort === "title" ? "title" : "dateAdded") as "dateAdded" | "title";
+  const dir = (params.dir === "asc" ? "asc" : "desc") as "asc" | "desc";
 
   return (
     <main className="min-h-screen flex flex-col items-center text-foreground">
@@ -108,7 +114,7 @@ export default async function Home({
         </nav>
         <div className="flex-1 w-full flex flex-col gap-6 max-w-7xl px-6 pt-2 pb-8 items-center">
           <Suspense>
-            <HomeContent showUpgrade={showUpgrade} />
+            <HomeContent showUpgrade={showUpgrade} sort={sort} dir={dir} />
           </Suspense>
         </div>
 

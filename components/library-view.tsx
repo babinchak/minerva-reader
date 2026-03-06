@@ -2,9 +2,17 @@ import { createClient } from "@/lib/supabase/server";
 import { BookOpen } from "lucide-react";
 import Link from "next/link";
 import { BooksList } from "@/components/books-list";
+import { LibrarySortControls } from "@/components/library-sort-controls";
 import { UploadBookDialog } from "@/components/upload-book-dialog";
+import type { LibrarySortType, LibrarySortDir } from "@/components/library-sort-controls";
 
-export async function LibraryView() {
+export async function LibraryView({
+  sort = "dateAdded",
+  dir = "desc",
+}: {
+  sort?: LibrarySortType;
+  dir?: LibrarySortDir;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -23,7 +31,10 @@ export async function LibraryView() {
         <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
           Library
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {hasBooks && (
+            <LibrarySortControls sort={sort} dir={dir} />
+          )}
           <UploadBookDialog />
           <Link
             href="/browse"
@@ -35,7 +46,7 @@ export async function LibraryView() {
       </div>
 
       {hasBooks ? (
-        <BooksList />
+        <BooksList sort={sort} dir={dir} />
       ) : (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-6 py-16 text-center">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
