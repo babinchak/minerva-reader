@@ -1,3 +1,5 @@
+import { calculateSelectionPositions } from "@/lib/book-position/positions";
+
 export interface EpubVisibleContext {
   text: string;
   debugInfo?: {
@@ -6,6 +8,11 @@ export interface EpubVisibleContext {
     chosenIframeRect?: { x: number; y: number; width: number; height: number };
     anchorTag?: string;
   };
+}
+
+export interface EpubVisibleContextWithPosition extends EpubVisibleContext {
+  startPosition: string;
+  endPosition: string;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -61,7 +68,10 @@ function getElementText(el: Element): string {
   return raw.replace(/\s+/g, " ").trim();
 }
 
-function collectNearbyBlocks(anchor: Element, maxChars: number): string {
+function collectNearbyBlocksWithElements(
+  anchor: Element,
+  maxChars: number
+): { text: string; blocks: Element[] } {
   const parent = anchor.parentElement;
   const blocks: Element[] = [];
 
@@ -72,15 +82,12 @@ function collectNearbyBlocks(anchor: Element, maxChars: number): string {
     blocks.push(el);
   };
 
-  // Start with anchor.
   pushIfOk(anchor);
 
-  // Add siblings around it (best-effort “visible neighborhood”).
   if (parent) {
     const children = Array.from(parent.children);
     const idx = children.indexOf(anchor);
     if (idx >= 0) {
-      // Prefer a few previous + next blocks.
       for (let offset = 1; offset <= 8; offset++) {
         pushIfOk(children[idx - offset] ?? null);
         pushIfOk(children[idx + offset] ?? null);
@@ -89,7 +96,6 @@ function collectNearbyBlocks(anchor: Element, maxChars: number): string {
     }
   }
 
-  // De-dupe while preserving order.
   const unique: Element[] = [];
   const seen = new Set<Element>();
   for (const b of blocks) {
@@ -98,8 +104,6 @@ function collectNearbyBlocks(anchor: Element, maxChars: number): string {
     unique.push(b);
   }
 
-  // Sort roughly by DOM position: keep anchor first, then previous/next interleaved order is fine.
-  // Now build text until budget.
   let out = "";
   for (const el of unique) {
     const txt = getElementText(el);
@@ -115,11 +119,15 @@ function collectNearbyBlocks(anchor: Element, maxChars: number): string {
     out += piece;
   }
 
-  return out.trim();
+  return { text: out.trim(), blocks: unique };
+}
+
+function collectNearbyBlocks(anchor: Element, maxChars: number): string {
+  return collectNearbyBlocksWithElements(anchor, maxChars).text;
 }
 
 /**
- * Best-effort extraction of the “currently visible” text in the EPUB iframe.
+ * Best-effort extraction of the "currently visible" text in the EPUB iframe.
  * This intentionally avoids any API calls that might change pagination / position.
  */
 export function getEpubVisibleContext(options?: {
@@ -192,3 +200,65 @@ export function getEpubVisibleContext(options?: {
   }
 }
 
+/**
+ * Like getEpubVisibleContext but also returns start/end position for the visible range.
+ * Used to fetch intersect-based summaries for EPUB "Explain page" and typed sends without selection.
+ */
+export function getEpubVisibleContextWithPosition(
+  readingOrder: Array<{ href?: string }>,
+  options?: { maxChars?: number }
+): EpubVisibleContextWithPosition | null {
+  const maxChars = clamp(options?.maxChars ?? 30000, 1000, 60000);
+
+  const iframes = Array.from(document.querySelectorAll("iframe"));
+  const viewportRect = new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+
+  let bestIdx: number | null = null;
+  let bestScore = 0;
+
+  for (let i = 0; i < iframes.length; i++) {
+    const iframe = iframes[i];
+    const rect = iframe.getBoundingClientRect();
+    const area = rectIntersectionArea(rect, viewportRect);
+    if (area <= 0) continue;
+    if (area > bestScore) {
+      bestScore = area;
+      bestIdx = i;
+    }
+  }
+
+  if (bestIdx == null) return null;
+
+  const chosen = iframes[bestIdx];
+  try {
+    const doc = chosen.contentDocument || chosen.contentWindow?.document;
+    const win = chosen.contentWindow;
+    if (!doc || !win) return null;
+
+    const x = Math.floor(win.innerWidth / 2);
+    const y = Math.floor(win.innerHeight / 2);
+    const atPoint = doc.elementFromPoint(x, y);
+    const anchor = closestBlockElement(atPoint) ?? closestBlockElement(doc.body);
+    if (!anchor) return null;
+
+    const { text, blocks } = collectNearbyBlocksWithElements(anchor, maxChars);
+    if (!text || blocks.length === 0) return null;
+
+    const first = blocks[0];
+    const last = blocks[blocks.length - 1];
+    if (!first || !last) return null;
+
+    const range = doc.createRange();
+    range.setStart(first, 0);
+    range.setEnd(last, last.childNodes.length);
+
+    const positions = calculateSelectionPositions(range, readingOrder, doc, -1);
+    return {
+      text,
+      startPosition: positions.start,
+      endPosition: positions.end,
+    };
+  } catch {
+    return null;
+  }
+}

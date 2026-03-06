@@ -26,7 +26,7 @@ import { getCurrentPdfPageContext } from "@/lib/pdf-position/page-context";
 import { queryPdfSummariesForPosition } from "@/lib/pdf-position/summaries";
 import { getPdfLocalContextAroundCurrentSelection } from "@/lib/pdf-position/local-context";
 import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context-from-document";
-import { getEpubVisibleContext } from "@/lib/epub-visible-context";
+import { getEpubVisibleContext, getEpubVisibleContextWithPosition } from "@/lib/epub-visible-context";
 import { getEpubLocalContextAroundCurrentSelection } from "@/lib/book-position/local-context";
 import { ContextPreviewDialog } from "@/components/context-preview-dialog";
 import { UpgradeCta } from "@/components/upgrade-cta";
@@ -959,9 +959,31 @@ export function AIAgentPanel({
           }
         }
       } else if (!hasSelection && bookType === "epub") {
-        const visible = getEpubVisibleContext({ maxChars: 30000 });
+        const readingOrder = rawManifest?.readingOrder || [];
+        const visible = getEpubVisibleContextWithPosition(readingOrder, { maxChars: 30000 });
         if (visible?.text) {
           sendPageContextBlock = `Current view text for context:\n\n"${visible.text}"`;
+          try {
+            const contextRes = await fetch(`/api/books/${bookId}/context`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                bookType: "epub",
+                startPosition: visible.startPosition,
+                endPosition: visible.endPosition,
+              }),
+            });
+            if (contextRes.ok) {
+              const contextData = (await contextRes.json()) as {
+                book?: { title?: string | null; author?: string | null } | null;
+                summaries?: ContextApiSummary[];
+              };
+              sendBookContext = contextData.book ?? null;
+              appendContextSummaries(contextData.summaries ?? []);
+            }
+          } catch {
+            // Best-effort context enrichment for typed sends.
+          }
         }
       }
     }
@@ -1283,7 +1305,8 @@ export function AIAgentPanel({
       }
     } else {
       if (isExplainPage) {
-        const visible = getEpubVisibleContext({ maxChars: 30000 });
+        const readingOrder = rawManifest?.readingOrder || [];
+        const visible = getEpubVisibleContextWithPosition(readingOrder, { maxChars: 30000 });
         if (!visible?.text) {
           setIsLoading(false);
           onActionComplete?.();
@@ -1292,8 +1315,14 @@ export function AIAgentPanel({
         explainBodyText = visible.text;
         selectionPositionLabel = `(View)`;
         selectionPositionTitle = "EPUB visible context";
-        // No reliable position → we skip summary lookup here (best-effort).
-        summaries = [];
+        summaries = (
+          await querySummariesForPosition(bookId, visible.startPosition, visible.endPosition)
+        ).map(({ summary_type, toc_title, chapter_path, summary_text }) => ({
+          summary_type: summary_type ?? "chapter",
+          toc_title,
+          chapter_path,
+          summary_text,
+        }));
       } else {
         const readingOrder = rawManifest?.readingOrder || [];
         const position = selectionSnapshot?.epubPosition ?? getCurrentSelectionPosition(readingOrder, null);
@@ -1302,8 +1331,8 @@ export function AIAgentPanel({
           selectionPositionLabel = formatted.label;
           selectionPositionTitle = formatted.title;
           summaries = (await querySummariesForPosition(bookId, position.start, position.end)).map(
-            ({ toc_title, chapter_path, summary_text }) => ({
-              summary_type: "chapter",
+            ({ summary_type, toc_title, chapter_path, summary_text }) => ({
+              summary_type: summary_type ?? "chapter",
               toc_title,
               chapter_path,
               summary_text,
@@ -1350,34 +1379,52 @@ export function AIAgentPanel({
     appendSummaries("Broader summary (wide context)", broadSummaries);
     appendSummaries("More specific summary (narrow context)", narrowSummaries);
 
-    // Add local PDF context window around selection (from document for cross-page context)
-    if (isPdf && !isExplainPage) {
-      const position = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
-      let local: { beforeText: string; selectedText: string; afterText: string } | null = null;
-      if (pdfDocument && position && explainBodyText) {
-        local = await getPdfLocalContextFromDocument(
-          pdfDocument,
-          position.start,
-          position.end,
-          explainBodyText,
-          { beforeChars: 1200, afterChars: 1200, pagesBefore: 2, pagesAfter: 2, maxTotalChars: 4000 }
-        );
-      }
-      if (!local) {
-        local = getPdfLocalContextAroundCurrentSelection({
-          beforeChars: 800,
-          afterChars: 800,
-          maxTotalChars: 2400,
-        });
-      }
-      if (local && (local.beforeText || local.afterText)) {
-        prompt += "Local context around the selection (PDF text from surrounding pages):\n\n";
-        if (local.beforeText) {
-          prompt += `Before:\n"${local.beforeText}"\n\n`;
+    // Add local context window around selection (PDF from document for cross-page; EPUB from DOM)
+    if (!isExplainPage) {
+      if (isPdf) {
+        const position = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
+        let local: { beforeText: string; selectedText: string; afterText: string } | null = null;
+        if (pdfDocument && position && explainBodyText) {
+          local = await getPdfLocalContextFromDocument(
+            pdfDocument,
+            position.start,
+            position.end,
+            explainBodyText,
+            { beforeChars: 1200, afterChars: 1200, pagesBefore: 2, pagesAfter: 2, maxTotalChars: 4000 }
+          );
         }
-        prompt += `Selected:\n"${local.selectedText}"\n\n`;
-        if (local.afterText) {
-          prompt += `After:\n"${local.afterText}"\n\n`;
+        if (!local) {
+          local = getPdfLocalContextAroundCurrentSelection({
+            beforeChars: 800,
+            afterChars: 800,
+            maxTotalChars: 2400,
+          });
+        }
+        if (local && (local.beforeText || local.afterText)) {
+          prompt += "Local context around the selection (PDF text from surrounding pages):\n\n";
+          if (local.beforeText) {
+            prompt += `Before:\n"${local.beforeText}"\n\n`;
+          }
+          prompt += `Selected:\n"${local.selectedText}"\n\n`;
+          if (local.afterText) {
+            prompt += `After:\n"${local.afterText}"\n\n`;
+          }
+        }
+      } else {
+        const local = getEpubLocalContextAroundCurrentSelection({
+          beforeChars: 900,
+          afterChars: 900,
+          maxTotalChars: 2800,
+        });
+        if (local && (local.beforeText || local.afterText)) {
+          prompt += "Local context around the selection (EPUB nearby text):\n\n";
+          if (local.beforeText) {
+            prompt += `Before:\n"${local.beforeText}"\n\n`;
+          }
+          prompt += `Selected:\n"${local.selectedText}"\n\n`;
+          if (local.afterText) {
+            prompt += `After:\n"${local.afterText}"\n\n`;
+          }
         }
       }
     }

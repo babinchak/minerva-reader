@@ -13,6 +13,7 @@ export interface Summary {
   start_reading_order: number;
   end_reading_order: number;
   summary_text: string | null;
+  summary_type?: "book" | "chapter" | "subchapter";
 }
 
 export interface TextSelectionResult {

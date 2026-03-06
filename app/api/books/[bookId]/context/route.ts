@@ -172,29 +172,32 @@ export async function POST(
         summary_text: s.summary_text,
       }));
     } else {
-      const readingOrderIndex = parseInt(startPosition.split("/")[0], 10);
-      if (isNaN(readingOrderIndex)) {
-        return NextResponse.json({ book: null, summaries: [] });
-      }
+      // Fetch all summaries (like PDF) so book-level always included; filter in memory
       const { data, error } = await supabase
         .from("summaries")
         .select("summary_type, toc_title, chapter_path, start_position, end_position, start_reading_order, end_reading_order, summary_text")
-        .eq("book_id", bookId)
-        .gte("end_reading_order", readingOrderIndex)
-        .lte("start_reading_order", readingOrderIndex);
+        .eq("book_id", bookId);
       if (error || !data) {
         return NextResponse.json({ book: null, summaries: [] });
       }
-      const matching = data.filter((s) =>
-        epubPositionsIntersect(
+      const matching = data.filter((s) => {
+        if (s.summary_type === "book") return true;
+        if (
+          s.start_reading_order == null ||
+          s.end_reading_order == null ||
+          s.start_position == null
+        ) {
+          return false;
+        }
+        return epubPositionsIntersect(
           startPosition,
           endPosition,
           s.start_position,
           s.end_position,
           s.start_reading_order,
           s.end_reading_order
-        )
-      );
+        );
+      });
       summaries = matching.map((s) => ({
         summary_type: (s.summary_type as "book" | "chapter" | "subchapter") || "chapter",
         toc_title: s.toc_title,

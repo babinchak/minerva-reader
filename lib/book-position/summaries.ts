@@ -107,22 +107,11 @@ export async function querySummariesForPosition(
   const supabase = createClient();
 
   try {
-    // Extract reading_order_index from start position (first number before "/")
-    const readingOrderIndex = parseInt(startPosition.split("/")[0], 10);
-
-    if (isNaN(readingOrderIndex)) {
-      console.error("Could not extract reading_order_index from position:", startPosition);
-      return [];
-    }
-
-    // Query summaries where the current reading order falls between start_reading_order and end_reading_order
-    // Note: Summaries can span multiple reading order items
+    // Fetch all summaries (like PDF) so book-level always included; filter in memory
     const { data, error } = await supabase
       .from("summaries")
-      .select("toc_title, chapter_path, start_position, end_position, start_reading_order, end_reading_order, summary_text")
-      .eq("book_id", bookId)
-      .gte("end_reading_order", readingOrderIndex)
-      .lte("start_reading_order", readingOrderIndex);
+      .select("summary_type, toc_title, chapter_path, start_position, end_position, start_reading_order, end_reading_order, summary_text")
+      .eq("book_id", bookId);
 
     if (error) {
       console.error("Error querying summaries:", error);
@@ -134,9 +123,16 @@ export async function querySummariesForPosition(
       return [];
     }
 
-    // Filter summaries where selection intersects with start_position and end_position
-    // Positions are in format: {start_reading_order}/{start_position} and {end_reading_order}/{end_position}
+    // Filter: book-level always included; others by position intersect
     const matchingSummaries = data.filter((summary) => {
+      if (summary.summary_type === "book") return true;
+      if (
+        summary.start_reading_order == null ||
+        summary.end_reading_order == null ||
+        summary.start_position == null
+      ) {
+        return false;
+      }
       return positionsIntersect(
         startPosition,
         endPosition,
@@ -147,8 +143,10 @@ export async function querySummariesForPosition(
       );
     });
 
-    // Sort by chapter_path
+    // Sort: book first, then by chapter_path (like PDF)
     matchingSummaries.sort((a, b) => {
+      if (a.summary_type === "book" && b.summary_type !== "book") return -1;
+      if (a.summary_type !== "book" && b.summary_type === "book") return 1;
       return (a.chapter_path || "").localeCompare(b.chapter_path || "");
     });
 
