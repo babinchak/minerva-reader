@@ -8,6 +8,7 @@ interface PdfReaderClientProps {
   bookId: string;
   initialPage?: number;
   initialBookmarks?: number[];
+  isLoggedIn?: boolean;
 }
 
 export default function PdfReaderClient(props: PdfReaderClientProps) {

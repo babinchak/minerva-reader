@@ -96,9 +96,10 @@ interface BookReaderProps {
   rawManifest: { readingOrder?: Array<{ href?: string }> };
   selfHref: string;
   initialReadingPosition?: Record<string, unknown> | null;
+  isLoggedIn?: boolean;
 }
 
-export function BookReader({ rawManifest, selfHref, initialReadingPosition }: BookReaderProps) {
+export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLoggedIn = false }: BookReaderProps) {
   const [mounted, setMounted] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
   const selectedText = useSelectedText();
@@ -170,7 +171,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition }: Bo
               />
             </div>
 
-            <EpubPositionSync bookId={bookId} storageKey={`${selfHref}${EPUB_STORAGE_KEY_SUFFIX}`} />
+            <EpubPositionSync bookId={bookId} storageKey={`${selfHref}${EPUB_STORAGE_KEY_SUFFIX}`} isLoggedIn={isLoggedIn} />
           </div>
         </ThI18nProvider>
       </StatefulPreferencesProvider>
@@ -276,10 +277,11 @@ function ThoriumThemeSync() {
   return null;
 }
 
-/** Syncs EPUB reading position from localStorage (written by Thorium) to our API */
-function EpubPositionSync({ bookId, storageKey }: { bookId: string; storageKey: string }) {
+/** Syncs EPUB reading position from localStorage (written by Thorium) to our API. Skips API when not logged in (curated books). */
+function EpubPositionSync({ bookId, storageKey, isLoggedIn }: { bookId: string; storageKey: string; isLoggedIn: boolean }) {
   const lastSavedRef = useRef<string | null>(null);
   useEffect(() => {
+    if (!isLoggedIn) return;
     const interval = setInterval(() => {
       try {
         const raw = localStorage.getItem(storageKey);
@@ -298,6 +300,6 @@ function EpubPositionSync({ bookId, storageKey }: { bookId: string; storageKey: 
       }
     }, 3000);
     return () => clearInterval(interval);
-  }, [bookId, storageKey]);
+  }, [bookId, storageKey, isLoggedIn]);
   return null;
 }

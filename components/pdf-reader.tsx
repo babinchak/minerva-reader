@@ -35,6 +35,7 @@ interface PdfReaderProps {
   bookId: string;
   initialPage?: number;
   initialBookmarks?: number[];
+  isLoggedIn?: boolean;
 }
 
 const MOBILE_PAGE_SIDE_MARGIN_PX = 2;
@@ -66,7 +67,7 @@ function isPdfDebugVerboseEnabled() {
   }
 }
 
-export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: PdfReaderProps) {
+export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLoggedIn = false }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -371,10 +372,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     return () => document.removeEventListener("mousedown", onDown);
   }, [isSearchOpen]);
 
-  // Debounced save of reading position
+  // Debounced save of reading position (skip when not logged in - curated books)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!bookId || currentPage < 1) return;
+    if (!isLoggedIn || !bookId || currentPage < 1) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       saveTimeoutRef.current = null;
@@ -387,7 +388,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks }: Pdf
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [bookId, currentPage]);
+  }, [bookId, currentPage, isLoggedIn]);
 
   const requestAiRun = (action: "page" | "selection") => {
     aiNonceRef.current += 1;

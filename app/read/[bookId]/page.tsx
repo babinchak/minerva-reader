@@ -100,6 +100,7 @@ export default async function ReadBookPage({ params }: PageProps) {
         bookId={bookId}
         initialPage={userBook?.current_page ?? undefined}
         initialBookmarks={userBook?.bookmarks ?? undefined}
+        isLoggedIn={!!user}
       />
     );
   }
@@ -162,6 +163,7 @@ export default async function ReadBookPage({ params }: PageProps) {
       rawManifest={manifest}
       selfHref={selfHref}
       initialReadingPosition={(userBook?.reading_position as Record<string, unknown> | null | undefined) ?? undefined}
+      isLoggedIn={!!user}
     />
   );
 }
