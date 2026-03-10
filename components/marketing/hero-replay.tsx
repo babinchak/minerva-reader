@@ -293,16 +293,9 @@ export function HeroReplay() {
                 : "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_24%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.10),transparent_22%)]"
             )}
           />
-          <div
-            className={cn(
-              "relative grid h-full",
-              isDeepMode
-                ? "grid-cols-[1.42fr_minmax(0,1.08fr)]"
-                : "grid-cols-[1.55fr_minmax(0,0.95fr)]"
-            )}
-          >
+          <div className="relative grid h-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <div className="flex min-w-0 flex-col">
-              <div className="flex items-center justify-between border-b border-border/60 bg-muted/35 px-[4.5%] py-[3.2%]">
+              <div className="border-b border-border/60 bg-muted/35 px-[4.5%] py-[3.2%]">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[0.56rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                     <BookText className="h-3.5 w-3.5" />
@@ -311,27 +304,30 @@ export function HeroReplay() {
                   <div className="mt-1 truncate text-[0.92rem] font-semibold text-foreground">
                     {scenario.bookTitle}
                   </div>
-                  <div className="truncate text-[0.72rem] text-muted-foreground">
-                    {scenario.chapterTitle}
-                  </div>
                 </div>
-
-                {scenario.interactionMode === "reader-action" ? (
-                  <button
-                    type="button"
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[0.72rem] font-medium transition-all",
-                      state.buttonPressed
-                        ? "scale-[0.98] border-primary/70 bg-primary text-primary-foreground shadow"
-                        : state.buttonHover
-                          ? "border-primary/40 bg-primary/12 text-foreground shadow-sm"
-                          : "border-border bg-background/85 text-foreground"
-                    )}
-                  >
-                    <ActionIcon className="h-3.5 w-3.5" />
-                    <span>{scenario.actionLabel}</span>
-                  </button>
-                ) : null}
+                <div className="mt-0.5 flex min-h-[2rem] w-full items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 truncate text-[0.72rem] text-muted-foreground">
+                      {scenario.chapterTitle}
+                    </div>
+                  </div>
+                  {scenario.interactionMode === "reader-action" ? (
+                    <button
+                      type="button"
+                      className={cn(
+                        "ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[0.66rem] font-medium leading-none transition-all",
+                        state.buttonPressed
+                          ? "scale-[0.98] border-primary/70 bg-primary text-primary-foreground shadow"
+                          : state.buttonHover
+                            ? "border-primary/40 bg-primary/12 text-foreground shadow-sm"
+                            : "border-border bg-background/85 text-foreground"
+                      )}
+                    >
+                      <ActionIcon className="h-3 w-3" />
+                      <span>{scenario.actionLabel}</span>
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
               <div className="relative flex-1 overflow-hidden px-[5.5%] py-[4.6%] text-[0.82rem] leading-[1.65] text-foreground/90">
