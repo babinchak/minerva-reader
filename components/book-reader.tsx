@@ -25,6 +25,7 @@ import { AIAssistant } from "@/components/ai-assistant";
 import { useParams } from "next/navigation";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
+import { hapticLight } from "@/lib/haptic";
 import { getThoriumThemeFromStoredVariants } from "@/lib/theme-variants";
 
 /** Fallback when document theme can't be read (SSR, etc.) */
@@ -124,6 +125,20 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   const openAiNonceRef = useRef(0);
   const [openAiRequest, setOpenAiRequest] = useState<{ nonce: number } | null>(null);
   const [isAiPaneOpen, setIsAiPaneOpen] = useState(false);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const tapRef = useRef<{ pointerId: number; x: number; y: number; t: number; moved: boolean } | null>(null);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+
+  useEffect(() => {
+    setChromeVisible(!isMobile);
+  }, [isMobile]);
+
+  const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
+  useEffect(() => {
+    if (isMobile && !chromeVisible && selectionExists) {
+      setChromeVisible(true);
+    }
+  }, [isMobile, chromeVisible, selectionExists]);
 
   useEffect(() => {
     setMounted(true);
@@ -161,32 +176,123 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
         <ThI18nProvider>
           <ThoriumThemeSync />
           <EpubMobileLayoutForce />
-          <div className="epub-reader-with-custom-toolbar w-full h-screen flex flex-col">
-            <EpubReaderToolbar
-              onRequestAiRun={(action) => {
-                aiNonceRef.current += 1;
-                setAiRequest({ nonce: aiNonceRef.current, action });
-              }}
-              onRequestAiOpen={() => {
-                openAiNonceRef.current += 1;
-                setOpenAiRequest({ nonce: openAiNonceRef.current });
-              }}
-              isAiPaneOpen={isAiPaneOpen}
-            />
-            <div className="flex flex-1 relative min-h-0 min-w-0">
-              <div className="flex-1 min-w-0 h-full">
-                <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
+          <div className={`epub-reader-with-custom-toolbar w-full flex flex-col ${isMobile ? "h-svh" : "h-screen"}`}>
+            {isMobile ? (
+              <div className="relative flex-1 min-h-0 flex flex-col">
+                {/* Mobile: toolbar overlays (no layout shift, avoids text reflow) */}
+                <div
+                  className={[
+                    "absolute left-0 right-0 z-50 border-b border-border/60 bg-background/95 backdrop-blur transition-opacity duration-200",
+                    chromeVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
+                  ].join(" ")}
+                  style={{
+                    top: 0,
+                    paddingTop: "env(safe-area-inset-top, 0px)",
+                    touchAction: "pan-x pan-y",
+                  }}
+                  aria-hidden={!chromeVisible}
+                >
+                  <EpubReaderToolbar
+                    onRequestAiRun={(action) => {
+                      aiNonceRef.current += 1;
+                      setAiRequest({ nonce: aiNonceRef.current, action });
+                    }}
+                    onRequestAiOpen={() => {
+                      openAiNonceRef.current += 1;
+                      setOpenAiRequest({ nonce: openAiNonceRef.current });
+                    }}
+                    isAiPaneOpen={isAiPaneOpen}
+                  />
+                </div>
+                <div
+                  className="flex flex-1 relative min-h-0 min-w-0"
+                  style={{ touchAction: "pan-x pan-y" }}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    tapRef.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), moved: false };
+                    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                  }}
+                  onPointerMove={(e) => {
+                    const t = tapRef.current;
+                    if (!t || t.pointerId !== e.pointerId) return;
+                    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) > 10) t.moved = true;
+                  }}
+                  onPointerUp={(e) => {
+                    pointersRef.current.delete(e.pointerId);
+                    const t = tapRef.current;
+                    tapRef.current = null;
+                    if (!t || t.pointerId !== e.pointerId) return;
+                    const sel = window.getSelection();
+                    if (sel && sel.toString().trim().length > 0) return;
+                    const dt = Date.now() - t.t;
+                    if (t.moved || dt > 350) return;
+                    const target = e.target as HTMLElement | null;
+                    if (target?.closest("button,a,input,textarea,select,[role='button']")) return;
+                    const w = window.innerWidth;
+                    const third = w / 3;
+                    const x = e.clientX;
+                    if (x >= third && x <= third * 2) {
+                      hapticLight();
+                      setChromeVisible((v) => !v);
+                    }
+                  }}
+                  onPointerCancel={() => {
+                    tapRef.current = null;
+                    pointersRef.current.clear();
+                  }}
+                >
+                  <div className="flex-1 min-w-0 h-full relative bg-background">
+                    <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
+                    <div className="absolute inset-0 pointer-events-none z-10" aria-hidden>
+                      <div
+                        className="absolute top-0 bottom-0 left-1/3 right-1/3 pointer-events-auto cursor-default"
+                        style={{ touchAction: "none" }}
+                      />
+                    </div>
+                  </div>
+                  {chromeVisible && (
+                    <AIAssistant
+                      selectedText={selectedText}
+                      bookId={bookId}
+                      rawManifest={rawManifest}
+                      bookType="epub"
+                      mobileDrawerMinMode="quick"
+                      requestRun={aiRequest}
+                      requestOpen={openAiRequest}
+                      onOpenChange={setIsAiPaneOpen}
+                    />
+                  )}
+                </div>
               </div>
-              <AIAssistant
-                selectedText={selectedText}
-                bookId={bookId}
-                rawManifest={rawManifest}
-                bookType="epub"
-                requestRun={aiRequest}
-                requestOpen={openAiRequest}
-                onOpenChange={setIsAiPaneOpen}
-              />
-            </div>
+            ) : (
+              <>
+                <EpubReaderToolbar
+                  onRequestAiRun={(action) => {
+                    aiNonceRef.current += 1;
+                    setAiRequest({ nonce: aiNonceRef.current, action });
+                  }}
+                  onRequestAiOpen={() => {
+                    openAiNonceRef.current += 1;
+                    setOpenAiRequest({ nonce: openAiNonceRef.current });
+                  }}
+                  isAiPaneOpen={isAiPaneOpen}
+                />
+                <div className="flex flex-1 relative min-h-0 min-w-0">
+                  <div className="flex-1 min-w-0 h-full relative">
+                    <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
+                  </div>
+                  <AIAssistant
+                    selectedText={selectedText}
+                    bookId={bookId}
+                    rawManifest={rawManifest}
+                    bookType="epub"
+                    requestRun={aiRequest}
+                    requestOpen={openAiRequest}
+                    onOpenChange={setIsAiPaneOpen}
+                  />
+                </div>
+              </>
+            )}
 
             <EpubPositionSync bookId={bookId} storageKey={`${selfHref}${EPUB_STORAGE_KEY_SUFFIX}`} isLoggedIn={isLoggedIn} />
           </div>

@@ -256,7 +256,7 @@ export function AIBottomDrawer({
       )}
 
       <div
-        className="fixed bottom-0 left-0 right-0 z-50"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-background"
         style={{
           height: `${heightPx}px`,
           transition: isDragging ? "none" : `height ${SNAP_DURATION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
