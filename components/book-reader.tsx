@@ -104,6 +104,7 @@ function createThoriumPreferences(isMobile: boolean) {
 }
 
 const EPUB_STORAGE_KEY_SUFFIX = "-current-location";
+const EPUB_LAYOUT_FIX_STYLE_ID = "minerva-epub-layout-fix-style";
 
 interface BookReaderProps {
   rawManifest: { readingOrder?: Array<{ href?: string }> };
@@ -642,10 +643,40 @@ function applyThemeToEpubIframes(tokens: Record<string, string>) {
       root.setProperty("--USER__visitedColor", tokens.visited ?? "");
       root.setProperty("--USER__selectionBackgroundColor", tokens.select ?? "");
       root.setProperty("--USER__selectionTextColor", tokens.onSelect ?? "");
+      ensureEpubIframeLayoutFix(doc);
     } catch {
       // Cross-origin or inaccessible iframe
     }
   }
+}
+
+function ensureEpubIframeLayoutFix(targetDoc: Document): void {
+  if (!targetDoc.head) return;
+  if (targetDoc.getElementById(EPUB_LAYOUT_FIX_STYLE_ID)) return;
+  const style = targetDoc.createElement("style");
+  style.id = EPUB_LAYOUT_FIX_STYLE_ID;
+  style.textContent = `
+@media (hover: none) and (pointer: coarse), (max-width: 767px) {
+  :root {
+    /* Readium uses strict 100vh + overflow clip in paginated mode; keep a tiny vertical buffer. */
+    --readium-noOverflow-on: 1 !important;
+    min-height: calc(100vh - 10px) !important;
+    height: calc(100vh - 10px) !important;
+    max-height: calc(100vh - 10px) !important;
+    padding-bottom: 10px !important;
+    overflow: visible !important;
+    overflow-clip-margin: border-box !important;
+  }
+
+  body {
+    /* Keep bottom descenders away from the clip edge. */
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px)) !important;
+    overflow: visible !important;
+    overflow-clip-margin: border-box !important;
+  }
+}
+`;
+  targetDoc.head.appendChild(style);
 }
 
 /** Forces paginated mode on mobile. Settings hiding happens in the initial preferences. */
