@@ -26,6 +26,7 @@ import { useParams } from "next/navigation";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
 import { hapticLight } from "@/lib/haptic";
+import { getLiveSelectedText } from "@/lib/book-position-utils";
 import { getThoriumThemeFromStoredVariants } from "@/lib/theme-variants";
 
 /** Fallback when document theme can't be read (SSR, etc.) */
@@ -126,7 +127,13 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   const [openAiRequest, setOpenAiRequest] = useState<{ nonce: number } | null>(null);
   const [isAiPaneOpen, setIsAiPaneOpen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
-  const tapRef = useRef<{ pointerId: number; x: number; y: number; t: number; moved: boolean } | null>(null);
+  const toggleChrome = useCallback(() => {
+    hapticLight();
+    setChromeVisible((v) => !v);
+  }, []);
+  const tapRef = useRef<{ pointerId: number; x: number; y: number; t: number; moved: boolean; hadSelection: boolean } | null>(
+    null
+  );
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
 
   useEffect(() => {
@@ -176,6 +183,8 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
         <ThI18nProvider>
           <ThoriumThemeSync />
           <EpubMobileLayoutForce />
+          <EpubSelectionTouchGuard enabled={isMobile} />
+          <EpubMobileCenterTapToggle enabled={isMobile} onToggle={toggleChrome} />
           <div className={`epub-reader-with-custom-toolbar w-full flex flex-col ${isMobile ? "h-svh" : "h-screen"}`}>
             {isMobile ? (
               <div className="relative flex-1 min-h-0 flex flex-col">
@@ -209,7 +218,14 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                   style={{ touchAction: "pan-x pan-y" }}
                   onPointerDown={(e) => {
                     if (e.button !== 0) return;
-                    tapRef.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), moved: false };
+                    tapRef.current = {
+                      pointerId: e.pointerId,
+                      x: e.clientX,
+                      y: e.clientY,
+                      t: Date.now(),
+                      moved: false,
+                      hadSelection: getLiveSelectedText().length > 0,
+                    };
                     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
                   }}
                   onPointerMove={(e) => {
@@ -222,8 +238,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     const t = tapRef.current;
                     tapRef.current = null;
                     if (!t || t.pointerId !== e.pointerId) return;
-                    const sel = window.getSelection();
-                    if (sel && sel.toString().trim().length > 0) return;
+                    if (t.hadSelection || getLiveSelectedText().length > 0) return;
                     const dt = Date.now() - t.t;
                     if (t.moved || dt > 350) return;
                     const target = e.target as HTMLElement | null;
@@ -232,8 +247,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     const third = w / 3;
                     const x = e.clientX;
                     if (x >= third && x <= third * 2) {
-                      hapticLight();
-                      setChromeVisible((v) => !v);
+                      toggleChrome();
                     }
                   }}
                   onPointerCancel={() => {
@@ -243,12 +257,6 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                 >
                   <div className="flex-1 min-w-0 h-full relative bg-background">
                     <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
-                    <div className="absolute inset-0 pointer-events-none z-10" aria-hidden>
-                      <div
-                        className="absolute top-0 bottom-0 left-1/3 right-1/3 pointer-events-auto cursor-default"
-                        style={{ touchAction: "none" }}
-                      />
-                    </div>
                   </div>
                   {chromeVisible && (
                     <AIAssistant
@@ -300,6 +308,200 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
       </StatefulPreferencesProvider>
     </ThStoreProvider>
   );
+}
+
+function hasExpandedSelection(targetDoc: Document): boolean {
+  const selection = targetDoc.getSelection();
+  return Boolean(selection && !selection.isCollapsed && selection.toString().trim().length > 0);
+}
+
+function EpubSelectionTouchGuard({ enabled }: { enabled: boolean }) {
+  useEffect(() => {
+    if (!enabled) return;
+    const watchedIframes = new Set<HTMLIFrameElement>();
+    const teardownByIframe = new Map<HTMLIFrameElement, () => void>();
+    const onLoadByIframe = new Map<HTMLIFrameElement, () => void>();
+
+    const mountGuardForIframe = (iframe: HTMLIFrameElement) => {
+      teardownByIframe.get(iframe)?.();
+      try {
+        const targetWindow = iframe.contentWindow;
+        const targetDoc = iframe.contentDocument ?? targetWindow?.document;
+        if (!targetWindow || !targetDoc) {
+          teardownByIframe.set(iframe, () => {});
+          return;
+        }
+
+        let selectionActiveUntil = 0;
+        const markSelectionActivity = () => {
+          if (hasExpandedSelection(targetDoc)) selectionActiveUntil = Date.now() + 1200;
+        };
+        const shouldSuppressSwipe = () => hasExpandedSelection(targetDoc) || Date.now() < selectionActiveUntil;
+        const suppressTouchGesture = (event: TouchEvent) => {
+          if (event.touches.length > 1) return;
+          if (!shouldSuppressSwipe()) return;
+          event.stopPropagation();
+        };
+
+        targetDoc.addEventListener("selectionchange", markSelectionActivity);
+        targetWindow.addEventListener("touchstart", suppressTouchGesture, { capture: true, passive: true });
+        targetWindow.addEventListener("touchmove", suppressTouchGesture, { capture: true, passive: true });
+        targetWindow.addEventListener("touchend", suppressTouchGesture, { capture: true, passive: true });
+        targetWindow.addEventListener("touchcancel", suppressTouchGesture, { capture: true, passive: true });
+        markSelectionActivity();
+
+        teardownByIframe.set(iframe, () => {
+          targetDoc.removeEventListener("selectionchange", markSelectionActivity);
+          targetWindow.removeEventListener("touchstart", suppressTouchGesture, true);
+          targetWindow.removeEventListener("touchmove", suppressTouchGesture, true);
+          targetWindow.removeEventListener("touchend", suppressTouchGesture, true);
+          targetWindow.removeEventListener("touchcancel", suppressTouchGesture, true);
+        });
+      } catch {
+        teardownByIframe.set(iframe, () => {});
+      }
+    };
+
+    const attachIframe = (iframe: HTMLIFrameElement) => {
+      if (watchedIframes.has(iframe)) return;
+      watchedIframes.add(iframe);
+      const onLoad = () => mountGuardForIframe(iframe);
+      onLoadByIframe.set(iframe, onLoad);
+      iframe.addEventListener("load", onLoad);
+      mountGuardForIframe(iframe);
+    };
+
+    const syncIframeGuards = () => {
+      const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+      for (const iframe of iframes) {
+        if (iframe instanceof HTMLIFrameElement) attachIframe(iframe);
+      }
+    };
+
+    syncIframeGuards();
+    const observer = new MutationObserver(() => {
+      syncIframeGuards();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      for (const iframe of watchedIframes) {
+        const onLoad = onLoadByIframe.get(iframe);
+        if (onLoad) iframe.removeEventListener("load", onLoad);
+        teardownByIframe.get(iframe)?.();
+      }
+    };
+  }, [enabled]);
+
+  return null;
+}
+
+function isInteractiveTapTarget(target: EventTarget | null): boolean {
+  const element = target instanceof Element ? target : null;
+  return Boolean(element?.closest("button,a,input,textarea,select,[role='button']"));
+}
+
+function EpubMobileCenterTapToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  useEffect(() => {
+    if (!enabled) return;
+    const watchedIframes = new Set<HTMLIFrameElement>();
+    const teardownByIframe = new Map<HTMLIFrameElement, () => void>();
+    const onLoadByIframe = new Map<HTMLIFrameElement, () => void>();
+
+    const mountTapToggleForIframe = (iframe: HTMLIFrameElement) => {
+      teardownByIframe.get(iframe)?.();
+      try {
+        const targetWindow = iframe.contentWindow;
+        const targetDoc = iframe.contentDocument ?? targetWindow?.document;
+        if (!targetWindow || !targetDoc) {
+          teardownByIframe.set(iframe, () => {});
+          return;
+        }
+
+        let tap:
+          | { pointerId: number; x: number; y: number; t: number; moved: boolean; hadSelection: boolean }
+          | null = null;
+        const onPointerDown = (event: PointerEvent) => {
+          if (event.button !== 0) return;
+          if (!event.isPrimary) return;
+          tap = {
+            pointerId: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            t: Date.now(),
+            moved: false,
+            hadSelection: hasExpandedSelection(targetDoc),
+          };
+        };
+        const onPointerMove = (event: PointerEvent) => {
+          if (!tap || tap.pointerId !== event.pointerId) return;
+          if (Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 10) tap.moved = true;
+        };
+        const onPointerUp = (event: PointerEvent) => {
+          const currentTap = tap;
+          tap = null;
+          if (!currentTap || currentTap.pointerId !== event.pointerId) return;
+          if (currentTap.hadSelection || hasExpandedSelection(targetDoc)) return;
+          if (isInteractiveTapTarget(event.target)) return;
+          const elapsed = Date.now() - currentTap.t;
+          if (currentTap.moved || elapsed > 350) return;
+          const third = targetWindow.innerWidth / 3;
+          if (event.clientX >= third && event.clientX <= third * 2) onToggle();
+        };
+        const onPointerCancel = () => {
+          tap = null;
+        };
+
+        targetDoc.addEventListener("pointerdown", onPointerDown, true);
+        targetDoc.addEventListener("pointermove", onPointerMove, true);
+        targetDoc.addEventListener("pointerup", onPointerUp, true);
+        targetDoc.addEventListener("pointercancel", onPointerCancel, true);
+
+        teardownByIframe.set(iframe, () => {
+          targetDoc.removeEventListener("pointerdown", onPointerDown, true);
+          targetDoc.removeEventListener("pointermove", onPointerMove, true);
+          targetDoc.removeEventListener("pointerup", onPointerUp, true);
+          targetDoc.removeEventListener("pointercancel", onPointerCancel, true);
+        });
+      } catch {
+        teardownByIframe.set(iframe, () => {});
+      }
+    };
+
+    const attachIframe = (iframe: HTMLIFrameElement) => {
+      if (watchedIframes.has(iframe)) return;
+      watchedIframes.add(iframe);
+      const onLoad = () => mountTapToggleForIframe(iframe);
+      onLoadByIframe.set(iframe, onLoad);
+      iframe.addEventListener("load", onLoad);
+      mountTapToggleForIframe(iframe);
+    };
+
+    const syncIframeGuards = () => {
+      const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+      for (const iframe of iframes) {
+        if (iframe instanceof HTMLIFrameElement) attachIframe(iframe);
+      }
+    };
+
+    syncIframeGuards();
+    const observer = new MutationObserver(() => {
+      syncIframeGuards();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      for (const iframe of watchedIframes) {
+        const onLoad = onLoadByIframe.get(iframe);
+        if (onLoad) iframe.removeEventListener("load", onLoad);
+        teardownByIframe.get(iframe)?.();
+      }
+    };
+  }, [enabled, onToggle]);
+
+  return null;
 }
 
 /** Apply Readium --USER__* theme variables to EPUB iframe document(s) */
