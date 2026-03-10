@@ -70,6 +70,29 @@ const MOBILE_SETTINGS_REFLOW_ORDER = DESKTOP_SETTINGS_REFLOW_ORDER.filter(
 
 /** Preferences with Themes panel hidden, Jump to position removed, mobile layout removed. */
 function createThoriumPreferences(isMobile: boolean) {
+  const mobilePaginatedAffordance: typeof defaultPreferences.affordances.paginated = isMobile
+    ? ({
+        reflow: {
+          default: {
+            variant: "none" as const,
+            discard: "none" as const,
+            hint: "none" as const,
+          },
+          breakpoints: {
+            large: { variant: "none" as const },
+            xLarge: { variant: "none" as const },
+          },
+        },
+        fxl: {
+          default: {
+            variant: "none" as const,
+            discard: "none" as const,
+            hint: "none" as const,
+          },
+        },
+      } as unknown as typeof defaultPreferences.affordances.paginated)
+    : defaultPreferences.affordances.paginated;
+
   return createPreferences({
     ...defaultPreferences,
     settings: {
@@ -99,6 +122,10 @@ function createThoriumPreferences(isMobile: boolean) {
           [ThThemeKeys.dark]: FALLBACK_DARK,
         },
       },
+    },
+    affordances: {
+      ...defaultPreferences.affordances,
+      paginated: mobilePaginatedAffordance,
     },
   });
 }
