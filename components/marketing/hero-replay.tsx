@@ -596,7 +596,7 @@ export function HeroReplay() {
                   )}
                 </div>
 
-                {scenario.interactionMode === "ai-composer" && (
+                {scenario.interactionMode === "ai-composer" && !state.userMessageVisible && (
                   <div className="rounded-2xl border border-border/60 bg-background/80 px-2.5 py-2 shadow-sm">
                     <div className="flex items-end gap-2">
                       <div
