@@ -1,5 +1,9 @@
 # Minerva Reader
 
+<p align="center">
+  <img src="public/hero-owl.png" alt="Minerva Reader" width="320" />
+</p>
+
 Minerva Reader is a personal EPUB and PDF library with an in-browser reader and an AI assistant. Ask questions about your books with location-specific context—the AI uses a character-specific positioning system to ground answers in the exact passage. Explain the current page or a text selection in a single click.
 
 ## Features
