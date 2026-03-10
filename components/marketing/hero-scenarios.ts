@@ -106,7 +106,7 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     interactionMode: "reader-action",
     actionLabel: "Explain selection",
     userMessage: "Explain selection",
-    userLocationLabel: "Passage · 123:0-123:0",
+    userLocationLabel: "Passage · 4:0-4:0",
     userLocationTitle:
       "Selected text from Chapter I - Mr. Sherlock Holmes",
     assistantLabel: "Minerva",
@@ -195,9 +195,9 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     interactionMode: "ai-composer",
     actionLabel: "Deep mode",
     userMessage: "How does Doyle use the moor to create fear across the book?",
-    userLocationLabel: "Page 34",
+    userLocationLabel: "Page 74",
     userLocationTitle:
-      "Context from page 34 in The Hound of the Baskervilles",
+      "Context from page 74 in The Hound of the Baskervilles",
     assistantLabel: "Minerva",
     composerPlaceholder: "Ask a question about the book...",
     readerBlocks: [

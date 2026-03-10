@@ -351,10 +351,7 @@ export function HeroReplay() {
                     <BookText className="h-3.5 w-3.5" />
                     <span>Reader</span>
                   </div>
-                  <div
-                    className="mt-1 truncate text-[0.98rem] font-semibold text-foreground"
-                    style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
-                  >
+                  <div className="mt-1 truncate text-[0.98rem] font-semibold text-foreground">
                     {scenario.bookTitle}
                   </div>
                 </div>
