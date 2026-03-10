@@ -285,14 +285,7 @@ export function HeroReplay() {
         />
 
         <div className="absolute inset-x-[4%] top-[5%] bottom-[4%] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm">
-          <div
-            className={cn(
-              "pointer-events-none absolute inset-0",
-              isDeepMode
-                ? "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_24%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_24%)]"
-                : "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_24%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.10),transparent_22%)]"
-            )}
-          />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_24%)]" />
           <div className="relative grid h-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <div className="flex min-w-0 flex-col">
               <div className="border-b border-border/60 bg-muted/35 px-[4.5%] py-[3.2%]">
