@@ -10,6 +10,11 @@ export type HeroToolCall = {
   detail: string;
 };
 
+export type HeroReaderBlock = {
+  type: "paragraph" | "letter";
+  text: string;
+};
+
 export type HeroReplayEvent =
   | {
       at: number;
@@ -77,7 +82,8 @@ export type HeroScenario = {
   userLocationLabel?: string;
   userLocationTitle?: string;
   assistantLabel: string;
-  readerParagraphs: string[];
+  readerParagraphs?: string[];
+  readerBlocks?: HeroReaderBlock[];
   selectedText?: string;
   responseChunks: string[];
   toolCalls?: HeroToolCall[];
@@ -104,10 +110,23 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     userLocationTitle:
       "Selected text from Chapter I - Mr. Sherlock Holmes",
     assistantLabel: "Minerva",
-    readerParagraphs: [
-      "“Really, Watson, you excel yourself,” said Holmes, pushing back his chair and lighting a cigarette. “I am bound to say that in all the accounts which you have been so good as to give of my own small achievements you have habitually underrated your own abilities.”",
-      "“It may be that you are not yourself luminous, but you are a conductor of light. Some people without possessing genius have a remarkable power of stimulating it. I confess, my dear fellow, that I am very much in your debt.”",
-      "He had never said as much before, and I must admit that his words gave me keen pleasure, for I had often been piqued by his indifference to my admiration and to the attempts which I had made to give publicity to his methods. I was proud, too, to think that I had so far mastered his system as to apply it in a way which earned his approval.",
+    readerBlocks: [
+      {
+        type: "paragraph",
+        text: "“Really, Watson, you excel yourself,” said Holmes, pushing back his chair and lighting a cigarette. “I am bound to say that in all the accounts which you have been so good as to give of my own small achievements you have habitually underrated your own abilities.”",
+      },
+      {
+        type: "paragraph",
+        text: "“It may be that you are not yourself luminous, but you are a conductor of light. Some people without possessing genius have a remarkable power of stimulating it. I confess, my dear fellow, that I am very much in your debt.”",
+      },
+      {
+        type: "paragraph",
+        text: "He had never said as much before, and I must admit that his words gave me keen pleasure, for I had often been piqued by his indifference to my admiration and to the attempts which I had made to give publicity to his methods. I was proud, too, to think that I had so far mastered his system as to apply it in a way which earned his approval.",
+      },
+      {
+        type: "paragraph",
+        text: "He now took the stick from my hands and examined it for a few minutes with his naked eyes. Then with an expression of interest he laid down his cigarette, and carrying the cane to the window, he looked over it again with a convex lens.",
+      },
     ],
     selectedText:
       "It may be that you are not yourself luminous, but you are a conductor of light. Some people without possessing genius have a remarkable power of stimulating it.",
@@ -181,10 +200,23 @@ export const HERO_SCENARIOS: HeroScenario[] = [
       "Context from page 34 in The Hound of the Baskervilles",
     assistantLabel: "Minerva",
     composerPlaceholder: "Ask a question about the book...",
-    readerParagraphs: [
-      "He laid an envelope upon the table, and we all bent over it. It was of common quality, greyish in colour. The address, “Sir Henry Baskerville, Northumberland Hotel,” was printed in rough characters; the post-mark “Charing Cross,” and the date of posting the preceding evening.",
-      "Across the middle of it a single sentence had been formed by the expedient of pasting printed words upon it. It ran: As you value your life or your reason keep away from the moor. The word “moor” only was printed in ink.",
-      "So the moor enters the story as a threat before Watson ever reaches it: not just a place of danger, but a place linked to fear, surveillance, and the possibility of madness.",
+    readerBlocks: [
+      {
+        type: "paragraph",
+        text: "Holmes opened the half-sheet of foolscap and spread it flat upon the table. Across the middle, a single sentence had been formed by pasting printed words upon it. It ran:",
+      },
+      {
+        type: "letter",
+        text: "As you value your life or your reason keep away from the moor.",
+      },
+      {
+        type: "paragraph",
+        text: "The word “moor” only was printed in ink. “Now,” said Sir Henry Baskerville, “perhaps you will tell me, Mr. Holmes, what in thunder is the meaning of that, and who it is that takes so much interest in my affairs?”",
+      },
+      {
+        type: "paragraph",
+        text: "“What do you make of it, Dr. Mortimer? You must allow that there is nothing supernatural about this, at any rate?”"
+      }
     ],
     responseChunks: [
       "## The moor as a machine for fear\n\nAcross the novel, Doyle uses the moor not just as scenery but as a **Gothic engine** that produces fear.\n\n",

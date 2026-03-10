@@ -19,6 +19,7 @@ import {
   HERO_SCENARIOS,
   type HeroCursorPoint,
   type HeroReplayEvent,
+  type HeroReaderBlock,
 } from "./hero-scenarios";
 
 type ReplayState = {
@@ -75,6 +76,32 @@ function renderParagraphWithSelection(
       </span>
       {after}
     </>
+  );
+}
+
+function renderReaderBlock(
+  block: HeroReaderBlock,
+  selectedText: string | undefined,
+  selectionActive: boolean
+) {
+  const content = renderParagraphWithSelection(
+    block.text,
+    selectedText,
+    selectionActive
+  );
+
+  if (block.type === "letter") {
+    return (
+      <p className="mx-auto my-3 max-w-[80%] px-4 text-center text-[1.08em] leading-[1.9] text-foreground">
+        {content}
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-foreground/95" style={{ textIndent: "0.9em" }}>
+      {content}
+    </p>
   );
 }
 
@@ -176,6 +203,12 @@ export function HeroReplay() {
   );
   const ActionIcon =
     scenario.modeBadge.toLowerCase().includes("deep") ? Sparkles : Highlighter;
+  const readerBlocks =
+    scenario.readerBlocks ??
+    (scenario.readerParagraphs ?? []).map((text) => ({
+      type: "paragraph" as const,
+      text,
+    }));
 
   const initialState = useMemo<ReplayState>(
     () => ({
@@ -318,7 +351,10 @@ export function HeroReplay() {
                     <BookText className="h-3.5 w-3.5" />
                     <span>Reader</span>
                   </div>
-                  <div className="mt-1 truncate text-[0.92rem] font-semibold text-foreground">
+                  <div
+                    className="mt-1 truncate text-[0.98rem] font-semibold text-foreground"
+                    style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+                  >
                     {scenario.bookTitle}
                   </div>
                 </div>
@@ -347,17 +383,20 @@ export function HeroReplay() {
                 </div>
               </div>
 
-              <div className="relative flex-1 overflow-hidden px-[5.5%] py-[4.6%] text-[0.82rem] leading-[1.65] text-foreground/90">
+              <div
+                className="relative flex-1 overflow-hidden px-[5.5%] py-[4.8%] text-[0.86rem] leading-[1.8] text-foreground"
+                style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+              >
                 <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-card via-card/96 to-transparent" />
-                <div className="relative space-y-3">
-                  {scenario.readerParagraphs.map((paragraph, index) => (
-                    <p key={`${scenario.id}-paragraph-${index}`}>
-                      {renderParagraphWithSelection(
-                        paragraph,
+                <div className="relative space-y-3.5">
+                  {readerBlocks.map((block, index) => (
+                    <div key={`${scenario.id}-block-${index}`}>
+                      {renderReaderBlock(
+                        block,
                         scenario.selectedText,
                         state.selectionActive
                       )}
-                    </p>
+                    </div>
                   ))}
                 </div>
               </div>
