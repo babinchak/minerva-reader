@@ -483,6 +483,8 @@ export function HeroReplay() {
                     type="button"
                     role="switch"
                     aria-checked={isDeepMode}
+                    aria-disabled
+                    disabled
                     aria-label={
                       isDeepMode
                         ? "Deep mode (tools: semantic and text search)"
@@ -493,15 +495,8 @@ export function HeroReplay() {
                         ? "Deep mode (tools: semantic and text search)"
                         : "Fast mode (single answer)"
                     }
-                    onClick={() => {
-                      if (isDeepMode && quickScenarioIndex >= 0) {
-                        setScenarioIndex(quickScenarioIndex);
-                      } else if (!isDeepMode && deepScenarioIndex >= 0) {
-                        setScenarioIndex(deepScenarioIndex);
-                      }
-                    }}
                     className={cn(
-                      "relative flex h-6 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200",
+                      "relative flex h-6 w-12 shrink-0 cursor-default items-center rounded-full p-0.5 transition-colors duration-200",
                       isDeepMode
                         ? "bg-blue-500 dark:bg-blue-600"
                         : "bg-amber-400 dark:bg-amber-500"
