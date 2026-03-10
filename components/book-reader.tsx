@@ -6,6 +6,7 @@ import {
   ThStoreProvider,
   ThI18nProvider,
   setTheme,
+  setScroll,
   useAppDispatch,
   usePreferences,
 } from "@edrlab/thorium-web/epub";
@@ -17,12 +18,13 @@ import {
   ThActionsKeys,
   type ThemeTokens,
 } from "@edrlab/thorium-web/core/preferences";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { EpubReaderToolbar } from "@/components/epub-reader-toolbar";
 import { useTheme } from "next-themes";
 import { AIAssistant } from "@/components/ai-assistant";
 import { useParams } from "next/navigation";
 import { useSelectedText } from "@/lib/use-selected-text";
+import { useIsMobile } from "@/lib/use-media-query";
 import { getThoriumThemeFromStoredVariants } from "@/lib/theme-variants";
 
 /** Fallback when document theme can't be read (SSR, etc.) */
@@ -57,38 +59,47 @@ const FALLBACK_DARK = {
   immerse: "0.4",
 };
 
-/** Preferences with Themes panel hidden, Jump to position removed - theme colors injected dynamically */
-const thoriumPreferences = createPreferences({
-  ...defaultPreferences,
-  settings: {
-    ...defaultPreferences.settings,
-    reflowOrder: defaultPreferences.settings.reflowOrder.filter((k) => k !== ThSettingsKeys.theme),
-    fxlOrder: defaultPreferences.settings.fxlOrder.filter((k) => k !== ThSettingsKeys.theme),
-  },
-  actions: {
-    ...defaultPreferences.actions,
-    reflowOrder: defaultPreferences.actions.reflowOrder.filter(
-      (k) => k !== ThActionsKeys.jumpToPosition && k !== ThActionsKeys.fullscreen
-    ),
-    fxlOrder: defaultPreferences.actions.fxlOrder.filter(
-      (k) => k !== ThActionsKeys.jumpToPosition && k !== ThActionsKeys.fullscreen
-    ),
-  },
-  theming: {
-    ...defaultPreferences.theming,
-    themes: {
-      ...defaultPreferences.theming.themes,
-      reflowOrder: ["auto", ThThemeKeys.light, ThThemeKeys.dark],
-      fxlOrder: ["auto", ThThemeKeys.light, ThThemeKeys.dark],
-      systemThemes: { light: ThThemeKeys.light, dark: ThThemeKeys.dark },
-      keys: {
-        ...defaultPreferences.theming.themes.keys,
-        [ThThemeKeys.light]: FALLBACK_LIGHT,
-        [ThThemeKeys.dark]: FALLBACK_DARK,
+const DESKTOP_SETTINGS_REFLOW_ORDER = defaultPreferences.settings.reflowOrder.filter(
+  (k) => k !== ThSettingsKeys.theme
+);
+const MOBILE_SETTINGS_REFLOW_ORDER = DESKTOP_SETTINGS_REFLOW_ORDER.filter(
+  (k) => k !== ThSettingsKeys.layout
+);
+
+/** Preferences with Themes panel hidden, Jump to position removed, mobile layout removed. */
+function createThoriumPreferences(isMobile: boolean) {
+  return createPreferences({
+    ...defaultPreferences,
+    settings: {
+      ...defaultPreferences.settings,
+      reflowOrder: isMobile ? MOBILE_SETTINGS_REFLOW_ORDER : DESKTOP_SETTINGS_REFLOW_ORDER,
+      fxlOrder: defaultPreferences.settings.fxlOrder.filter((k) => k !== ThSettingsKeys.theme),
+    },
+    actions: {
+      ...defaultPreferences.actions,
+      reflowOrder: defaultPreferences.actions.reflowOrder.filter(
+        (k) => k !== ThActionsKeys.jumpToPosition && k !== ThActionsKeys.fullscreen
+      ),
+      fxlOrder: defaultPreferences.actions.fxlOrder.filter(
+        (k) => k !== ThActionsKeys.jumpToPosition && k !== ThActionsKeys.fullscreen
+      ),
+    },
+    theming: {
+      ...defaultPreferences.theming,
+      themes: {
+        ...defaultPreferences.theming.themes,
+        reflowOrder: ["auto", ThThemeKeys.light, ThThemeKeys.dark],
+        fxlOrder: ["auto", ThThemeKeys.light, ThThemeKeys.dark],
+        systemThemes: { light: ThThemeKeys.light, dark: ThThemeKeys.dark },
+        keys: {
+          ...defaultPreferences.theming.themes.keys,
+          [ThThemeKeys.light]: FALLBACK_LIGHT,
+          [ThThemeKeys.dark]: FALLBACK_DARK,
+        },
       },
     },
-  },
-});
+  });
+}
 
 const EPUB_STORAGE_KEY_SUFFIX = "-current-location";
 
@@ -102,9 +113,11 @@ interface BookReaderProps {
 export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLoggedIn = false }: BookReaderProps) {
   const [mounted, setMounted] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
+  const isMobile = useIsMobile();
   const selectedText = useSelectedText();
   const params = useParams();
   const bookId = params?.bookId as string;
+  const thoriumPreferences = useMemo(() => createThoriumPreferences(isMobile), [isMobile]);
 
   const aiNonceRef = useRef(0);
   const [aiRequest, setAiRequest] = useState<{ nonce: number; action: "page" | "selection" } | null>(null);
@@ -141,9 +154,13 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
 
   return (
     <ThStoreProvider>
-      <StatefulPreferencesProvider initialPreferences={thoriumPreferences}>
+      <StatefulPreferencesProvider
+        key={isMobile ? "mobile" : "desktop"}
+        initialPreferences={thoriumPreferences}
+      >
         <ThI18nProvider>
           <ThoriumThemeSync />
+          <EpubMobileLayoutForce />
           <div className="epub-reader-with-custom-toolbar w-full h-screen flex flex-col">
             <EpubReaderToolbar
               onRequestAiRun={(action) => {
@@ -200,6 +217,19 @@ function applyThemeToEpubIframes(tokens: Record<string, string>) {
   }
 }
 
+/** Forces paginated mode on mobile. Settings hiding happens in the initial preferences. */
+function EpubMobileLayoutForce() {
+  const dispatch = useAppDispatch();
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    if (isMobile) {
+      dispatch(setScroll(false));
+    }
+  }, [isMobile, dispatch]);
+  return null;
+}
+
 /** Syncs app theme (next-themes + theme variants) to Thorium */
 function ThoriumThemeSync() {
   const { resolvedTheme } = useTheme();
@@ -208,7 +238,7 @@ function ThoriumThemeSync() {
   const prefsRef = useRef(preferences);
   prefsRef.current = preferences;
 
-  const syncThemeColors = () => {
+  const syncThemeColors = useCallback(() => {
     const tokens = getThoriumThemeFromStoredVariants();
     if (tokens) {
       const prefs = prefsRef.current;
@@ -227,7 +257,7 @@ function ThoriumThemeSync() {
         },
       });
     }
-  };
+  }, [updatePreferences]);
 
   useEffect(() => {
     const theme = resolvedTheme === "dark" ? "dark" : "light";
@@ -243,7 +273,7 @@ function ThoriumThemeSync() {
       attributeFilter: ["data-light-theme", "data-dark-theme", "class"],
     });
     return () => observer.disconnect();
-  }, [resolvedTheme]);
+  }, [resolvedTheme, syncThemeColors]);
 
   // Apply theme to EPUB iframe when theme changes (iframe has its own document, doesn't inherit)
   useEffect(() => {
