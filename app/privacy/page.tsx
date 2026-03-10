@@ -82,21 +82,34 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-4 mt-8">
-            <h2 className="text-lg font-semibold text-foreground">5. AI and Model Training</h2>
+            <h2 className="text-lg font-semibold text-foreground">5. Cookies</h2>
+            <p>We use the following cookies:</p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li><strong>Session and authentication:</strong> Required to keep you logged in. Set by Supabase.</li>
+              <li><strong>Preferences:</strong> Such as theme (light/dark mode) and layout preferences, stored in your browser.</li>
+              <li><strong>Analytics:</strong> Vercel Analytics may set cookies or similar technology to measure usage (e.g., page views) in aggregate. This helps us improve the service.</li>
+            </ul>
+            <p>
+              You can disable or block cookies in your browser settings. Some features (such as staying logged in) may not work if you disable essential cookies.
+            </p>
+          </section>
+
+          <section className="space-y-4 mt-8">
+            <h2 className="text-lg font-semibold text-foreground">6. AI and Model Training</h2>
             <p>
               We send your prompts and selected book content to AI providers (e.g., OpenAI) to generate responses. As of this policy, we do not use your content to train AI models. Please refer to the relevant provider&apos;s policies for their data retention and usage practices.
             </p>
           </section>
 
           <section className="space-y-4 mt-8">
-            <h2 className="text-lg font-semibold text-foreground">6. Data Retention</h2>
+            <h2 className="text-lg font-semibold text-foreground">7. Data Retention</h2>
             <p>
               We retain your data for as long as your account exists. You may delete your account and associated data at any time. Deleted books, chats, and usage records are removed from our systems according to our retention procedures.
             </p>
           </section>
 
           <section className="space-y-4 mt-8">
-            <h2 className="text-lg font-semibold text-foreground">7. Your Rights</h2>
+            <h2 className="text-lg font-semibold text-foreground">8. Your Rights</h2>
             <p>Depending on your location, you may have the right to:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Access, correct, or delete your personal data.</li>
@@ -111,42 +124,42 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-4 mt-8">
-            <h2 className="text-lg font-semibold text-foreground">8. California Privacy Rights (CCPA/CPRA)</h2>
+            <h2 className="text-lg font-semibold text-foreground">9. California Privacy Rights (CCPA/CPRA)</h2>
             <p>
               California residents may have additional rights under the CCPA/CPRA, including the right to know what personal information is collected, to opt out of the &quot;sale&quot; or &quot;sharing&quot; of personal information, and to non-discrimination. We do not sell or share your personal information for cross-context behavioral advertising.
             </p>
           </section>
 
           <section className="space-y-4 mt-8">
-            <h2 className="text-lg font-semibold text-foreground">9. International Transfers</h2>
+            <h2 className="text-lg font-semibold text-foreground">10. International Transfers</h2>
             <p>
               Your data may be processed in countries outside your residence, including the United States and the European Union. We rely on appropriate safeguards (e.g., Standard Contractual Clauses) where required by law.
             </p>
           </section>
 
           <section className="space-y-4 mt-8">
-            <h2 className="text-lg font-semibold text-foreground">10. Children</h2>
+            <h2 className="text-lg font-semibold text-foreground">11. Children</h2>
             <p>
               Our service is not intended for children under 13. We do not knowingly collect personal information from children under 13. If you believe we have collected such information, please contact us and we will delete it.
             </p>
           </section>
 
           <section className="space-y-4 mt-8">
-            <h2 className="text-lg font-semibold text-foreground">11. Security</h2>
+            <h2 className="text-lg font-semibold text-foreground">12. Security</h2>
             <p>
               We use industry-standard measures to protect your data, including encryption in transit and at rest, access controls, and secure authentication. No system is completely secure; we encourage you to use strong passwords and protect your account.
             </p>
           </section>
 
           <section className="space-y-4 mt-8">
-            <h2 className="text-lg font-semibold text-foreground">12. Changes</h2>
+            <h2 className="text-lg font-semibold text-foreground">13. Changes</h2>
             <p>
               We may update this Privacy Policy from time to time. We will notify you of material changes by posting the updated policy on this page and updating the &quot;Last updated&quot; date.
             </p>
           </section>
 
           <section className="space-y-4 mt-8">
-            <h2 className="text-lg font-semibold text-foreground">13. Contact</h2>
+            <h2 className="text-lg font-semibold text-foreground">14. Contact</h2>
             <p>
               For privacy-related questions or to exercise your rights, contact us at the email or address provided in your account settings or on our website.
             </p>
