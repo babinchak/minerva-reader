@@ -408,21 +408,11 @@ export function HeroReplay() {
 
       <div
         ref={demoRef}
-        className="relative aspect-[16/10] overflow-hidden rounded-[28px] border border-border/70 bg-gradient-to-br from-background via-background to-muted/50 p-4 shadow-[0_24px_90px_rgba(15,23,42,0.14)] sm:p-5 lg:aspect-auto lg:min-h-[34rem] xl:min-h-[38rem]"
+        className="relative h-[34rem] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm"
       >
-        <div
-          className={cn(
-            "pointer-events-none absolute inset-0",
-            isDeepMode
-              ? "bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.16),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.18),transparent_32%)]"
-              : "bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.12),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.16),transparent_30%)]"
-          )}
-        />
-
-        <div className="absolute inset-x-[4%] top-[5%] bottom-[4%] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_24%)]" />
           <div className="relative grid h-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            <div className="flex min-w-0 flex-col">
+            <div className="flex min-h-0 min-w-0 flex-col">
               <div className="border-b border-border/60 bg-muted/35 px-[4.5%] py-[3.2%]">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[0.56rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -460,7 +450,7 @@ export function HeroReplay() {
               </div>
 
               <div
-                className="relative flex-1 overflow-hidden px-[5.5%] py-[4.8%] text-[0.86rem] leading-[1.8] text-foreground"
+                className="relative min-h-0 flex-1 overflow-hidden px-[5.5%] py-[4.8%] text-[0.86rem] leading-[1.8] text-foreground"
                 style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
               >
                 <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-card via-card/96 to-transparent" />
@@ -480,7 +470,7 @@ export function HeroReplay() {
               </div>
             </div>
 
-            <div className="relative flex min-w-0 flex-col border-l border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%)]">
+            <div className="relative flex min-h-0 min-w-0 flex-col border-l border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%)]">
               <div className="absolute inset-y-[5%] left-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
               <div className="flex items-center justify-between border-b border-border/60 px-[6%] py-[4.2%]">
                 <div>
@@ -541,14 +531,14 @@ export function HeroReplay() {
                 </div>
               </div>
 
-              <div className="flex flex-1 flex-col gap-2.5 px-[6%] py-[4.3%]">
+              <div className="flex min-h-0 flex-1 flex-col gap-2.5 px-[6%] py-[4.3%]">
                 {scenario.paneIntro ? (
                   <div className="rounded-2xl border border-border/60 bg-muted/35 px-3 py-2 text-[0.74rem] text-muted-foreground">
                     {scenario.paneIntro}
                   </div>
                 ) : null}
 
-                <div className="flex-1 space-y-3 overflow-hidden">
+                <div className="min-h-0 flex-1 space-y-3 overflow-hidden">
                   {state.userMessageVisible && (
                     <div className="ml-auto max-w-[86%] rounded-2xl bg-primary px-3 py-1.5 text-[0.78rem] leading-[1.32] text-primary-foreground shadow">
                       <p>{scenario.userMessage}</p>
@@ -640,7 +630,6 @@ export function HeroReplay() {
               </div>
             </div>
           </div>
-        </div>
 
         <div
           className="pointer-events-none absolute z-30 text-foreground drop-shadow-[0_10px_18px_rgba(15,23,42,0.28)]"
