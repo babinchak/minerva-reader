@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MinervaLogo } from "@/components/minerva-logo";
 import { useEffect, useMemo, useState } from "react";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { BookCard } from "@/components/book-card";
@@ -113,8 +114,9 @@ export function LibraryWithBooks({
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-          No books match this filter.
+        <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-8 flex flex-col items-center gap-4 text-center">
+          <MinervaLogo size={48} />
+          <p className="text-sm text-muted-foreground">No books match this filter.</p>
         </div>
       )}
     </div>

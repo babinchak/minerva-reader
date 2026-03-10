@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { UpdatePasswordForm } from "@/components/update-password-form";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { MinervaLogo } from "@/components/minerva-logo";
 
 export default function Page() {
   return (
@@ -7,7 +9,11 @@ export default function Page() {
       <div className="absolute top-4 right-4">
         <ThemeSwitcher />
       </div>
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-sm flex flex-col items-center gap-6">
+        <Link href="/" className="flex items-center gap-2">
+          <MinervaLogo size={48} />
+          <span className="text-xl font-semibold text-foreground">Minerva Reader</span>
+        </Link>
         <UpdatePasswordForm />
       </div>
     </div>

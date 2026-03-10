@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { MinervaLogo } from "@/components/minerva-logo";
 
 export function SiteFooter({ className }: { className?: string }) {
   return (
@@ -9,7 +10,10 @@ export function SiteFooter({ className }: { className?: string }) {
         className
       )}
     >
-      <span className="font-medium text-foreground">Minerva Reader</span>
+      <Link href="/" className="flex items-center gap-2 font-medium text-foreground hover:text-foreground/90">
+        <MinervaLogo size={20} />
+        Minerva Reader
+      </Link>
       <Link
         href="/privacy"
         className="hover:text-foreground underline-offset-4 hover:underline"

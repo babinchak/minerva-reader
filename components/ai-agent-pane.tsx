@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { MinervaLogo } from "@/components/minerva-logo";
 import { createClient } from "@/lib/supabase/client";
 import {
   DropdownMenu,
@@ -1782,6 +1783,9 @@ export function AIAgentPanel({
       {showMessages && messages.length === 0 && (
         <div className="flex-1 flex flex-col justify-start pt-4 px-4 min-h-0">
           <div className="space-y-4 max-w-full">
+              <div className="flex justify-center mb-2">
+                <MinervaLogo size={40} />
+              </div>
               {showSelectionChip && (trimmedSelectedText || (currentPage && currentPage >= 1)) && (
                 <div className="flex justify-center">
                   <button

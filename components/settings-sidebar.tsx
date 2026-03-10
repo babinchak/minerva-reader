@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, Palette } from "lucide-react";
+import { MinervaLogo } from "@/components/minerva-logo";
 import { cn } from "@/lib/utils";
 
 const SETTINGS_NAV = [
@@ -15,6 +16,10 @@ export function SettingsSidebar() {
 
   return (
     <aside className="w-48 shrink-0 border-r border-border py-6 pr-4">
+      <Link href="/" className="mb-6 flex items-center gap-2 px-3">
+        <MinervaLogo size={28} />
+        <span className="text-sm font-semibold text-foreground">Minerva</span>
+      </Link>
       <nav className="flex flex-col gap-1">
         {SETTINGS_NAV.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href;

@@ -13,7 +13,7 @@ import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Suspense } from "react";
-import { BookOpen } from "lucide-react";
+import { MinervaLogo } from "@/components/minerva-logo";
 
 function formatAuthorDisplay(author: string | null): string {
   if (!author) return "";
@@ -121,7 +121,7 @@ async function HomeContent({
   if (!hasEnvVars) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col items-center gap-5 text-center">
-        <BookOpen className="h-16 w-16 text-muted-foreground" />
+        <MinervaLogo size={96} variant="large" />
         <h1 className="max-w-3xl text-4xl font-bold text-foreground">
           <span className="block">Instant answers in context.</span>
           <span className="block">Deep search across the book.</span>
@@ -158,6 +158,10 @@ async function HomeContent({
       <section className="w-full rounded-[2rem] border border-border/70 bg-gradient-to-br from-background via-background to-muted/35 px-4 py-6 shadow-sm sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:items-center">
           <div className="space-y-6 text-left">
+            <div className="flex items-center gap-3 mb-2">
+              <MinervaLogo size={48} />
+              <span className="text-2xl font-semibold text-foreground">Minerva Reader</span>
+            </div>
             <div className="space-y-4">
               <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
                 <span className="block">Explain any passage instantly.</span>

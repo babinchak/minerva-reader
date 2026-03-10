@@ -26,7 +26,7 @@ async function main() {
   const sharp = require("sharp");
   const input = sharp(sourcePath);
 
-  const sizes = [16, 32, 48, 180, 192, 512];
+  const sizes = [16, 32, 48, 96, 180, 192, 512];
 
   for (const size of sizes) {
     await input

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { BookOpen } from "lucide-react";
+import { MinervaLogo } from "@/components/minerva-logo";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { LibraryWithBooks } from "@/components/library-grid-with-sort";
@@ -134,8 +135,8 @@ export async function LibraryView() {
             </div>
           </div>
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-6 py-16 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <BookOpen className="h-8 w-8 text-muted-foreground" />
+            <div className="mb-4">
+              <MinervaLogo size={64} variant="large" />
             </div>
             <h2 className="text-lg font-semibold text-foreground">
               Your library is empty

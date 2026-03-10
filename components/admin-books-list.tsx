@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BookOpen, Trash2, Loader2 } from "lucide-react";
+import { MinervaLogo } from "@/components/minerva-logo";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -95,7 +96,10 @@ export function AdminBooksList() {
     <>
       <div className="space-y-4">
         {books.length === 0 ? (
-          <p className="text-muted-foreground">No books.</p>
+          <div className="flex flex-col items-center gap-4 py-12">
+            <MinervaLogo size={48} />
+            <p className="text-muted-foreground">No books.</p>
+          </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {books.map((book) => (
