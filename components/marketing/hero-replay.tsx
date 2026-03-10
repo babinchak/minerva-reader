@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from
 import {
   BookText,
   Highlighter,
-  MessageSquareText,
   MousePointer2,
   ScanSearch,
   Search,
@@ -166,6 +165,7 @@ export function HeroReplay() {
   const scenarios = HERO_SCENARIOS;
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const scenario = scenarios[scenarioIndex];
+  const isDeepMode = scenario.interactionMode === "ai-composer";
   const ActionIcon =
     scenario.modeBadge.toLowerCase().includes("deep") ? Sparkles : Highlighter;
 
@@ -260,7 +260,14 @@ export function HeroReplay() {
 
         <div className="absolute inset-x-[4%] top-[5%] bottom-[4%] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_24%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.10),transparent_22%)]" />
-          <div className="relative grid h-full grid-cols-[1.55fr_minmax(0,0.95fr)]">
+          <div
+            className={cn(
+              "relative grid h-full",
+              isDeepMode
+                ? "grid-cols-[1.42fr_minmax(0,1.08fr)]"
+                : "grid-cols-[1.55fr_minmax(0,0.95fr)]"
+            )}
+          >
             <div className="flex min-w-0 flex-col">
               <div className="flex items-center justify-between border-b border-border/60 bg-muted/35 px-[4.5%] py-[3.2%]">
                 <div className="min-w-0">
@@ -294,9 +301,9 @@ export function HeroReplay() {
                 ) : null}
               </div>
 
-              <div className="relative flex-1 overflow-hidden px-[5.5%] py-[4.6%] text-[0.84rem] leading-[1.8] text-foreground/90">
+              <div className="relative flex-1 overflow-hidden px-[5.5%] py-[4.6%] text-[0.82rem] leading-[1.65] text-foreground/90">
                 <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-card via-card/96 to-transparent" />
-                <div className="relative space-y-4">
+                <div className="relative space-y-3">
                   {scenario.readerParagraphs.map((paragraph, index) => (
                     <p key={`${scenario.id}-paragraph-${index}`}>
                       {renderParagraphWithSelection(
@@ -333,13 +340,9 @@ export function HeroReplay() {
                   </div>
                 ) : null}
 
-                <div className="flex-1 space-y-2.5 overflow-hidden">
+                <div className="flex-1 space-y-3 overflow-hidden">
                   {state.userMessageVisible && (
-                    <div className="ml-auto max-w-[86%] rounded-2xl bg-primary px-3 py-2 text-[0.8rem] text-primary-foreground shadow">
-                      <div className="mb-1 flex items-center gap-1.5 text-[0.62rem] uppercase tracking-[0.15em] text-primary-foreground/80">
-                        <MessageSquareText className="h-3 w-3" />
-                        <span>User</span>
-                      </div>
+                    <div className="ml-auto max-w-[86%] rounded-2xl bg-primary px-3 py-1.5 text-[0.78rem] leading-[1.32] text-primary-foreground shadow">
                       <p>{scenario.userMessage}</p>
                     </div>
                   )}
@@ -360,7 +363,7 @@ export function HeroReplay() {
                             <ToolIcon className="h-3 w-3 text-primary" />
                             <span>{toolCall.label}</span>
                           </div>
-                          <p className="mt-0.5 truncate leading-5 text-muted-foreground">
+                          <p className="mt-1 truncate leading-5 text-muted-foreground">
                             {toolCall.detail}
                           </p>
                         </div>
@@ -369,15 +372,10 @@ export function HeroReplay() {
 
                   {(state.typingVisible || state.assistantText) && (
                     <div className="w-full pt-0.5">
-                      <div className="mb-1.5 flex items-center gap-1.5 text-[0.62rem] uppercase tracking-[0.15em] text-muted-foreground">
-                        <Sparkles className="h-3 w-3 text-primary" />
-                        <span>{scenario.assistantLabel}</span>
-                      </div>
-
                       {state.assistantText ? (
                         <Markdown
                           content={state.assistantText}
-                          className="space-y-1.5 text-[0.8rem] leading-5 text-foreground/90 [&_h1]:mt-0 [&_h1]:mb-1 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h2]:mt-0 [&_h2]:mb-1 [&_h2]:text-[0.9rem] [&_h2]:font-semibold [&_h2]:leading-5 [&_h3]:mt-0 [&_h3]:mb-1 [&_h3]:text-[0.84rem] [&_h3]:font-semibold [&_h3]:leading-5 [&_p]:my-0 [&_p]:text-[0.8rem] [&_p]:leading-5 [&_ul]:my-0 [&_ul]:space-y-0.5 [&_ul]:pl-4.5 [&_li]:leading-5 [&_strong]:font-semibold"
+                          className="space-y-1.5 text-[0.8rem] leading-[1.54] text-foreground/90 [&_h1]:!mt-0 [&_h1]:!mb-1 [&_h1]:text-[1.02rem] [&_h1]:font-bold [&_h1]:leading-5 [&_h1]:text-foreground [&_h2]:!mt-0 [&_h2]:!mb-1.5 [&_h2]:text-[0.96rem] [&_h2]:font-bold [&_h2]:leading-5 [&_h2]:text-foreground [&_h3]:!mt-0 [&_h3]:!mb-1.25 [&_h3]:text-[0.9rem] [&_h3]:font-semibold [&_h3]:leading-5 [&_h3]:text-foreground [&_p]:!mt-0 [&_p]:!mb-1 [&_p]:text-[0.8rem] [&_p]:leading-[1.54] [&_ul]:!my-0 [&_ul]:space-y-0.5 [&_ul]:pl-4 [&_li]:leading-[1.54] [&_strong]:font-semibold"
                         />
                       ) : (
                         <div className="flex items-center gap-1.5 pt-1">

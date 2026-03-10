@@ -94,7 +94,6 @@ export const HERO_SCENARIOS: HeroScenario[] = [
       "Highlight a passage and get an explanation that stays grounded in the exact text you selected.",
     bookTitle: "The Hound of the Baskervilles",
     chapterTitle: "Chapter VI - Baskerville Hall",
-    paneIntro: "Highlight any passage and ask Minerva to explain it in context.",
     modeBadge: "Quick mode",
     interactionMode: "reader-action",
     actionLabel: "Explain selection",
