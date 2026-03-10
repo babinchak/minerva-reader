@@ -374,12 +374,12 @@ export function HeroReplay() {
           className={cn(
             "inline-flex items-center gap-2 rounded-full border bg-background/80 px-3 py-1 text-xs shadow-sm backdrop-blur",
             isDeepMode
-              ? "border-blue-500/20 text-blue-200/85"
-              : "border-amber-500/20 text-muted-foreground"
+              ? "border-blue-500/30 text-blue-700 dark:border-blue-500/20 dark:text-blue-200/90"
+              : "border-amber-500/20 text-amber-600 dark:text-amber-500"
           )}
         >
           <Sparkles
-            className={cn("h-3.5 w-3.5", isDeepMode ? "text-blue-400" : "text-primary")}
+            className={cn("h-3.5 w-3.5", isDeepMode ? "text-blue-600 dark:text-blue-400" : "text-amber-500 dark:text-amber-400")}
           />
           <span>{scenario.label}</span>
         </div>
@@ -394,7 +394,9 @@ export function HeroReplay() {
                 index === scenarioIndex
                   ? cn(
                       "w-7",
-                      isDeepMode ? "bg-blue-500" : "bg-primary"
+                      item.interactionMode === "reader-action"
+                        ? "bg-amber-400 dark:bg-amber-500"
+                        : "bg-blue-500 dark:bg-blue-600"
                     )
                   : "w-2.5 bg-border hover:bg-muted-foreground/40"
               )}
@@ -444,9 +446,9 @@ export function HeroReplay() {
                       className={cn(
                         "ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[0.66rem] font-medium leading-none transition-all",
                         state.buttonPressed
-                          ? "scale-[0.98] border-primary/70 bg-primary text-primary-foreground shadow"
+                          ? "scale-[0.98] border-amber-500/70 bg-amber-400 text-amber-950 shadow dark:bg-amber-500 dark:text-amber-950"
                           : state.buttonHover
-                            ? "border-primary/40 bg-primary/12 text-foreground shadow-sm"
+                            ? "border-amber-500/40 bg-amber-500/12 text-foreground shadow-sm"
                             : "border-border bg-background/85 text-foreground"
                       )}
                     >
