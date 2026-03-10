@@ -91,9 +91,9 @@ export const HERO_SCENARIOS: HeroScenario[] = [
   {
     id: "hound-explain-selection",
     label: "Explain selection",
-    title: "See the meaning in a single line.",
+    title: "Understand a passage instantly.",
     subtitle:
-      "Highlight a passage and get an explanation that stays grounded in the exact text you selected.",
+      "Highlight a passage and get an explanation grounded in the exact text.",
     bookTitle: "The Hound of the Baskervilles",
     chapterTitle: "Chapter VI - Baskerville Hall",
     modeBadge: "Quick mode",
@@ -163,7 +163,7 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     label: "Deep mode",
     title: "Search themes across the whole book.",
     subtitle:
-      "Ask broader questions and let Minerva search semantically across the novel before it answers.",
+      "Ask broader questions and let Minerva search across the book before answering.",
     bookTitle: "The Hound of the Baskervilles",
     chapterTitle: "Chapter VII - The Stapletons of Merripit House",
     modeBadge: "Deep mode",
