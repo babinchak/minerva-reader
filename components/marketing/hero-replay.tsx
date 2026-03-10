@@ -425,6 +425,16 @@ export function HeroReplay() {
                   {state.userMessageVisible && (
                     <div className="ml-auto max-w-[86%] rounded-2xl bg-primary px-3 py-1.5 text-[0.78rem] leading-[1.32] text-primary-foreground shadow">
                       <p>{scenario.userMessage}</p>
+                      {scenario.userLocationLabel ? (
+                        <div className="mt-1.5">
+                          <span
+                            title={scenario.userLocationTitle}
+                            className="inline-flex items-center rounded-full border border-primary-foreground/35 bg-primary-foreground/10 px-1.5 py-0.5 text-[0.66rem] font-medium leading-none text-primary-foreground/75"
+                          >
+                            {scenario.userLocationLabel}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   )}
 

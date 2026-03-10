@@ -74,6 +74,8 @@ export type HeroScenario = {
   interactionMode: "reader-action" | "ai-composer";
   actionLabel: string;
   userMessage: string;
+  userLocationLabel?: string;
+  userLocationTitle?: string;
   assistantLabel: string;
   readerParagraphs: string[];
   selectedText?: string;
@@ -98,6 +100,9 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     interactionMode: "reader-action",
     actionLabel: "Explain selection",
     userMessage: "Explain selection",
+    userLocationLabel: "Passage · 123:0-123:0",
+    userLocationTitle:
+      "Selected text from Chapter VI - Baskerville Hall",
     assistantLabel: "Minerva",
     readerParagraphs: [
       "\"I've been over a good part of the world since I left it, Dr. Watson,\" said he; \"but I have never seen a place to compare with it.\"",
@@ -165,6 +170,9 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     interactionMode: "ai-composer",
     actionLabel: "Deep mode",
     userMessage: "How does Doyle use the moor to create fear across the book?",
+    userLocationLabel: "Page 252",
+    userLocationTitle:
+      "Context from page 252 in The Hound of the Baskervilles",
     assistantLabel: "Minerva",
     composerPlaceholder: "Ask a question about the book...",
     readerParagraphs: [
