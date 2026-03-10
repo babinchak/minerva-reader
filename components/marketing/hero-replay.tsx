@@ -408,10 +408,10 @@ export function HeroReplay() {
 
       <div
         ref={demoRef}
-        className="relative h-[34rem] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm"
+        className="relative h-[48rem] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm md:h-[34rem]"
       >
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_24%)]" />
-          <div className="relative grid h-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="relative grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1.5fr)] md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:grid-rows-1">
             <div className="flex min-h-0 min-w-0 flex-col">
               <div className="border-b border-border/60 bg-muted/35 px-[4.5%] py-[3.2%]">
                 <div className="min-w-0">
@@ -454,7 +454,14 @@ export function HeroReplay() {
                 style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
               >
                 <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-card via-card/96 to-transparent" />
-                <div className="relative space-y-3.5">
+                <div
+                  className={cn(
+                    "relative space-y-3.5 md:mt-0",
+                    scenario.interactionMode === "reader-action"
+                      ? "-mt-32"
+                      : "-mt-20"
+                  )}
+                >
                   {readerBlocks.map((block, index) => (
                     <div key={`${scenario.id}-block-${index}`}>
                       {renderReaderBlock(
@@ -470,7 +477,7 @@ export function HeroReplay() {
               </div>
             </div>
 
-            <div className="relative flex min-h-0 min-w-0 flex-col border-l border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%)]">
+            <div className="relative flex min-h-0 min-w-0 flex-col border-t border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%)] md:border-t-0 md:border-l">
               <div className="absolute inset-y-[5%] left-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
               <div className="flex items-center justify-between border-b border-border/60 px-[6%] py-[4.2%]">
                 <div>
