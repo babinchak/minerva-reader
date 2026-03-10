@@ -171,34 +171,37 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     subtitle:
       "Ask broader questions and let Minerva search across the book before answering.",
     bookTitle: "The Hound of the Baskervilles",
-    chapterTitle: "Chapter VII - The Stapletons of Merripit House",
+    chapterTitle: "Chapter IV - Sir Henry Baskerville",
     modeBadge: "Deep mode",
     interactionMode: "ai-composer",
     actionLabel: "Deep mode",
     userMessage: "How does Doyle use the moor to create fear across the book?",
-    userLocationLabel: "Page 252",
+    userLocationLabel: "Page 34",
     userLocationTitle:
-      "Context from page 252 in The Hound of the Baskervilles",
+      "Context from page 34 in The Hound of the Baskervilles",
     assistantLabel: "Minerva",
     composerPlaceholder: "Ask a question about the book...",
     readerParagraphs: [
-      "The longer one stays upon the moor the more does its grim charm sink into the soul, its vastness, and also its grim charm. When once you are out upon its bosom you have left all traces of modern England behind you, but on the other hand you are conscious everywhere of the homes and the work of the prehistoric people.",
-      "As far as the eye can reach there is nothing but a sea of green rolling swells, broken by jagged summits and sinister hills. Here and there a tor or a gray stone outcropping catches the last of the light, while below the low places are dark with the shadows of the drifting clouds.",
-      "Watson could not shake the sense that the moor itself was watching, withholding answers while every path seemed to lead deeper into uncertainty.",
+      "He laid an envelope upon the table, and we all bent over it. It was of common quality, greyish in colour. The address, “Sir Henry Baskerville, Northumberland Hotel,” was printed in rough characters; the post-mark “Charing Cross,” and the date of posting the preceding evening.",
+      "Across the middle of it a single sentence had been formed by the expedient of pasting printed words upon it. It ran: As you value your life or your reason keep away from the moor. The word “moor” only was printed in ink.",
+      "So the moor enters the story as a threat before Watson ever reaches it: not just a place of danger, but a place linked to fear, surveillance, and the possibility of madness.",
     ],
     responseChunks: [
-      "## Across the book\n\nDoyle turns the moor into a source of fear by making it feel both **physically dangerous** and **psychologically unstable**.\n\n",
-      "## How the moor builds fear\n\n- Its silence, shifting weather, hidden paths, and strange sounds make the landscape itself feel complicit in the mystery.\n",
-      "- Because the moor feels vast and unreadable, every clue stays uncertain until Holmes can impose order on it.",
+      "## The moor as a machine for fear\n\nAcross the novel, Doyle uses the moor not just as scenery but as a **Gothic engine** that produces fear.\n\n",
+      "## Why this warning matters\n\n> **As you value your life or your reason keep away from the moor.**\n\nThe threat works because the moor is dangerous not only to **life**, but to **reason** itself.\n\n",
+      "## How Doyle builds that fear\n\n- The moor is framed by **legend** before we even arrive.\n- Its distance and sparseness make characters feel **isolated**.\n",
+      "- Fog, darkness, and strange sounds turn the landscape into a place where perception cannot be trusted.",
     ],
     toolCalls: [
       {
         label: "Semantic search",
-        detail: "moor fear atmosphere suspicion across the novel",
+        detail:
+          "Doyle description of the moor creating fear bleak desolate Grimpen Mire fog tors unearthly howling baying atmosphere",
       },
       {
         label: "Text search",
-        detail: "\"moor\" + \"fear\" + \"sound\" + \"dark\"",
+        detail:
+          "moor | Dartmoor | Grimpen | mire | fog | tors | baying | howl | waste | desolate",
       },
     ],
     cursorPoints: {
@@ -222,19 +225,24 @@ export const HERO_SCENARIOS: HeroScenario[] = [
       {
         at: 5800,
         type: "assistant-chunk",
-        text: "## Across the book\n\nDoyle turns the moor into a source of fear by making it feel both **physically dangerous** and **psychologically unstable**.\n\n",
+        text: "## The moor as a machine for fear\n\nAcross the novel, Doyle uses the moor not just as scenery but as a **Gothic engine** that produces fear.\n\n",
       },
       {
         at: 6640,
         type: "assistant-chunk",
-        text: "## How the moor builds fear\n\n- Its silence, shifting weather, hidden paths, and strange sounds make the landscape itself feel complicit in the mystery.\n",
+        text: "## Why this warning matters\n\n> **As you value your life or your reason keep away from the moor.**\n\nThe threat works because the moor is dangerous not only to **life**, but to **reason** itself.\n\n",
       },
       {
         at: 7720,
         type: "assistant-chunk",
-        text: "- Because the moor feels vast and unreadable, every clue stays uncertain until Holmes can impose order on it.",
+        text: "## How Doyle builds that fear\n\n- The moor is framed by **legend** before we even arrive.\n- Its distance and sparseness make characters feel **isolated**.\n",
+      },
+      {
+        at: 9000,
+        type: "assistant-chunk",
+        text: "- Fog, darkness, and strange sounds turn the landscape into a place where perception cannot be trusted.",
       },
     ],
-    loopAfterMs: 11000,
+    loopAfterMs: 12500,
   },
 ];
