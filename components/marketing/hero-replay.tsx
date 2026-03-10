@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from "react";
 import {
   BookText,
   Highlighter,
@@ -41,7 +49,9 @@ const INITIAL_CURSOR: HeroCursorPoint = { x: 18, y: 73 };
 function renderParagraphWithSelection(
   paragraph: string,
   selectedText: string | undefined,
-  selectionActive: boolean
+  selectionActive: boolean,
+  selectionStartRef?: RefObject<HTMLSpanElement | null>,
+  selectionEndRef?: RefObject<HTMLSpanElement | null>
 ) {
   if (!selectedText) {
     return paragraph;
@@ -72,7 +82,17 @@ function renderParagraphWithSelection(
           transition: "background-size 900ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease",
         }}
       >
+        <span
+          ref={selectionStartRef}
+          aria-hidden="true"
+          className="inline-block w-0 overflow-hidden align-baseline"
+        />
         {selectedText}
+        <span
+          ref={selectionEndRef}
+          aria-hidden="true"
+          className="inline-block w-0 overflow-hidden align-baseline"
+        />
       </span>
       {after}
     </>
@@ -82,12 +102,16 @@ function renderParagraphWithSelection(
 function renderReaderBlock(
   block: HeroReaderBlock,
   selectedText: string | undefined,
-  selectionActive: boolean
+  selectionActive: boolean,
+  selectionStartRef?: RefObject<HTMLSpanElement | null>,
+  selectionEndRef?: RefObject<HTMLSpanElement | null>
 ) {
   const content = renderParagraphWithSelection(
     block.text,
     selectedText,
-    selectionActive
+    selectionActive,
+    selectionStartRef,
+    selectionEndRef
   );
 
   if (block.type === "letter") {
@@ -212,7 +236,7 @@ export function HeroReplay() {
 
   const initialState = useMemo<ReplayState>(
     () => ({
-      cursor: scenario.cursorPoints.idle ?? INITIAL_CURSOR,
+      cursor: INITIAL_CURSOR,
       cursorTransitionMs: 0,
       selectionActive: false,
       buttonHover: false,
@@ -228,6 +252,58 @@ export function HeroReplay() {
   );
 
   const [state, setState] = useState<ReplayState>(initialState);
+  const demoRef = useRef<HTMLDivElement | null>(null);
+  const selectionStartRef = useRef<HTMLSpanElement | null>(null);
+  const selectionEndRef = useRef<HTMLSpanElement | null>(null);
+  const quickButtonRef = useRef<HTMLButtonElement | null>(null);
+  const composerInputRef = useRef<HTMLDivElement | null>(null);
+  const composerSendRef = useRef<HTMLButtonElement | null>(null);
+
+  const getRelativeCursorPoint = (position: string): HeroCursorPoint => {
+    const container = demoRef.current;
+    if (!container) return INITIAL_CURSOR;
+
+    const containerRect = container.getBoundingClientRect();
+    const toPercent = (clientX: number, clientY: number): HeroCursorPoint => ({
+      x: ((clientX - containerRect.left) / containerRect.width) * 100,
+      y: ((clientY - containerRect.top) / containerRect.height) * 100,
+    });
+
+    if (position === "selectionStart" || position === "selectionEnd") {
+      const el =
+        position === "selectionStart"
+          ? selectionStartRef.current
+          : selectionEndRef.current;
+      if (!el) return INITIAL_CURSOR;
+      const rect = el.getBoundingClientRect();
+      const targetX = rect.left;
+      const targetY = rect.top + rect.height * 0.55;
+      return toPercent(targetX, targetY);
+    }
+
+    if (position === "button") {
+      const el = quickButtonRef.current;
+      if (!el) return INITIAL_CURSOR;
+      const rect = el.getBoundingClientRect();
+      return toPercent(rect.left + rect.width * 0.72, rect.top + rect.height * 0.52);
+    }
+
+    if (position === "composerInput") {
+      const el = composerInputRef.current;
+      if (!el) return INITIAL_CURSOR;
+      const rect = el.getBoundingClientRect();
+      return toPercent(rect.left + rect.width * 0.78, rect.top + rect.height * 0.5);
+    }
+
+    if (position === "composerSend") {
+      const el = composerSendRef.current;
+      if (!el) return INITIAL_CURSOR;
+      const rect = el.getBoundingClientRect();
+      return toPercent(rect.left + rect.width * 0.55, rect.top + rect.height * 0.52);
+    }
+
+    return INITIAL_CURSOR;
+  };
 
   useEffect(() => {
     setState(initialState);
@@ -269,10 +345,7 @@ export function HeroReplay() {
       timeouts.push(
         window.setTimeout(() => {
           if (event.type === "cursor") {
-            moveCursor(
-              scenario.cursorPoints[event.position],
-              event.durationMs ?? 420
-            );
+            moveCursor(getRelativeCursorPoint(event.position), event.durationMs ?? 420);
             return;
           }
 
@@ -331,7 +404,10 @@ export function HeroReplay() {
         </div>
       </div>
 
-      <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] border border-border/70 bg-gradient-to-br from-background via-background to-muted/50 p-4 shadow-[0_24px_90px_rgba(15,23,42,0.14)] sm:p-5 lg:aspect-auto lg:min-h-[34rem] xl:min-h-[38rem]">
+      <div
+        ref={demoRef}
+        className="relative aspect-[16/10] overflow-hidden rounded-[28px] border border-border/70 bg-gradient-to-br from-background via-background to-muted/50 p-4 shadow-[0_24px_90px_rgba(15,23,42,0.14)] sm:p-5 lg:aspect-auto lg:min-h-[34rem] xl:min-h-[38rem]"
+      >
         <div
           className={cn(
             "pointer-events-none absolute inset-0",
@@ -363,6 +439,7 @@ export function HeroReplay() {
                   </div>
                   {scenario.interactionMode === "reader-action" ? (
                     <button
+                      ref={quickButtonRef}
                       type="button"
                       className={cn(
                         "ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[0.66rem] font-medium leading-none transition-all",
@@ -391,7 +468,9 @@ export function HeroReplay() {
                       {renderReaderBlock(
                         block,
                         scenario.selectedText,
-                        state.selectionActive
+                        state.selectionActive,
+                        selectionStartRef,
+                        selectionEndRef
                       )}
                     </div>
                   ))}
@@ -528,7 +607,10 @@ export function HeroReplay() {
                 {scenario.interactionMode === "ai-composer" && (
                   <div className="rounded-2xl border border-border/60 bg-background/80 px-2.5 py-2 shadow-sm">
                     <div className="flex items-end gap-2">
-                      <div className="min-h-[2.5rem] flex-1 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[0.76rem] leading-5 text-foreground/90">
+                      <div
+                        ref={composerInputRef}
+                        className="min-h-[2.5rem] flex-1 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[0.76rem] leading-5 text-foreground/90"
+                      >
                         {state.composerText ? (
                           <span>{state.composerText}</span>
                         ) : (
@@ -538,6 +620,7 @@ export function HeroReplay() {
                         )}
                       </div>
                       <button
+                        ref={composerSendRef}
                         type="button"
                         className={cn(
                           "inline-flex h-10 w-10 items-center justify-center rounded-xl border transition-all",

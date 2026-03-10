@@ -88,7 +88,6 @@ export type HeroScenario = {
   responseChunks: string[];
   toolCalls?: HeroToolCall[];
   composerPlaceholder?: string;
-  cursorPoints: Record<string, HeroCursorPoint>;
   events: HeroReplayEvent[];
   loopAfterMs: number;
 };
@@ -137,12 +136,6 @@ export const HERO_SCENARIOS: HeroScenario[] = [
       "- Holmes rarely praises Watson this directly.\n- Here, he is saying Watson’s observations and companionship actively **stimulate Holmes’s thinking**.\n\n",
       "## Why Doyle includes it\n\n- Watson is not just a sidekick; he is a **catalyst** for Holmes’s reasoning.\n- As narrator, he also \"conducts\" Holmes’s brilliance to the reader.",
     ],
-    cursorPoints: {
-      idle: { x: 18, y: 73 },
-      selectionStart: { x: 23, y: 45 },
-      selectionEnd: { x: 56, y: 51 },
-      button: { x: 53, y: 14 },
-    },
     events: [
       { at: 350, type: "cursor", position: "selectionStart", durationMs: 420 },
       { at: 850, type: "selection", active: true },
@@ -236,11 +229,6 @@ export const HERO_SCENARIOS: HeroScenario[] = [
           "moor | Dartmoor | Grimpen | mire | fog | tors | baying | howl | waste | desolate",
       },
     ],
-    cursorPoints: {
-      idle: { x: 18, y: 73 },
-      composerInput: { x: 78, y: 82 },
-      composerSend: { x: 92, y: 82 },
-    },
     events: [
       { at: 420, type: "cursor", position: "composerInput", durationMs: 520 },
       { at: 1120, type: "composer-chunk", text: "How does Doyle use " },
