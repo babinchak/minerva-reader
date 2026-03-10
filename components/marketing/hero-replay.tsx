@@ -555,31 +555,34 @@ export function HeroReplay() {
                     </div>
                   )}
 
-                  {scenario.toolCalls &&
-                    state.visibleToolCalls.map((toolIndex) => {
-                      const toolCall = scenario.toolCalls?.[toolIndex];
-                      if (!toolCall) return null;
+                  {scenario.toolCalls && state.visibleToolCalls.length > 0 && (
+                    <div className="-mb-3 space-y-0.5">
+                      {state.visibleToolCalls.map((toolIndex) => {
+                        const toolCall = scenario.toolCalls?.[toolIndex];
+                        if (!toolCall) return null;
 
-                      const ToolIcon = getToolIcon(toolCall.label);
+                        const ToolIcon = getToolIcon(toolCall.label);
 
-                      return (
-                        <div
-                          key={`${scenario.id}-tool-${toolIndex}`}
-                          className="max-w-[96%] rounded-xl border border-primary/15 bg-primary/5 px-2.5 py-1.5 text-[0.68rem] shadow-sm"
-                        >
-                          <div className="flex items-center gap-1.5 font-medium leading-none text-foreground">
-                            <ToolIcon className="h-3 w-3 text-primary" />
-                            <span>{toolCall.label}</span>
+                        return (
+                          <div
+                            key={`${scenario.id}-tool-${toolIndex}`}
+                            className="flex max-w-[96%] items-center gap-2 py-0.5 text-[0.68rem]"
+                          >
+                            <ToolIcon className="h-3 w-3 shrink-0 text-primary" />
+                            <span className="shrink-0 font-medium text-foreground">
+                              {toolCall.label}
+                            </span>
+                            <span className="min-w-0 truncate text-muted-foreground">
+                              {toolCall.detail}
+                            </span>
                           </div>
-                          <p className="mt-1 truncate leading-5 text-muted-foreground">
-                            {toolCall.detail}
-                          </p>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {(state.typingVisible || state.assistantText) && (
-                    <div className="w-full pt-0.5">
+                    <div className="w-full">
                       {state.assistantText ? (
                         <Markdown
                           content={state.assistantText}
