@@ -4,6 +4,7 @@ import { BookCard } from "@/components/book-card";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LibraryView } from "@/components/library-view";
 import { UpgradeCta } from "@/components/upgrade-cta";
+import { HeroReplay } from "@/components/marketing/hero-replay";
 import { SiteNav } from "@/components/site-nav";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -153,31 +154,45 @@ async function HomeContent({
   // User is not logged in - show landing page with browse CTA
   return (
     <div className="w-full max-w-7xl space-y-12 sm:space-y-14">
-      <section className="mx-auto flex max-w-4xl flex-col items-center gap-5 px-4 pt-10 text-center sm:pt-14">
-        <BookOpen className="h-16 w-16 text-muted-foreground" />
-        <h1 className="max-w-3xl text-4xl font-bold text-foreground sm:text-5xl">
-          <span className="block">Instant answers in context.</span>
-          <span className="block">Deep search across the book.</span>
-        </h1>
-        <p className="max-w-2xl text-lg text-muted-foreground">
-          Highlight any passage for an instant explanation in context, or switch to
-          deep mode for broader answers grounded in the book and relevant web
-          results.
-        </p>
-        <div className="flex flex-col gap-3 sm:flex-row items-center sm:items-center">
-          <Link
-            href="/browse"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Browse curated library
-          </Link>
-          <Suspense>
-            <AuthButton />
-          </Suspense>
+      <section className="w-full rounded-[2rem] border border-border/70 bg-gradient-to-br from-background via-background to-muted/35 px-4 py-6 shadow-sm sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:items-center">
+          <div className="space-y-6 text-left">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>Read with context</span>
+            </div>
+            <div className="space-y-4">
+              <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+                Instant answers in context.
+                <span className="block text-muted-foreground">
+                  Deep search across the book.
+                </span>
+              </h1>
+              <p className="max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
+                Highlight any passage for an instant explanation in context, or
+                switch to deep mode for broader answers grounded in the book and
+                relevant web results.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link
+                href="/browse"
+                className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Browse curated library
+              </Link>
+              <Suspense>
+                <AuthButton />
+              </Suspense>
+            </div>
+            <p className="max-w-lg text-sm leading-6 text-muted-foreground">
+              Sign up to upload your own books, save a personal library, and
+              keep every answer anchored to the exact passage you are reading.
+            </p>
+          </div>
+
+          <HeroReplay />
         </div>
-        <p className="text-sm text-muted-foreground">
-          Sign up to upload your own books and save a personal library.
-        </p>
       </section>
 
       <SignedOutCuratedPreview />
