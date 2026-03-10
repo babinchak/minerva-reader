@@ -16,6 +16,7 @@ export interface AIAssistantProps {
   /** PDF document for extracting text from arbitrary pages (local context). */
   pdfDocument?: PDFDocumentProxy | null;
   mobileDrawerMinMode?: "closed" | "quick";
+  mobileDrawerAnchor?: "top" | "bottom";
   /**
    * Optional external trigger to open the desktop AI pane and run an action.
    * Used by reader toolbars (e.g. PDF) to drive "Explain selection/section".
@@ -48,6 +49,7 @@ export function AIAssistant(props: AIAssistantProps) {
       currentPage={props.currentPage}
       pdfDocument={props.pdfDocument}
       minMode={props.mobileDrawerMinMode}
+      anchor={props.mobileDrawerAnchor}
     />
   );
   }

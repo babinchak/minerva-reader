@@ -26,7 +26,7 @@ import { useParams } from "next/navigation";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
 import { hapticLight } from "@/lib/haptic";
-import { getLiveSelectedText } from "@/lib/book-position-utils";
+import { getLiveSelectedText, getTextSelection } from "@/lib/book-position-utils";
 import { getThoriumThemeFromStoredVariants } from "@/lib/theme-variants";
 
 /** Fallback when document theme can't be read (SSR, etc.) */
@@ -127,6 +127,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   const [openAiRequest, setOpenAiRequest] = useState<{ nonce: number } | null>(null);
   const [isAiPaneOpen, setIsAiPaneOpen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
+  const [mobileDrawerAnchor, setMobileDrawerAnchor] = useState<"top" | "bottom">("bottom");
   const toggleChrome = useCallback(() => {
     hapticLight();
     setChromeVisible((v) => !v);
@@ -146,6 +147,76 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
       setChromeVisible(true);
     }
   }, [isMobile, chromeVisible, selectionExists]);
+  const mobileTopToolbarVisible = chromeVisible && !selectionExists;
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileDrawerAnchor("bottom");
+      return;
+    }
+    if (!selectionExists) {
+      setMobileDrawerAnchor("bottom");
+      return;
+    }
+
+    const watchedDocs = new Set<Document>();
+    const iframeLoadHandlers = new Map<HTMLIFrameElement, () => void>();
+    const updateAnchor = () => {
+      const rect = getSelectionViewportRect();
+      if (!rect) return;
+      const centerY = rect.top + rect.height / 2;
+      setMobileDrawerAnchor(centerY > window.innerHeight * 0.58 ? "top" : "bottom");
+    };
+
+    const attachSelectionListener = (targetDoc: Document | null | undefined) => {
+      if (!targetDoc || watchedDocs.has(targetDoc)) return;
+      targetDoc.addEventListener("selectionchange", updateAnchor);
+      watchedDocs.add(targetDoc);
+    };
+
+    const attachIframeSelectionListener = (iframe: HTMLIFrameElement) => {
+      if (iframeLoadHandlers.has(iframe)) return;
+      const handleIframeLoad = () => {
+        try {
+          attachSelectionListener(iframe.contentDocument ?? iframe.contentWindow?.document);
+          updateAnchor();
+        } catch {
+          // Ignore inaccessible iframe document.
+        }
+      };
+      iframe.addEventListener("load", handleIframeLoad);
+      iframeLoadHandlers.set(iframe, handleIframeLoad);
+      handleIframeLoad();
+    };
+
+    const syncIframeSelectionListeners = () => {
+      const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+      for (const iframe of iframes) {
+        if (iframe instanceof HTMLIFrameElement) attachIframeSelectionListener(iframe);
+      }
+    };
+
+    attachSelectionListener(document);
+    syncIframeSelectionListeners();
+    updateAnchor();
+    window.addEventListener("resize", updateAnchor);
+    const observer = new MutationObserver(() => {
+      syncIframeSelectionListeners();
+      updateAnchor();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateAnchor);
+      watchedDocs.forEach((targetDoc) => {
+        targetDoc.removeEventListener("selectionchange", updateAnchor);
+      });
+      iframeLoadHandlers.forEach((handler, iframe) => {
+        iframe.removeEventListener("load", handler);
+      });
+    };
+  }, [isMobile, selectionExists]);
 
   useEffect(() => {
     setMounted(true);
@@ -192,14 +263,14 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                 <div
                   className={[
                     "absolute left-0 right-0 z-50 border-b border-border/60 bg-background/95 backdrop-blur transition-opacity duration-200",
-                    chromeVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
+                    mobileTopToolbarVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
                   ].join(" ")}
                   style={{
                     top: 0,
                     paddingTop: "env(safe-area-inset-top, 0px)",
                     touchAction: "pan-x pan-y",
                   }}
-                  aria-hidden={!chromeVisible}
+                  aria-hidden={!mobileTopToolbarVisible}
                 >
                   <EpubReaderToolbar
                     onRequestAiRun={(action) => {
@@ -265,6 +336,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                       rawManifest={rawManifest}
                       bookType="epub"
                       mobileDrawerMinMode="quick"
+                      mobileDrawerAnchor={mobileDrawerAnchor}
                       requestRun={aiRequest}
                       requestOpen={openAiRequest}
                       onOpenChange={setIsAiPaneOpen}
@@ -308,6 +380,57 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
       </StatefulPreferencesProvider>
     </ThStoreProvider>
   );
+}
+
+function findReaderIframeForDocument(targetDoc: Document): HTMLIFrameElement | null {
+  const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+  for (const iframe of iframes) {
+    if (!(iframe instanceof HTMLIFrameElement)) continue;
+    try {
+      if (iframe.contentDocument === targetDoc) return iframe;
+    } catch {
+      // Ignore inaccessible iframes.
+    }
+  }
+  return null;
+}
+
+function getSelectionViewportRect(): DOMRect | null {
+  try {
+    const selection = getTextSelection();
+    const range = selection?.range;
+    const targetDoc = selection?.targetDoc;
+    if (!range || !targetDoc) return null;
+
+    const primaryRect = range.getBoundingClientRect();
+    const firstRect = range.getClientRects()[0];
+    const rangeRect =
+      firstRect && firstRect.width > 0 && firstRect.height > 0
+        ? firstRect
+        : primaryRect.width > 0 || primaryRect.height > 0
+          ? primaryRect
+          : null;
+    if (!rangeRect) return null;
+
+    if (targetDoc === document) {
+      return new DOMRect(rangeRect.left, rangeRect.top, rangeRect.width, rangeRect.height);
+    }
+
+    const readerIframe = findReaderIframeForDocument(targetDoc);
+    if (!readerIframe) {
+      return new DOMRect(rangeRect.left, rangeRect.top, rangeRect.width, rangeRect.height);
+    }
+
+    const frameRect = readerIframe.getBoundingClientRect();
+    return new DOMRect(
+      frameRect.left + rangeRect.left,
+      frameRect.top + rangeRect.top,
+      rangeRect.width,
+      rangeRect.height
+    );
+  } catch {
+    return null;
+  }
 }
 
 function hasExpandedSelection(targetDoc: Document): boolean {

@@ -25,6 +25,10 @@ export interface AIBottomDrawerProps
    * Defaults to "quick" so users can always access the AI.
    */
   minMode?: Extract<MobileDrawerMode, "closed" | "quick">;
+  /**
+   * Drawer edge on mobile. Useful for avoiding overlap with active text selection.
+   */
+  anchor?: "top" | "bottom";
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -41,6 +45,7 @@ export function AIBottomDrawer({
   selectedText,
   initialMode,
   minMode = "quick",
+  anchor = "bottom",
   ...panelProps
 }: AIBottomDrawerProps) {
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
@@ -182,7 +187,7 @@ export function AIBottomDrawer({
     const drag = draggingRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
     didDragRef.current = true;
-    const delta = drag.startY - e.clientY; // up = positive
+    const delta = anchor === "top" ? e.clientY - drag.startY : drag.startY - e.clientY;
     const next = clamp(drag.startHeight + delta, minHeight, maxHeight);
     setHeightPx(next);
 
@@ -210,7 +215,8 @@ export function AIBottomDrawer({
 
     draggingRef.current = null;
     setIsDragging(false);
-    snapToMode(heightPx, velocityY);
+    const effectiveVelocityY = anchor === "top" ? -velocityY : velocityY;
+    snapToMode(heightPx, effectiveVelocityY);
   };
 
   const close = () => {
@@ -256,32 +262,37 @@ export function AIBottomDrawer({
       )}
 
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 bg-background"
+        className={`fixed left-0 right-0 z-50 bg-background ${anchor === "top" ? "top-0" : "bottom-0"}`}
         style={{
           height: `${heightPx}px`,
           transition: isDragging ? "none" : `height ${SNAP_DURATION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
         }}
       >
-        <div className="h-full w-full rounded-t-2xl border-t border-border bg-background shadow-2xl flex flex-col overflow-hidden min-h-0">
-          {/* Pill / handle */}
-          <div
-            className="h-6 flex items-center justify-center touch-none"
-            onPointerDown={onHandlePointerDown}
-            onPointerMove={onHandlePointerMove}
-            onPointerUp={onHandlePointerUp}
-            onPointerCancel={onHandlePointerUp}
-            role="button"
-            tabIndex={0}
-            aria-label="Drag to open AI assistant"
-            onClick={() => {
-              if (didDragRef.current) return;
-              // Tap to expand to half.
-              if (mode === "closed") setMode(selectionExists ? "quick" : "half");
-              else if (mode === "quick") setMode("half");
-            }}
-          >
-            <div className="h-1.5 w-10 rounded-full bg-muted-foreground/30" />
-          </div>
+        <div
+          className={`h-full w-full border-border bg-background shadow-2xl flex flex-col overflow-hidden min-h-0 ${
+            anchor === "top" ? "rounded-b-2xl border-b" : "rounded-t-2xl border-t"
+          }`}
+        >
+          {anchor === "bottom" && (
+            <div
+              className="h-6 flex items-center justify-center touch-none"
+              onPointerDown={onHandlePointerDown}
+              onPointerMove={onHandlePointerMove}
+              onPointerUp={onHandlePointerUp}
+              onPointerCancel={onHandlePointerUp}
+              role="button"
+              tabIndex={0}
+              aria-label="Drag to open AI assistant"
+              onClick={() => {
+                if (didDragRef.current) return;
+                // Tap to expand to half.
+                if (mode === "closed") setMode(selectionExists ? "quick" : "half");
+                else if (mode === "quick") setMode("half");
+              }}
+            >
+              <div className="h-1.5 w-10 rounded-full bg-muted-foreground/30" />
+            </div>
+          )}
 
           {mode !== "closed" && (
             <AIAgentPanel
@@ -299,6 +310,27 @@ export function AIBottomDrawer({
               }}
               className="flex-1 flex flex-col min-h-0"
             />
+          )}
+
+          {anchor === "top" && (
+            <div
+              className="h-6 flex items-center justify-center touch-none"
+              onPointerDown={onHandlePointerDown}
+              onPointerMove={onHandlePointerMove}
+              onPointerUp={onHandlePointerUp}
+              onPointerCancel={onHandlePointerUp}
+              role="button"
+              tabIndex={0}
+              aria-label="Drag to open AI assistant"
+              onClick={() => {
+                if (didDragRef.current) return;
+                // Tap to expand to half.
+                if (mode === "closed") setMode(selectionExists ? "quick" : "half");
+                else if (mode === "quick") setMode("half");
+              }}
+            >
+              <div className="h-1.5 w-10 rounded-full bg-muted-foreground/30" />
+            </div>
           )}
         </div>
       </div>
