@@ -89,6 +89,13 @@ function getToolIcon(label: string) {
   return Sparkles;
 }
 
+function getStreamCharDelay(char: string) {
+  if (char === "\n") return 24;
+  if (char === " " || char === "\t") return 8;
+  if (/[.,!?;:]/.test(char)) return 18;
+  return 10;
+}
+
 function applyReplayEvent(
   event: HeroReplayEvent,
   setState: Dispatch<SetStateAction<ReplayState>>
@@ -143,12 +150,6 @@ function applyReplayEvent(
         typingVisible: event.active,
       }));
       break;
-    case "assistant-chunk":
-      setState((prev) => ({
-        ...prev,
-        assistantText: prev.assistantText + event.text,
-      }));
-      break;
     case "tool-call":
       setState((prev) => ({
         ...prev,
@@ -199,6 +200,7 @@ export function HeroReplay() {
     setState(initialState);
 
     const timeouts: number[] = [];
+    let assistantStreamAvailableAt = 0;
 
     const moveCursor = (point: HeroCursorPoint, durationMs: number) => {
       setState((prev) => ({
@@ -208,7 +210,29 @@ export function HeroReplay() {
       }));
     };
 
+    const scheduleAssistantChunk = (text: string, requestedStartAt: number) => {
+      const startAt = Math.max(requestedStartAt, assistantStreamAvailableAt);
+      let elapsed = 0;
+      for (const char of text) {
+        elapsed += getStreamCharDelay(char);
+        timeouts.push(
+          window.setTimeout(() => {
+            setState((prev) => ({
+              ...prev,
+              assistantText: prev.assistantText + char,
+            }));
+          }, startAt + elapsed)
+        );
+      }
+      assistantStreamAvailableAt = startAt + elapsed;
+    };
+
     for (const event of scenario.events) {
+      if (event.type === "assistant-chunk") {
+        scheduleAssistantChunk(event.text, event.at);
+        continue;
+      }
+
       timeouts.push(
         window.setTimeout(() => {
           if (event.type === "cursor") {
