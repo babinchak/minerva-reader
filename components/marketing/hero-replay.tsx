@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/utils";
 
 import {
@@ -367,16 +368,17 @@ export function HeroReplay() {
                     })}
 
                   {(state.typingVisible || state.assistantText) && (
-                    <div className="max-w-[95%] rounded-2xl border border-border/60 bg-background/90 px-3 py-2 text-[0.8rem] shadow-sm">
-                      <div className="mb-1 flex items-center gap-1.5 text-[0.62rem] uppercase tracking-[0.15em] text-muted-foreground">
+                    <div className="w-full pt-0.5">
+                      <div className="mb-1.5 flex items-center gap-1.5 text-[0.62rem] uppercase tracking-[0.15em] text-muted-foreground">
                         <Sparkles className="h-3 w-3 text-primary" />
                         <span>{scenario.assistantLabel}</span>
                       </div>
 
                       {state.assistantText ? (
-                        <p className="whitespace-pre-wrap text-foreground/90">
-                          {state.assistantText}
-                        </p>
+                        <Markdown
+                          content={state.assistantText}
+                          className="space-y-1.5 text-[0.8rem] leading-5 text-foreground/90 [&_h1]:mt-0 [&_h1]:mb-1 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h2]:mt-0 [&_h2]:mb-1 [&_h2]:text-[0.9rem] [&_h2]:font-semibold [&_h2]:leading-5 [&_h3]:mt-0 [&_h3]:mb-1 [&_h3]:text-[0.84rem] [&_h3]:font-semibold [&_h3]:leading-5 [&_p]:my-0 [&_p]:text-[0.8rem] [&_p]:leading-5 [&_ul]:my-0 [&_ul]:space-y-0.5 [&_ul]:pl-4.5 [&_li]:leading-5 [&_strong]:font-semibold"
+                        />
                       ) : (
                         <div className="flex items-center gap-1.5 pt-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce" />

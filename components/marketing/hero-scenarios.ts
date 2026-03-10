@@ -108,10 +108,10 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     selectedText:
       "a gray, melancholy hill, with a strange jagged summit, dim and vague in the distance, like some fantastic landscape in a dream",
     responseChunks: [
-      "Doyle is using this description to make the moor feel eerie and unreal before the characters even arrive. ",
-      "Words like \"gray,\" \"melancholy,\" \"jagged,\" and \"dim and vague\" turn the landscape into something emotionally threatening, not just physically distant. ",
-      "The comparison to \"some fantastic landscape in a dream\" suggests that the place feels uncanny and half-unreal, ",
-      "which prepares the reader for the mystery and dread surrounding Baskerville Hall.",
+      "## What Doyle is doing here\n\nDoyle makes the moor feel **eerie and unreal** before the characters even arrive.\n\n",
+      "Words like **\"gray,\" \"melancholy,\" \"jagged,\"** and **\"dim and vague\"** turn the landscape into something emotionally threatening, not just physically distant.\n\n",
+      "## Why it matters\n\n- The phrase **\"like some fantastic landscape in a dream\"** makes the setting feel uncanny and half-unreal.\n",
+      "- That mood prepares the reader for the mystery and dread surrounding Baskerville Hall.",
     ],
     cursorPoints: {
       idle: { x: 18, y: 73 },
@@ -131,10 +131,26 @@ export const HERO_SCENARIOS: HeroScenario[] = [
       { at: 3080, type: "user-message" },
       { at: 3420, type: "typing", active: true },
       { at: 4100, type: "typing", active: false },
-      { at: 4100, type: "assistant-chunk", text: "Doyle is using this description to make the moor feel eerie and unreal before the characters even arrive. " },
-      { at: 5150, type: "assistant-chunk", text: "Words like \"gray,\" \"melancholy,\" \"jagged,\" and \"dim and vague\" turn the landscape into something emotionally threatening, not just physically distant. " },
-      { at: 6480, type: "assistant-chunk", text: "The comparison to \"some fantastic landscape in a dream\" suggests that the place feels uncanny and half-unreal, " },
-      { at: 7700, type: "assistant-chunk", text: "which prepares the reader for the mystery and dread surrounding Baskerville Hall." },
+      {
+        at: 4100,
+        type: "assistant-chunk",
+        text: "## What Doyle is doing here\n\nDoyle makes the moor feel **eerie and unreal** before the characters even arrive.\n\n",
+      },
+      {
+        at: 5150,
+        type: "assistant-chunk",
+        text: "Words like **\"gray,\" \"melancholy,\" \"jagged,\"** and **\"dim and vague\"** turn the landscape into something emotionally threatening, not just physically distant.\n\n",
+      },
+      {
+        at: 6480,
+        type: "assistant-chunk",
+        text: "## Why it matters\n\n- The phrase **\"like some fantastic landscape in a dream\"** makes the setting feel uncanny and half-unreal.\n",
+      },
+      {
+        at: 7700,
+        type: "assistant-chunk",
+        text: "- That mood prepares the reader for the mystery and dread surrounding Baskerville Hall.",
+      },
     ],
     loopAfterMs: 10500,
   },
@@ -158,9 +174,9 @@ export const HERO_SCENARIOS: HeroScenario[] = [
       "Watson could not shake the sense that the moor itself was watching, withholding answers while every path seemed to lead deeper into uncertainty.",
     ],
     responseChunks: [
-      "Doyle turns the moor into a source of fear by making it feel both physically dangerous and psychologically unstable. ",
-      "Across the novel, descriptions of its silence, shifting weather, hidden paths, and strange sounds make the landscape itself seem complicit in the mystery. ",
-      "That matters because suspicion spreads more easily when the setting feels vast, isolating, and unreadable, so the moor keeps every clue uncertain until Holmes can impose order on it.",
+      "## Across the book\n\nDoyle turns the moor into a source of fear by making it feel both **physically dangerous** and **psychologically unstable**.\n\n",
+      "## How the moor builds fear\n\n- Its silence, shifting weather, hidden paths, and strange sounds make the landscape itself feel complicit in the mystery.\n",
+      "- Because the moor feels vast and unreadable, every clue stays uncertain until Holmes can impose order on it.",
     ],
     toolCalls: [
       {
@@ -193,17 +209,17 @@ export const HERO_SCENARIOS: HeroScenario[] = [
       {
         at: 5800,
         type: "assistant-chunk",
-        text: "Doyle turns the moor into a source of fear by making it feel both physically dangerous and psychologically unstable. ",
+        text: "## Across the book\n\nDoyle turns the moor into a source of fear by making it feel both **physically dangerous** and **psychologically unstable**.\n\n",
       },
       {
         at: 6640,
         type: "assistant-chunk",
-        text: "Across the novel, descriptions of its silence, shifting weather, hidden paths, and strange sounds make the landscape itself seem complicit in the mystery. ",
+        text: "## How the moor builds fear\n\n- Its silence, shifting weather, hidden paths, and strange sounds make the landscape itself feel complicit in the mystery.\n",
       },
       {
         at: 7720,
         type: "assistant-chunk",
-        text: "That matters because suspicion spreads more easily when the setting feels vast, isolating, and unreadable, so the moor keeps every clue uncertain until Holmes can impose order on it.",
+        text: "- Because the moor feels vast and unreadable, every clue stays uncertain until Holmes can impose order on it.",
       },
     ],
     loopAfterMs: 11000,
