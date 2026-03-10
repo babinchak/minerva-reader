@@ -8,6 +8,7 @@ import {
   MousePointer2,
   ScanSearch,
   Search,
+  SendHorizontal,
   Sparkles,
 } from "lucide-react";
 
@@ -25,6 +26,8 @@ type ReplayState = {
   selectionActive: boolean;
   buttonHover: boolean;
   buttonPressed: boolean;
+  composerText: string;
+  composerSendPressed: boolean;
   userMessageVisible: boolean;
   typingVisible: boolean;
   assistantText: string;
@@ -114,9 +117,22 @@ function applyReplayEvent(
         buttonPressed: event.active,
       }));
       break;
+    case "composer-chunk":
+      setState((prev) => ({
+        ...prev,
+        composerText: prev.composerText + event.text,
+      }));
+      break;
+    case "composer-send":
+      setState((prev) => ({
+        ...prev,
+        composerSendPressed: event.active,
+      }));
+      break;
     case "user-message":
       setState((prev) => ({
         ...prev,
+        composerText: "",
         userMessageVisible: true,
       }));
       break;
@@ -159,6 +175,8 @@ export function HeroReplay() {
       selectionActive: false,
       buttonHover: false,
       buttonPressed: false,
+      composerText: "",
+      composerSendPressed: false,
       userMessageVisible: false,
       typingVisible: false,
       assistantText: "",
@@ -257,20 +275,22 @@ export function HeroReplay() {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[0.72rem] font-medium transition-all",
-                    state.buttonPressed
-                      ? "scale-[0.98] border-primary/70 bg-primary text-primary-foreground shadow"
-                      : state.buttonHover
-                        ? "border-primary/40 bg-primary/12 text-foreground shadow-sm"
-                        : "border-border bg-background/85 text-foreground"
-                  )}
-                >
-                  <ActionIcon className="h-3.5 w-3.5" />
-                  <span>{scenario.actionLabel}</span>
-                </button>
+                {scenario.interactionMode === "reader-action" ? (
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[0.72rem] font-medium transition-all",
+                      state.buttonPressed
+                        ? "scale-[0.98] border-primary/70 bg-primary text-primary-foreground shadow"
+                        : state.buttonHover
+                          ? "border-primary/40 bg-primary/12 text-foreground shadow-sm"
+                          : "border-border bg-background/85 text-foreground"
+                    )}
+                  >
+                    <ActionIcon className="h-3.5 w-3.5" />
+                    <span>{scenario.actionLabel}</span>
+                  </button>
+                ) : null}
               </div>
 
               <div className="relative flex-1 overflow-hidden px-[5.5%] py-[4.6%] text-[0.84rem] leading-[1.8] text-foreground/90">
@@ -367,6 +387,34 @@ export function HeroReplay() {
                     </div>
                   )}
                 </div>
+
+                {scenario.interactionMode === "ai-composer" && (
+                  <div className="rounded-2xl border border-border/60 bg-background/80 px-2.5 py-2 shadow-sm">
+                    <div className="flex items-end gap-2">
+                      <div className="min-h-[2.5rem] flex-1 rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-[0.76rem] leading-5 text-foreground/90">
+                        {state.composerText ? (
+                          <span>{state.composerText}</span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {scenario.composerPlaceholder}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex h-10 w-10 items-center justify-center rounded-xl border transition-all",
+                          state.composerSendPressed
+                            ? "scale-[0.97] border-primary/70 bg-primary text-primary-foreground shadow"
+                            : "border-border bg-background text-foreground"
+                        )}
+                        aria-label="Send question"
+                      >
+                        <SendHorizontal className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

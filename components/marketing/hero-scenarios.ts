@@ -14,7 +14,7 @@ export type HeroReplayEvent =
   | {
       at: number;
       type: "cursor";
-      position: keyof HeroScenario["cursorPoints"];
+      position: string;
       durationMs?: number;
     }
   | {
@@ -50,6 +50,16 @@ export type HeroReplayEvent =
       at: number;
       type: "tool-call";
       index: number;
+    }
+  | {
+      at: number;
+      type: "composer-chunk";
+      text: string;
+    }
+  | {
+      at: number;
+      type: "composer-send";
+      active: boolean;
     };
 
 export type HeroScenario = {
@@ -61,6 +71,7 @@ export type HeroScenario = {
   chapterTitle: string;
   paneIntro?: string;
   modeBadge: string;
+  interactionMode: "reader-action" | "ai-composer";
   actionLabel: string;
   userMessage: string;
   assistantLabel: string;
@@ -68,12 +79,8 @@ export type HeroScenario = {
   selectedText?: string;
   responseChunks: string[];
   toolCalls?: HeroToolCall[];
-  cursorPoints: {
-    idle: HeroCursorPoint;
-    selectionStart: HeroCursorPoint;
-    selectionEnd: HeroCursorPoint;
-    button: HeroCursorPoint;
-  };
+  composerPlaceholder?: string;
+  cursorPoints: Record<string, HeroCursorPoint>;
   events: HeroReplayEvent[];
   loopAfterMs: number;
 };
@@ -89,6 +96,7 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     chapterTitle: "Chapter VI - Baskerville Hall",
     paneIntro: "Highlight any passage and ask Minerva to explain it in context.",
     modeBadge: "Quick mode",
+    interactionMode: "reader-action",
     actionLabel: "Explain selection",
     userMessage: "Explain selection",
     assistantLabel: "Minerva",
@@ -139,9 +147,11 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     bookTitle: "The Hound of the Baskervilles",
     chapterTitle: "Chapter VII - The Stapletons of Merripit House",
     modeBadge: "Deep mode",
+    interactionMode: "ai-composer",
     actionLabel: "Deep mode",
-    userMessage: "How does Doyle use the moor to build fear and suspicion across the book?",
+    userMessage: "How does Doyle use the moor to create fear across the book?",
     assistantLabel: "Minerva",
+    composerPlaceholder: "Ask a question about the book...",
     readerParagraphs: [
       "The longer one stays upon the moor the more does its grim charm sink into the soul, its vastness, and also its grim charm. When once you are out upon its bosom you have left all traces of modern England behind you, but on the other hand you are conscious everywhere of the homes and the work of the prehistoric people.",
       "As far as the eye can reach there is nothing but a sea of green rolling swells, broken by jagged summits and sinister hills. Here and there a tor or a gray stone outcropping catches the last of the light, while below the low places are dark with the shadows of the drifting clouds.",
@@ -164,37 +174,38 @@ export const HERO_SCENARIOS: HeroScenario[] = [
     ],
     cursorPoints: {
       idle: { x: 18, y: 73 },
-      selectionStart: { x: 23, y: 45 },
-      selectionEnd: { x: 56, y: 51 },
-      button: { x: 51, y: 14 },
+      composerInput: { x: 78, y: 82 },
+      composerSend: { x: 92, y: 82 },
     },
     events: [
-      { at: 550, type: "button-hover", active: true },
-      { at: 550, type: "cursor", position: "button", durationMs: 500 },
-      { at: 1220, type: "button-press", active: true },
-      { at: 1400, type: "button-press", active: false },
-      { at: 1480, type: "button-hover", active: false },
-      { at: 1740, type: "user-message" },
-      { at: 2220, type: "tool-call", index: 0 },
-      { at: 3180, type: "tool-call", index: 1 },
-      { at: 4120, type: "typing", active: true },
-      { at: 4760, type: "typing", active: false },
+      { at: 420, type: "cursor", position: "composerInput", durationMs: 520 },
+      { at: 1120, type: "composer-chunk", text: "How does Doyle use " },
+      { at: 1520, type: "composer-chunk", text: "the moor to create fear " },
+      { at: 1940, type: "composer-chunk", text: "across the book?" },
+      { at: 2580, type: "cursor", position: "composerSend", durationMs: 360 },
+      { at: 3020, type: "composer-send", active: true },
+      { at: 3190, type: "composer-send", active: false },
+      { at: 3380, type: "user-message" },
+      { at: 3880, type: "tool-call", index: 0 },
+      { at: 4560, type: "tool-call", index: 1 },
+      { at: 5280, type: "typing", active: true },
+      { at: 5800, type: "typing", active: false },
       {
-        at: 4760,
+        at: 5800,
         type: "assistant-chunk",
         text: "Doyle turns the moor into a source of fear by making it feel both physically dangerous and psychologically unstable. ",
       },
       {
-        at: 5940,
+        at: 6640,
         type: "assistant-chunk",
         text: "Across the novel, descriptions of its silence, shifting weather, hidden paths, and strange sounds make the landscape itself seem complicit in the mystery. ",
       },
       {
-        at: 7320,
+        at: 7720,
         type: "assistant-chunk",
         text: "That matters because suspicion spreads more easily when the setting feels vast, isolating, and unreadable, so the moor keeps every clue uncertain until Holmes can impose order on it.",
       },
     ],
-    loopAfterMs: 10700,
+    loopAfterMs: 11000,
   },
 ];
