@@ -16,6 +16,7 @@ import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useAppSelector, useAppDispatch, setActionOpen } from "@edrlab/thorium-web/epub";
 import { hapticLight } from "@/lib/haptic";
+import { useIsMobile } from "@/lib/use-media-query";
 
 interface EpubReaderToolbarProps {
   onRequestAiRun: (action: "page" | "selection") => void;
@@ -63,6 +64,7 @@ export function EpubReaderToolbar({
   isAiPaneOpen,
 }: EpubReaderToolbarProps) {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const selectedText = useSelectedText();
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
   const dispatch = useAppDispatch();
@@ -97,16 +99,17 @@ export function EpubReaderToolbar({
       </div>
 
       <div className="flex items-center justify-center gap-2 min-w-0 justify-self-center">
-        {positionLabel ? (
-          <span
-            className="text-sm text-muted-foreground select-none truncate max-w-[200px]"
-            title={positionLabel}
-          >
-            {positionLabel}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground select-none">—</span>
-        )}
+        {!isMobile &&
+          (positionLabel ? (
+            <span
+              className="text-sm text-muted-foreground select-none truncate max-w-[200px]"
+              title={positionLabel}
+            >
+              {positionLabel}
+            </span>
+          ) : (
+            <span className="text-sm text-muted-foreground select-none">—</span>
+          ))}
       </div>
 
       <div className="flex items-center gap-2 shrink-0 justify-self-end">
