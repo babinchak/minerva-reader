@@ -1050,6 +1050,14 @@
     display: none !important;
   }
 
+  /* Hide Thorium's bottom bar (position + prev/next) on mobile; AI pane stays visible */
+  @media (hover: none) and (pointer: coarse), (max-width: 767px) {
+    .epub-reader-with-custom-toolbar #reader-footer-overlay,
+    .epub-reader-with-custom-toolbar #bottom-bar {
+      display: none !important;
+    }
+  }
+
   /* Thorium uses height: 100vh which can overflow and overlap our toolbar.
    * Constrain the reader to the content area so it sits below the toolbar. */
   .epub-reader-with-custom-toolbar #reader-main,
