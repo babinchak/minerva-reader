@@ -5,7 +5,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "postinstall": "node scripts/fix-pdfjs-assets.cjs && node scripts/generate-pwa-icons.cjs",
+    "postinstall": "node scripts/fix-pdfjs-assets.cjs && node scripts/postinstall-icons.cjs",
+    "gen:favicons": "node scripts/generate-favicons.cjs",
     "gen:pwa-icons": "node scripts/generate-pwa-icons.cjs",
     "lint": "eslint ."
   },

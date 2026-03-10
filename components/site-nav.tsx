@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Menu, X, Library, Settings, Home } from "lucide-react";
+import { Menu, X, Library, Settings, Home } from "lucide-react";
+import { MinervaLogo } from "@/components/minerva-logo";
 import { useIsMobile } from "@/lib/use-media-query";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -59,7 +60,7 @@ export function SiteNav({ rightSlot }: SiteNavProps) {
         <div className="w-full max-w-7xl flex justify-between items-center p-3 px-5 text-sm">
           <div className="flex gap-5 items-center font-semibold">
             <Link href="/" className="flex items-center gap-2 text-foreground">
-              <BookOpen className="h-5 w-5" />
+              <MinervaLogo size={28} className="shrink-0" />
               Minerva Reader
             </Link>
             <Link
@@ -103,7 +104,7 @@ export function SiteNav({ rightSlot }: SiteNavProps) {
             href="/"
             className="flex items-center gap-2 font-semibold text-foreground shrink-0"
           >
-            <BookOpen className="h-5 w-5" />
+            <MinervaLogo size={24} className="shrink-0" />
             <span className="truncate">Minerva</span>
           </Link>
 
