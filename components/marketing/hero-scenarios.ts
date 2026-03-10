@@ -237,7 +237,6 @@ export const HERO_SCENARIOS: HeroScenario[] = [
       { at: 2580, type: "cursor", position: "composerSend", durationMs: 360 },
       { at: 3020, type: "composer-send", active: true },
       { at: 3190, type: "composer-send", active: false },
-      { at: 3240, type: "cursor", position: "readerRest", durationMs: 540 },
       { at: 3380, type: "user-message" },
       { at: 3880, type: "tool-call", index: 0 },
       { at: 4560, type: "tool-call", index: 1 },
