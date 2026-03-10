@@ -59,6 +59,9 @@ export async function updateSession(request: NextRequest) {
     // Curated library and reading curated books (read page enforces access per-book)
     !request.nextUrl.pathname.startsWith("/browse") &&
     !request.nextUrl.pathname.startsWith("/read/") &&
+    // Legal pages: must be readable before sign-up for informed consent
+    request.nextUrl.pathname !== "/privacy" &&
+    request.nextUrl.pathname !== "/terms" &&
     // Thorium EPUB reader i18n translations (needed for anonymous curated book reading)
     !request.nextUrl.pathname.startsWith("/locales/") &&
     // Chat APIs (enforce access per-request; anonymous allowed for curated books)

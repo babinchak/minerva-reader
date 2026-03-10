@@ -110,6 +110,9 @@ export function UploadBookForm({
               )}
             </p>
           )}
+          <p className="text-xs text-muted-foreground dark:text-foreground/80">
+            Only upload content you own or are authorized to use.
+          </p>
           <div className="space-y-2">
             <label htmlFor="book-file" className="text-sm font-medium text-foreground">
               Select EPUB or PDF File

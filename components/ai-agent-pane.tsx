@@ -1754,6 +1754,12 @@ export function AIAgentPanel({
               </Button>
             )}
           </div>
+          {/* AI disclaimer */}
+          <div className="px-4 pb-2 pt-0">
+            <p className="text-[10px] text-muted-foreground">
+              AI-generated. May be inaccurate. Not legal, medical, or professional advice.
+            </p>
+          </div>
           {/* Processing status banner: set expectations when summaries/vectors aren't ready */}
           {bookId && processingStatus && (!processingStatus.summariesReady || !processingStatus.vectorsReady) && (
             <div

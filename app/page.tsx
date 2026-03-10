@@ -1,4 +1,5 @@
 import { EnvVarWarning } from "@/components/env-var-warning";
+import { SiteFooter } from "@/components/site-footer";
 import { AuthButton } from "@/components/auth-button";
 import { BookCard } from "@/components/book-card";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -235,9 +236,7 @@ export default async function Home({
           </Suspense>
         </div>
 
-        <footer className="w-full flex items-center justify-center border-t border-border mx-auto text-center text-xs gap-8 py-16 text-muted-foreground">
-          Minerva Reader
-        </footer>
+        <SiteFooter className="py-16" />
       </div>
     </main>
   );

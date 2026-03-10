@@ -1,6 +1,7 @@
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SiteNav } from "@/components/site-nav";
+import { SiteFooter } from "@/components/site-footer";
 import { hasEnvVars } from "@/lib/utils";
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { Suspense } from "react";
@@ -34,6 +35,7 @@ export default function SettingsLayout({
           {children}
         </div>
       </div>
+      <SiteFooter />
     </main>
   );
 }

@@ -10,6 +10,7 @@ import { EnvVarWarning } from "@/components/env-var-warning";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { BrowseCuratedView } from "@/components/browse-curated-view";
+import { SiteFooter } from "@/components/site-footer";
 import type {
   LibraryBookFilter,
   LibrarySortDir,
@@ -153,9 +154,7 @@ export default async function BrowsePage() {
         )}
         </div>
 
-        <footer className="w-full flex items-center justify-center border-t border-border mx-auto text-center text-xs gap-8 py-16 text-muted-foreground">
-          Minerva Reader
-        </footer>
+        <SiteFooter className="py-16" />
       </div>
     </main>
   );
