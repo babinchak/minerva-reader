@@ -9,6 +9,7 @@ import {
   Search,
   SendHorizontal,
   Sparkles,
+  Zap,
 } from "lucide-react";
 
 import { Markdown } from "@/components/markdown";
@@ -166,6 +167,12 @@ export function HeroReplay() {
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const scenario = scenarios[scenarioIndex];
   const isDeepMode = scenario.interactionMode === "ai-composer";
+  const quickScenarioIndex = scenarios.findIndex(
+    (item) => item.interactionMode === "reader-action"
+  );
+  const deepScenarioIndex = scenarios.findIndex(
+    (item) => item.interactionMode === "ai-composer"
+  );
   const ActionIcon =
     scenario.modeBadge.toLowerCase().includes("deep") ? Sparkles : Highlighter;
 
@@ -328,8 +335,56 @@ export function HeroReplay() {
                     {scenario.assistantLabel}
                   </div>
                 </div>
-                <div className="inline-flex items-center rounded-full bg-primary/10 px-2 py-1 text-[0.65rem] font-medium text-primary">
-                  {scenario.modeBadge}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isDeepMode}
+                    aria-label={
+                      isDeepMode
+                        ? "Deep mode (tools: semantic and text search)"
+                        : "Fast mode (single answer)"
+                    }
+                    title={
+                      isDeepMode
+                        ? "Deep mode (tools: semantic and text search)"
+                        : "Fast mode (single answer)"
+                    }
+                    onClick={() => {
+                      if (isDeepMode && quickScenarioIndex >= 0) {
+                        setScenarioIndex(quickScenarioIndex);
+                      } else if (!isDeepMode && deepScenarioIndex >= 0) {
+                        setScenarioIndex(deepScenarioIndex);
+                      }
+                    }}
+                    className={cn(
+                      "relative flex h-6 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200",
+                      isDeepMode
+                        ? "bg-blue-500 dark:bg-blue-600"
+                        : "bg-amber-400 dark:bg-amber-500"
+                    )}
+                  >
+                    <Zap
+                      className="absolute left-1 h-3.5 w-3.5 shrink-0 text-amber-900 dark:text-amber-950"
+                      aria-hidden
+                    />
+                    <Sparkles
+                      className="absolute right-1.5 h-3.5 w-3.5 shrink-0 text-blue-900 dark:text-blue-950"
+                      aria-hidden
+                    />
+                    <span
+                      className={cn(
+                        "absolute top-0.5 h-5 w-6 rounded-full bg-white shadow-md transition-all duration-200",
+                        isDeepMode
+                          ? "left-0.5"
+                          : "left-[calc(100%-1.5rem-2px)]"
+                      )}
+                      aria-hidden
+                    />
+                  </button>
+                  <span className="text-[0.68rem] font-medium text-muted-foreground">
+                    {isDeepMode ? "Deep" : "Fast"}
+                  </span>
                 </div>
               </div>
 
