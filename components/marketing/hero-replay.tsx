@@ -240,8 +240,17 @@ export function HeroReplay() {
   return (
     <div className="w-full space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
+        <div
+          className={cn(
+            "inline-flex items-center gap-2 rounded-full border bg-background/80 px-3 py-1 text-xs shadow-sm backdrop-blur",
+            isDeepMode
+              ? "border-blue-500/20 text-blue-200/85"
+              : "border-amber-500/20 text-muted-foreground"
+          )}
+        >
+          <Sparkles
+            className={cn("h-3.5 w-3.5", isDeepMode ? "text-blue-400" : "text-primary")}
+          />
           <span>{scenario.label}</span>
         </div>
         <div className="hidden items-center gap-1.5 sm:flex">
@@ -253,7 +262,10 @@ export function HeroReplay() {
               className={cn(
                 "h-2.5 rounded-full transition-all",
                 index === scenarioIndex
-                  ? "w-7 bg-primary"
+                  ? cn(
+                      "w-7",
+                      isDeepMode ? "bg-blue-500" : "bg-primary"
+                    )
                   : "w-2.5 bg-border hover:bg-muted-foreground/40"
               )}
               aria-label={`Show ${item.label} demo`}
@@ -263,10 +275,24 @@ export function HeroReplay() {
       </div>
 
       <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] border border-border/70 bg-gradient-to-br from-background via-background to-muted/50 p-4 shadow-[0_24px_90px_rgba(15,23,42,0.14)] sm:p-5 lg:aspect-auto lg:min-h-[34rem] xl:min-h-[38rem]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.12),transparent_30%)]" />
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0",
+            isDeepMode
+              ? "bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.16),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.18),transparent_32%)]"
+              : "bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.12),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.16),transparent_30%)]"
+          )}
+        />
 
         <div className="absolute inset-x-[4%] top-[5%] bottom-[4%] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm">
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_24%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.10),transparent_22%)]" />
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-0",
+              isDeepMode
+                ? "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_24%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_24%)]"
+                : "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_24%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.10),transparent_22%)]"
+            )}
+          />
           <div
             className={cn(
               "relative grid h-full",
