@@ -164,7 +164,7 @@ async function HomeContent({
           deep mode for broader answers grounded in the book and relevant web
           results.
         </p>
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3 sm:flex-row items-center sm:items-center">
           <Link
             href="/browse"
             className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
