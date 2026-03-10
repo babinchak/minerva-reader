@@ -1,11 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { BookText, Highlighter, MessageSquareText, MousePointer2, Sparkles } from "lucide-react";
+import {
+  BookText,
+  Highlighter,
+  MessageSquareText,
+  MousePointer2,
+  ScanSearch,
+  Search,
+  Sparkles,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import { HERO_SCENARIOS, type HeroCursorPoint, type HeroReplayEvent } from "./hero-scenarios";
+import {
+  HERO_SCENARIOS,
+  type HeroCursorPoint,
+  type HeroReplayEvent,
+} from "./hero-scenarios";
 
 type ReplayState = {
   cursor: HeroCursorPoint;
@@ -16,15 +28,20 @@ type ReplayState = {
   userMessageVisible: boolean;
   typingVisible: boolean;
   assistantText: string;
+  visibleToolCalls: number[];
 };
 
 const INITIAL_CURSOR: HeroCursorPoint = { x: 18, y: 73 };
 
 function renderParagraphWithSelection(
   paragraph: string,
-  selectedText: string,
+  selectedText: string | undefined,
   selectionActive: boolean
 ) {
+  if (!selectedText) {
+    return paragraph;
+  }
+
   const selectedIndex = paragraph.indexOf(selectedText);
   if (selectedIndex === -1) {
     return paragraph;
@@ -55,6 +72,17 @@ function renderParagraphWithSelection(
       {after}
     </>
   );
+}
+
+function getToolIcon(label: string) {
+  const normalizedLabel = label.toLowerCase();
+  if (normalizedLabel.includes("semantic")) {
+    return ScanSearch;
+  }
+  if (normalizedLabel.includes("text")) {
+    return Search;
+  }
+  return Sparkles;
 }
 
 function applyReplayEvent(
@@ -104,6 +132,14 @@ function applyReplayEvent(
         assistantText: prev.assistantText + event.text,
       }));
       break;
+    case "tool-call":
+      setState((prev) => ({
+        ...prev,
+        visibleToolCalls: prev.visibleToolCalls.includes(event.index)
+          ? prev.visibleToolCalls
+          : [...prev.visibleToolCalls, event.index],
+      }));
+      break;
     default:
       break;
   }
@@ -113,6 +149,8 @@ export function HeroReplay() {
   const scenarios = HERO_SCENARIOS;
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const scenario = scenarios[scenarioIndex];
+  const ActionIcon =
+    scenario.modeBadge.toLowerCase().includes("deep") ? Sparkles : Highlighter;
 
   const initialState = useMemo<ReplayState>(
     () => ({
@@ -124,6 +162,7 @@ export function HeroReplay() {
       userMessageVisible: false,
       typingVisible: false,
       assistantText: "",
+      visibleToolCalls: [],
     }),
     [scenario]
   );
@@ -197,14 +236,14 @@ export function HeroReplay() {
         </div>
       </div>
 
-      <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] border border-border/70 bg-gradient-to-br from-background via-background to-muted/50 p-4 shadow-[0_24px_90px_rgba(15,23,42,0.14)] sm:p-5">
+      <div className="relative aspect-[16/10] overflow-hidden rounded-[28px] border border-border/70 bg-gradient-to-br from-background via-background to-muted/50 p-4 shadow-[0_24px_90px_rgba(15,23,42,0.14)] sm:p-5 lg:aspect-auto lg:min-h-[34rem] xl:min-h-[38rem]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.12),transparent_30%)]" />
 
-        <div className="absolute inset-x-[4%] top-[6%] bottom-[6%] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm">
+        <div className="absolute inset-x-[4%] top-[5%] bottom-[4%] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm">
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_24%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.10),transparent_22%)]" />
           <div className="relative grid h-full grid-cols-[1.55fr_minmax(0,0.95fr)]">
             <div className="flex min-w-0 flex-col">
-              <div className="flex items-center justify-between border-b border-border/60 bg-muted/35 px-[4.5%] py-[3.7%]">
+              <div className="flex items-center justify-between border-b border-border/60 bg-muted/35 px-[4.5%] py-[3.2%]">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[0.56rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                     <BookText className="h-3.5 w-3.5" />
@@ -229,12 +268,12 @@ export function HeroReplay() {
                         : "border-border bg-background/85 text-foreground"
                   )}
                 >
-                  <Highlighter className="h-3.5 w-3.5" />
+                  <ActionIcon className="h-3.5 w-3.5" />
                   <span>{scenario.actionLabel}</span>
                 </button>
               </div>
 
-              <div className="relative flex-1 overflow-hidden px-[5.5%] py-[5.4%] text-[0.84rem] leading-[1.8] text-foreground/90">
+              <div className="relative flex-1 overflow-hidden px-[5.5%] py-[4.6%] text-[0.84rem] leading-[1.8] text-foreground/90">
                 <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-card via-card/96 to-transparent" />
                 <div className="relative space-y-4">
                   {scenario.readerParagraphs.map((paragraph, index) => (
@@ -252,7 +291,7 @@ export function HeroReplay() {
 
             <div className="relative flex min-w-0 flex-col border-l border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%)]">
               <div className="absolute inset-y-[5%] left-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
-              <div className="flex items-center justify-between border-b border-border/60 px-[6%] py-[5%]">
+              <div className="flex items-center justify-between border-b border-border/60 px-[6%] py-[4.2%]">
                 <div>
                   <div className="text-[0.56rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                     AI pane
@@ -262,16 +301,18 @@ export function HeroReplay() {
                   </div>
                 </div>
                 <div className="inline-flex items-center rounded-full bg-primary/10 px-2 py-1 text-[0.65rem] font-medium text-primary">
-                  Quick mode
+                  {scenario.modeBadge}
                 </div>
               </div>
 
-              <div className="flex flex-1 flex-col gap-3 px-[6%] py-[5.5%]">
-                <div className="rounded-2xl border border-border/60 bg-muted/35 px-3 py-2 text-[0.74rem] text-muted-foreground">
-                  Highlight any passage and ask Minerva to explain it in context.
-                </div>
+              <div className="flex flex-1 flex-col gap-2.5 px-[6%] py-[4.3%]">
+                {scenario.paneIntro ? (
+                  <div className="rounded-2xl border border-border/60 bg-muted/35 px-3 py-2 text-[0.74rem] text-muted-foreground">
+                    {scenario.paneIntro}
+                  </div>
+                ) : null}
 
-                <div className="flex-1 space-y-3 overflow-hidden">
+                <div className="flex-1 space-y-2.5 overflow-hidden">
                   {state.userMessageVisible && (
                     <div className="ml-auto max-w-[86%] rounded-2xl bg-primary px-3 py-2 text-[0.8rem] text-primary-foreground shadow">
                       <div className="mb-1 flex items-center gap-1.5 text-[0.62rem] uppercase tracking-[0.15em] text-primary-foreground/80">
@@ -281,6 +322,29 @@ export function HeroReplay() {
                       <p>{scenario.userMessage}</p>
                     </div>
                   )}
+
+                  {scenario.toolCalls &&
+                    state.visibleToolCalls.map((toolIndex) => {
+                      const toolCall = scenario.toolCalls?.[toolIndex];
+                      if (!toolCall) return null;
+
+                      const ToolIcon = getToolIcon(toolCall.label);
+
+                      return (
+                        <div
+                          key={`${scenario.id}-tool-${toolIndex}`}
+                          className="max-w-[96%] rounded-xl border border-primary/15 bg-primary/5 px-2.5 py-1.5 text-[0.68rem] shadow-sm"
+                        >
+                          <div className="flex items-center gap-1.5 font-medium leading-none text-foreground">
+                            <ToolIcon className="h-3 w-3 text-primary" />
+                            <span>{toolCall.label}</span>
+                          </div>
+                          <p className="mt-0.5 truncate leading-5 text-muted-foreground">
+                            {toolCall.detail}
+                          </p>
+                        </div>
+                      );
+                    })}
 
                   {(state.typingVisible || state.assistantText) && (
                     <div className="max-w-[95%] rounded-2xl border border-border/60 bg-background/90 px-3 py-2 text-[0.8rem] shadow-sm">
