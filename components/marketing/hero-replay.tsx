@@ -354,11 +354,8 @@ export function HeroReplay() {
               <div className="absolute inset-y-[5%] left-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
               <div className="flex items-center justify-between border-b border-border/60 px-[6%] py-[4.2%]">
                 <div>
-                  <div className="text-[0.56rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                    AI pane
-                  </div>
-                  <div className="mt-1 text-[0.95rem] font-semibold text-foreground">
-                    {scenario.assistantLabel}
+                  <div className="text-[0.62rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                    Ask Minerva
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
