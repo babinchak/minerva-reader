@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import NextTopLoader from "nextjs-toploader";
 import { ThemeProvider } from "next-themes";
 import { PwaRegister } from "@/components/pwa-register";
 import { CreditsRefreshOnSuccess } from "@/components/credits-refresh-on-success";
@@ -71,6 +72,12 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <NextTopLoader
+            height={3}
+            showSpinner={false}
+            easing="ease"
+            speed={200}
+          />
           <ThemeVariantsProvider>
             <PwaRegister />
             <MobileConsoleMirror />
