@@ -7,9 +7,20 @@ interface MinervaLogoProps {
   variant?: "default" | "large";
 }
 
+/** Pick source that is at least 2x display size for crisp rendering on retina. */
+function getLogoSrc(displaySize: number, variant: "default" | "large"): string {
+  const minPixels = Math.max(displaySize * 2, 64);
+  if (variant === "large" || minPixels >= 96) {
+    if (minPixels > 256) return "/icons/icon-512.png";
+    if (minPixels > 96) return "/icons/icon-192.png";
+    return "/icons/favicon-96.png";
+  }
+  return "/favicon-32.png";
+}
+
 /** Owl face logo - transparent PNG works on light and dark backgrounds. */
 export function MinervaLogo({ size = 32, className, variant = "default" }: MinervaLogoProps) {
-  const src = variant === "large" ? "/icons/favicon-96.png" : "/favicon-32.png";
+  const src = getLogoSrc(size, variant);
   return (
     <Image
       src={src}
