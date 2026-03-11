@@ -28,7 +28,6 @@ import { getPdfLocalContextAroundCurrentSelection } from "@/lib/pdf-position/loc
 import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context-from-document";
 import { getEpubVisibleContext, getEpubVisibleContextWithPosition } from "@/lib/epub-visible-context";
 import { getEpubLocalContextAroundCurrentSelection } from "@/lib/book-position/local-context";
-import { ContextPreviewDialog } from "@/components/context-preview-dialog";
 import { UpgradeCta } from "@/components/upgrade-cta";
 import {
   Dialog,
@@ -258,13 +257,6 @@ export function AIAgentPanel({
   >([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [chatMode, setChatMode] = useState<"fast" | "agentic">("fast");
-  const [contextDialogOpen, setContextDialogOpen] = useState(false);
-  const [capturedContext, setCapturedContext] = useState<{
-    startPosition?: string;
-    endPosition?: string;
-    localArea?: { beforeText?: string; selectedText?: string; afterText?: string };
-    selectedText?: string;
-  } | null>(null);
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const sendingRef = useRef(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
@@ -349,56 +341,6 @@ export function AIAgentPanel({
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
   }, [bookType, rawManifest?.readingOrder]);
-
-  const handleContextButtonPress = useCallback(() => {
-    if (trimmedSelectedText) {
-      const snapshot = getSelectionSnapshot();
-      const selectedTextForContext = snapshot?.text?.trim() || trimmedSelectedText;
-
-      const isPdf = bookType === "pdf";
-      if (isPdf) {
-        const pos = snapshot?.pdfPosition ?? getCurrentPdfSelectionPosition() ?? undefined;
-        let localArea: { beforeText?: string; selectedText?: string; afterText?: string } | undefined;
-        if (!pdfDocument) {
-          const local = getPdfLocalContextAroundCurrentSelection({
-            beforeChars: 800,
-            afterChars: 800,
-            maxTotalChars: 2400,
-          });
-          if (local) {
-            localArea = {
-              beforeText: local.beforeText || undefined,
-              selectedText: local.selectedText || undefined,
-              afterText: local.afterText || undefined,
-            };
-          }
-        }
-        setCapturedContext({
-          startPosition: pos?.start,
-          endPosition: pos?.end,
-          selectedText: selectedTextForContext.trim(),
-          localArea,
-        });
-      } else {
-        const readingOrder = rawManifest?.readingOrder || [];
-        const pos = snapshot?.epubPosition ?? getCurrentSelectionPosition(readingOrder, null) ?? undefined;
-        setCapturedContext({
-          startPosition: pos?.start,
-          endPosition: pos?.end,
-          selectedText: selectedTextForContext.trim(),
-        });
-      }
-    } else {
-      setCapturedContext(null);
-    }
-    setContextDialogOpen(true);
-  }, [
-    trimmedSelectedText,
-    bookType,
-    rawManifest?.readingOrder,
-    pdfDocument,
-    getSelectionSnapshot,
-  ]);
 
   type StreamUsage = {
     inputTokens?: number | null;
@@ -1784,18 +1726,13 @@ export function AIAgentPanel({
           <div className="space-y-4 max-w-full">
               {showSelectionChip && (trimmedSelectedText || (currentPage && currentPage >= 1)) && (
                 <div className="flex justify-center">
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                    }}
-                    onClick={handleContextButtonPress}
-                    className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+                  <span
+                    className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground"
                   >
                     {trimmedSelectedText
                       ? "Using selected text for context"
                       : `Using page ${currentPage} for context`}
-                  </button>
+                  </span>
                 </div>
               )}
               <div className="flex gap-2">
@@ -1904,18 +1841,13 @@ export function AIAgentPanel({
         <div className="p-4 border-t border-border shrink-0">
           {showSelectionChip && (trimmedSelectedText || (currentPage && currentPage >= 1)) && (
             <div className="mb-2">
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                }}
-                onClick={handleContextButtonPress}
-                className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+              <span
+                className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground"
               >
                 {trimmedSelectedText
                   ? "Using selected text for context"
                   : `Using page ${currentPage} for context`}
-              </button>
+              </span>
             </div>
           )}
           {!showMessages && trimmedSelectedText && (
@@ -1953,21 +1885,6 @@ export function AIAgentPanel({
             </div>
         </div>
       )}
-
-      <ContextPreviewDialog
-        isOpen={contextDialogOpen}
-        onClose={() => {
-          setContextDialogOpen(false);
-          setCapturedContext(null);
-        }}
-        bookId={bookId}
-        bookType={bookType}
-        rawManifest={rawManifest}
-        bookTitle={bookTitle}
-        bookAuthor={bookAuthor}
-        capturedContext={capturedContext}
-        pdfDocument={pdfDocument}
-      />
 
       <Dialog open={creditsExhaustedDialogOpen} onOpenChange={setCreditsExhaustedDialogOpen}>
         <DialogContent className="sm:max-w-lg">
