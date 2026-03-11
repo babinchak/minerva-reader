@@ -4,15 +4,28 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Laptop, Moon, Sun } from "lucide-react";
+import { Contrast, Laptop, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
-const ThemeSwitcher = () => {
+interface ThemeSwitcherProps {
+  /** When true, shows an "Invert" switch for PDF color inversion (PDF reader only) */
+  showPdfInvert?: boolean;
+  pdfInvert?: boolean;
+  onPdfInvertChange?: (invert: boolean) => void;
+}
+
+const ThemeSwitcher = ({
+  showPdfInvert = false,
+  pdfInvert = false,
+  onPdfInvertChange,
+}: ThemeSwitcherProps) => {
   const [mounted, setMounted] = useState(false);
   const { theme, resolvedTheme, setTheme } = useTheme();
 
@@ -67,6 +80,21 @@ const ThemeSwitcher = () => {
             <span>System</span>
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+        {showPdfInvert && onPdfInvertChange && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={pdfInvert}
+              onCheckedChange={(checked) =>
+                onPdfInvertChange(checked === true)}
+              onSelect={(e) => e.preventDefault()}
+              className="flex gap-2"
+            >
+              <Contrast size={ICON_SIZE} className="text-muted-foreground" />
+              <span>Invert</span>
+            </DropdownMenuCheckboxItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

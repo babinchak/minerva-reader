@@ -40,6 +40,7 @@ interface PdfReaderProps {
 
 const MOBILE_PAGE_SIDE_MARGIN_PX = 2;
 const MOBILE_FIT_WIDTH_BUFFER_PX = 2;
+const PDF_INVERT_STORAGE_KEY = "minerva-pdf-invert";
 
 function isPdfDebugEnabled() {
   if (typeof window === "undefined") return false;
@@ -92,6 +93,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<"normal" | "semantic">("normal");
+  const [pdfInvert, setPdfInvert] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unknown; items?: unknown[] }> | null>(null);
   const [isTocOpen, setIsTocOpen] = useState(false);
@@ -105,6 +107,23 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
     setBookmarks(initialBookmarks ?? []);
     lastSyncedRef.current = JSON.stringify([...(initialBookmarks ?? [])].sort((a, b) => a - b));
   }, [initialBookmarks]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PDF_INVERT_STORAGE_KEY);
+      setPdfInvert(stored === "1");
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PDF_INVERT_STORAGE_KEY, pdfInvert ? "1" : "0");
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [pdfInvert]);
 
   useEffect(() => {
     if (initialBookmarks === undefined) return;
@@ -1043,7 +1062,11 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 justify-self-end">
-                  <ThemeSwitcher />
+                  <ThemeSwitcher
+                    showPdfInvert
+                    pdfInvert={pdfInvert}
+                    onPdfInvertChange={setPdfInvert}
+                  />
                   {initialBookmarks !== undefined && (
                     <Button
                       variant="ghost"
@@ -1261,6 +1284,11 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 justify-self-end">
+                  <ThemeSwitcher
+                    showPdfInvert
+                    pdfInvert={pdfInvert}
+                    onPdfInvertChange={setPdfInvert}
+                  />
                   {initialBookmarks !== undefined && (
                     <Button
                       variant="ghost"
@@ -1499,6 +1527,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                         mobilePagedMode={true}
                         fitViewport={isAtMobileMinScale}
                         itemTextsCacheRef={itemTextsCacheRef}
+                        invert={pdfInvert}
                       />
                     </div>
                   ) : (
@@ -1538,6 +1567,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                                   mobilePagedMode={true}
                                   fitViewport={isAtMobileMinScale}
                                   itemTextsCacheRef={itemTextsCacheRef}
+                                  invert={pdfInvert}
                                 />
                               </div>
                               <div className="flex h-full w-1/2 shrink-0 items-center justify-center">
@@ -1550,6 +1580,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                                   mobilePagedMode={true}
                                   fitViewport={isAtMobileMinScale}
                                   itemTextsCacheRef={itemTextsCacheRef}
+                                  invert={pdfInvert}
                                 />
                               </div>
                             </>
@@ -1570,6 +1601,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                       mobilePagedMode={isMobilePagedMode}
                       itemTextsCacheRef={itemTextsCacheRef}
                       initialPage={initialPage}
+                      invert={pdfInvert}
                     />
                   ))
                 )}
@@ -1899,6 +1931,8 @@ interface PdfPageProps {
   itemTextsCacheRef?: RefObject<Map<number, string[]>>;
   initialPage?: number;
   onRenderComplete?: () => void;
+  /** When true, inverts the PDF page colors (canvas + text) only */
+  invert?: boolean;
 }
 
 function LazyPdfPage({
@@ -1910,6 +1944,7 @@ function LazyPdfPage({
   mobilePagedMode,
   itemTextsCacheRef,
   initialPage,
+  invert,
 }: PdfPageProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   // Pre-render pages 1, 2, and initialPage ±2 (for reading position restoration on desktop;
@@ -1964,12 +1999,16 @@ function LazyPdfPage({
           isMobile={isMobile}
           mobilePagedMode={mobilePagedMode}
           itemTextsCacheRef={itemTextsCacheRef}
+          invert={invert}
         />
       ) : (
         <div className="w-full flex justify-center">
           <div
             className={`page relative shadow-sm border bg-white ${isMobile ? "max-w-[896px]" : "w-full max-w-4xl"}`}
-            style={isMobile ? { width: `calc(100% - ${MOBILE_PAGE_SIDE_MARGIN_PX * 2}px)` } : undefined}
+            style={{
+              ...(isMobile ? { width: `calc(100% - ${MOBILE_PAGE_SIDE_MARGIN_PX * 2}px)` } : {}),
+              ...(invert ? { filter: "invert(1)" } : {}),
+            }}
           >
             <div className="w-full" style={{ aspectRatio: "1 / 1.4142" }} />
           </div>
@@ -1989,6 +2028,7 @@ function PdfPage({
   fitViewport,
   itemTextsCacheRef,
   onRenderComplete,
+  invert = false,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerHostRef = useRef<HTMLDivElement | null>(null);
@@ -2205,16 +2245,17 @@ function PdfPage({
       <div
         ref={pageContainerRef}
         className={`page relative bg-white ${isMobile ? "max-w-[896px]" : ""}`}
-        style={
-          isMobile
+        style={{
+          ...(isMobile
             ? {
                 width: `calc(100% - ${MOBILE_PAGE_SIDE_MARGIN_PX * 2}px)`,
                 margin: "0 auto",
                 border: 0,
                 boxSizing: "border-box",
               }
-            : undefined
-        }
+            : {}),
+          ...(invert ? { filter: "invert(1)" } : {}),
+        }}
       >
         <div className="canvasWrapper">
           <canvas ref={canvasRef} className="pointer-events-none block" />
