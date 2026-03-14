@@ -54,6 +54,16 @@ async function main() {
     .png()
     .toFile(path.join(iconsDir, "favicon-32.png"));
 
+  // Generate favicon.ico for Safari and legacy browsers (expect /favicon.ico)
+  const toIco = require("to-ico");
+  const png16 = await input.clone().resize(16, 16).ensureAlpha().png().toBuffer();
+  const png32 = await input.clone().resize(32, 32).ensureAlpha().png().toBuffer();
+  const icoBuffer = await toIco([png16, png32]);
+  const appDir = path.join(repoRoot, "app");
+  fs.mkdirSync(appDir, { recursive: true });
+  fs.writeFileSync(path.join(appDir, "favicon.ico"), icoBuffer);
+  console.log("  favicon.ico (16+32) -> app/");
+
   const pwaSizes = [
     [192, "icon-192.png"],
     [512, "icon-512.png"],
