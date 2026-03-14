@@ -108,6 +108,7 @@ export function LibraryWithBooks({
               id={book.id}
               title={book.title ?? ""}
               authorDisplay={formatAuthorDisplay(book.author)}
+              author={book.author}
               coverUrl={book.coverUrl}
               bookType={book.bookType}
             />

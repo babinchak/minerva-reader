@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BookOpen, MoreVertical, Trash2, User } from "lucide-react";
+import { BookOpen, MoreVertical, Pencil, Trash2, User } from "lucide-react";
 import { hapticLight } from "@/lib/haptic";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,11 +11,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EditBookMetadataDialog } from "@/components/edit-book-metadata-dialog";
 
 interface BookCardProps {
   id: string;
   title: string;
   authorDisplay: string;
+  /** Raw author string for edit form. When provided with showRemove, enables Edit option. */
+  author?: string | null;
   coverUrl: string | null;
   bookType: "epub" | "pdf" | null;
   /** When false, hides the remove-from-library dropdown. Default true. */
@@ -26,12 +29,14 @@ export function BookCard({
   id,
   title,
   authorDisplay,
+  author,
   coverUrl,
   bookType,
   showRemove = true,
 }: BookCardProps) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const handleRemove = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -106,6 +111,10 @@ export function BookCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setEditOpen(true)}>
+                <Pencil className="h-4 w-4" />
+                Edit title & author
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleRemove}
                 disabled={isRemoving}
@@ -120,6 +129,13 @@ export function BookCard({
           <div />
         )}
       </div>
+      <EditBookMetadataDialog
+        bookId={id}
+        currentTitle={title}
+        currentAuthor={author ?? ""}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
     </div>
   );
 }

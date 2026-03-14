@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Library, Settings, Home } from "lucide-react";
+import { Menu, X, Library, Settings, Home, Shield } from "lucide-react";
 import { MinervaLogo } from "@/components/minerva-logo";
 import { useIsMobile } from "@/lib/use-media-query";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 interface SiteNavProps {
   rightSlot: React.ReactNode;
+  showAdmin?: boolean;
 }
 
 const navLinks = [
@@ -19,7 +20,9 @@ const navLinks = [
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-export function SiteNav({ rightSlot }: SiteNavProps) {
+const adminLink = { href: "/admin", label: "Admin", icon: Shield } as const;
+
+export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
   const isMobile = useIsMobile();
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -85,6 +88,19 @@ export function SiteNav({ rightSlot }: SiteNavProps) {
             >
               Settings
             </Link>
+            {showAdmin && (
+              <Link
+                href="/admin"
+                className={cn(
+                  "transition-colors",
+                  pathname.startsWith("/admin")
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Admin
+              </Link>
+            )}
           </div>
           <div className="flex items-center gap-2">{rightSlot}</div>
         </div>
@@ -179,6 +195,22 @@ export function SiteNav({ rightSlot }: SiteNavProps) {
                 </Link>
               );
             })}
+            {showAdmin && (
+              <Link
+                key={adminLink.href}
+                href={adminLink.href}
+                onClick={closeDrawer}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-base font-medium transition-colors",
+                  pathname.startsWith(adminLink.href)
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                )}
+              >
+                <adminLink.icon className="h-5 w-5 shrink-0" />
+                {adminLink.label}
+              </Link>
+            )}
             <div className="mt-4 pt-4 border-t border-border flex flex-col gap-3">
               {rightSlot}
             </div>

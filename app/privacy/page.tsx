@@ -1,4 +1,4 @@
-import { SiteNav } from "@/components/site-nav";
+import { ServerSiteNav } from "@/components/server-site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
   return (
     <main className="min-h-screen flex flex-col items-center text-foreground">
       <div className="flex-1 w-full flex flex-col gap-4 items-center">
-        <SiteNav
+        <ServerSiteNav
           rightSlot={
             <>
               <Suspense>

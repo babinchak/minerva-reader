@@ -57,7 +57,7 @@ export async function LibraryView() {
 
   const { data: userBookRows, error: linksError } = await supabase
     .from("user_books")
-    .select("book_id, created_at, updated_at")
+    .select("book_id, created_at, updated_at, custom_title, custom_author, file_name")
     .eq("user_id", user.id);
 
   if (linksError) {
@@ -96,17 +96,31 @@ export async function LibraryView() {
     const dateAddedMap = new Map(
       userBookRows.map((r) => [r.book_id, r.created_at ?? r.updated_at ?? ""])
     );
+    const customTitleMap = new Map(
+      userBookRows.map((r) => [r.book_id, r.custom_title])
+    );
+    const customAuthorMap = new Map(
+      userBookRows.map((r) => [r.book_id, r.custom_author])
+    );
+    const fileNameMap = new Map(
+      userBookRows.map((r) => [r.book_id, r.file_name])
+    );
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    books = (booksData || []).map((book) => ({
-      id: book.id,
-      title: book.title,
-      author: book.author,
-      coverUrl: book.cover_path && supabaseUrl
-        ? `${supabaseUrl}/storage/v1/object/public/covers/${book.cover_path}`
-        : null,
-      dateAdded: dateAddedMap.get(book.id) ?? "",
-      bookType: book.book_type === "pdf" ? "pdf" : book.book_type === "epub" ? "epub" : null,
-    }));
+    books = (booksData || []).map((book) => {
+      const customTitle = customTitleMap.get(book.id);
+      const fileName = fileNameMap.get(book.id);
+      const displayTitle = customTitle ?? book.title ?? fileName;
+      return {
+        id: book.id,
+        title: displayTitle,
+        author: customAuthorMap.get(book.id) ?? book.author,
+        coverUrl: book.cover_path && supabaseUrl
+          ? `${supabaseUrl}/storage/v1/object/public/covers/${book.cover_path}`
+          : null,
+        dateAdded: dateAddedMap.get(book.id) ?? "",
+        bookType: book.book_type === "pdf" ? "pdf" : book.book_type === "epub" ? "epub" : null,
+      };
+    });
   }
 
   return (

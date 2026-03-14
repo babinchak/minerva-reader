@@ -22,15 +22,26 @@ export async function GET(
       return NextResponse.json({ error: "Book not found" }, { status: 404 });
     }
 
+    let displayTitle = book.title ?? "";
+    let displayAuthor = book.author ?? "";
+
     if (user) {
       const { data: userBook } = await supabase
         .from("user_books")
-        .select("id")
+        .select("id, custom_title, custom_author, file_name")
         .eq("user_id", user.id)
         .eq("book_id", bookId)
         .single();
       if (!userBook && !book.is_curated) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      }
+      if (userBook) {
+        if (userBook.custom_title != null) {
+          displayTitle = userBook.custom_title;
+        } else {
+          displayTitle = book.title ?? userBook.file_name ?? "";
+        }
+        if (userBook.custom_author != null) displayAuthor = userBook.custom_author;
       }
     } else {
       if (!book.is_curated) {
@@ -39,8 +50,8 @@ export async function GET(
     }
 
     return NextResponse.json({
-      title: book.title ?? "",
-      author: book.author ?? "",
+      title: displayTitle,
+      author: displayAuthor,
       summaries_processed_at: book.summaries_processed_at ?? null,
       vectors_processed_at: book.vectors_processed_at ?? null,
     });

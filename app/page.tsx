@@ -6,7 +6,7 @@ import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LibraryView } from "@/components/library-view";
 import { UpgradeCta } from "@/components/upgrade-cta";
 import { HeroReplay } from "@/components/marketing/hero-replay";
-import { SiteNav } from "@/components/site-nav";
+import { ServerSiteNav } from "@/components/server-site-nav";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
@@ -227,7 +227,7 @@ export default async function Home({
             <strong>Free beta</strong> — Book vectorization and AI usage free during beta.
           </div>
         )}
-        <SiteNav
+        <ServerSiteNav
           rightSlot={
             <>
               {!hasEnvVars ? (

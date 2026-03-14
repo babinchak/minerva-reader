@@ -4,7 +4,7 @@ import { BookOpen } from "lucide-react";
 import Link from "next/link";
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { SiteNav } from "@/components/site-nav";
+import { ServerSiteNav } from "@/components/server-site-nav";
 import { hasEnvVars } from "@/lib/utils";
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { Suspense } from "react";
@@ -56,7 +56,7 @@ export default async function BrowsePage() {
   if (!hasEnvVars) {
     return (
       <main className="min-h-screen flex flex-col items-center text-foreground">
-        <SiteNav rightSlot={<><EnvVarWarning /><ThemeSwitcher /></>} />
+        <ServerSiteNav rightSlot={<><EnvVarWarning /><ThemeSwitcher /></>} />
         <div className="flex-1 flex items-center justify-center p-8">
           <p className="text-muted-foreground">Configure environment variables to continue.</p>
         </div>
@@ -97,7 +97,7 @@ export default async function BrowsePage() {
   return (
     <main className="min-h-screen flex flex-col items-center text-foreground">
       <div className="flex-1 w-full flex flex-col gap-4 items-center">
-        <SiteNav
+        <ServerSiteNav
           rightSlot={
             <>
               <Suspense>

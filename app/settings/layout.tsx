@@ -1,6 +1,6 @@
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { SiteNav } from "@/components/site-nav";
+import { ServerSiteNav } from "@/components/server-site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { hasEnvVars } from "@/lib/utils";
 import { EnvVarWarning } from "@/components/env-var-warning";
@@ -14,7 +14,7 @@ export default function SettingsLayout({
 }) {
   return (
     <main className="min-h-screen flex flex-col text-foreground">
-      <SiteNav
+      <ServerSiteNav
         rightSlot={
           <>
             {!hasEnvVars ? (

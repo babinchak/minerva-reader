@@ -1,4 +1,4 @@
-import { extractPdfMetadata } from "@/lib/pdf-metadata";
+import { extractPdfMetadata, AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getTier, countBooksUploadedThisWeek, isFreeBetaMode } from "@/lib/credits";
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     console.log("[UPLOAD] Checking for duplicates...");
     const { data: existingBook, error: checkError } = await serviceSupabase
       .from("books")
-      .select("id, title")
+      .select("id, title, author, title_source, cover_path, book_type")
       .eq("file_checksum", hashHex)
       .maybeSingle();
 
@@ -82,12 +82,17 @@ export async function POST(request: NextRequest) {
 
       // Link if not already linked
       if (!existingLink) {
+        const cleanedFileName = file.name.replace(/\.(epub|pdf)$/i, "");
+        const userBookData: { user_id: string; book_id: string; file_name?: string } = {
+          user_id: user.id,
+          book_id: existingBook.id,
+        };
+        if (cleanedFileName) {
+          userBookData.file_name = cleanedFileName;
+        }
         const { error: linkError } = await serviceSupabase
           .from("user_books")
-          .insert({
-            user_id: user.id,
-            book_id: existingBook.id,
-          });
+          .insert(userBookData);
         
         if (linkError) {
           console.error("[UPLOAD] Error linking duplicate book:", linkError);
@@ -98,13 +103,30 @@ export async function POST(request: NextRequest) {
         }
       }
       
+      const bookTitle = existingBook.title ?? "Unknown";
+      const bookAuthor = existingBook.author ?? null;
+      const authorDisplay = bookAuthor
+        ? bookAuthor.split(AUTHOR_DELIMITER).map((a: string) => a.trim()).filter(Boolean).join(", ")
+        : null;
+      const bookLabel = authorDisplay ? `${bookTitle} by ${authorDisplay}` : bookTitle;
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const coverUrl =
+        existingBook.cover_path && supabaseUrl
+          ? `${supabaseUrl}/storage/v1/object/public/covers/${existingBook.cover_path}`
+          : null;
+
       return NextResponse.json({ 
         book_id: existingBook.id,
         duplicate: true,
         alreadyInLibrary: !!existingLink,
         message: existingLink
-          ? "You already have this book in your library"
-          : "Book already exists and has been added to your library",
+          ? `You already have "${bookLabel}" in your library`
+          : `"${bookLabel}" already exists and has been added to your library`,
+        book_title: bookTitle,
+        book_author: authorDisplay,
+        book_cover_url: coverUrl,
+        book_type: existingBook.book_type ?? null,
       });
     }
 
@@ -130,13 +152,14 @@ export async function POST(request: NextRequest) {
     const extension = bookType === "pdf" ? "pdf" : "epub";
     const storagePath = `books/${user.id}/${bookId}.${extension}`;
 
-    // For PDFs: extract metadata (title, author, published_at) and first page as cover
+    // Extract metadata: PDF (title, author, published_at, cover) and EPUB (title, author)
     let pdfMetadata: Awaited<ReturnType<typeof extractPdfMetadata>> | null = null;
+    let epubMetadata: Awaited<ReturnType<typeof import("@/lib/epub-metadata").extractEpubMetadata>> | null = null;
     let coverPng: Buffer | null = null;
+
     if (isPdf) {
       try {
         pdfMetadata = await extractPdfMetadata(arrayBuffer);
-        // Dynamic import to avoid pdf-to-img path resolution issues at build time
         const { extractPdfFirstPageAsPng } = await import("@/lib/pdf-cover");
         coverPng = await extractPdfFirstPageAsPng(arrayBuffer);
         if (coverPng) {
@@ -147,12 +170,23 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         console.warn("[UPLOAD] PDF metadata/cover extraction failed (non-fatal):", err);
       }
+    } else {
+      try {
+        const { extractEpubMetadata } = await import("@/lib/epub-metadata");
+        epubMetadata = await extractEpubMetadata(arrayBuffer);
+      } catch (err) {
+        console.warn("[UPLOAD] EPUB metadata extraction failed (non-fatal):", err);
+      }
     }
 
-    const fallbackTitle = file.name.replace(/\.(epub|pdf)$/i, "");
+    const cleanedFileName = file.name.replace(/\.(epub|pdf)$/i, "");
+    const titleFromMetadata =
+      (pdfMetadata?.title?.trim() || epubMetadata?.title?.trim()) || null;
+    // Only set books.title from metadata; never use filename as source of truth
     const bookData: Record<string, unknown> = {
       id: bookId,
-      title: pdfMetadata?.title || fallbackTitle,
+      title: titleFromMetadata ?? null,
+      title_source: titleFromMetadata ? "metadata" : null,
       file_size: file.size,
       file_checksum: hashHex,
       uploaded_by: user.id,
@@ -162,7 +196,9 @@ export async function POST(request: NextRequest) {
       mime_type: mimeType,
     };
     if (pdfMetadata?.author != null) bookData.author = pdfMetadata.author;
+    else if (epubMetadata?.author != null) bookData.author = epubMetadata.author;
     if (pdfMetadata?.authorSortName != null) bookData.author_sort_name = pdfMetadata.authorSortName;
+    else if (epubMetadata?.authorSortName != null) bookData.author_sort_name = epubMetadata.authorSortName;
     if (pdfMetadata?.publishedAt != null) bookData.published_at = pdfMetadata.publishedAt;
 
     // Upload cover to storage before insert (for PDFs), so we can include cover_path in the row
@@ -249,7 +285,7 @@ export async function POST(request: NextRequest) {
         // Re-check for the book (it might have been created by another request)
         const { data: raceConditionBook } = await serviceSupabase
           .from("books")
-          .select("id, title")
+          .select("id, title, author, title_source")
           .eq("file_checksum", hashHex)
           .maybeSingle();
 
@@ -263,16 +299,30 @@ export async function POST(request: NextRequest) {
             .maybeSingle();
 
           if (!existingLink) {
-            await serviceSupabase.from("user_books").insert({
+            const cleanedFileName = file.name.replace(/\.(epub|pdf)$/i, "");
+            const raceUserBookData: { user_id: string; book_id: string; file_name?: string } = {
               user_id: user.id,
               book_id: raceConditionBook.id,
-            });
+            };
+            if (cleanedFileName) {
+              raceUserBookData.file_name = cleanedFileName;
+            }
+            await serviceSupabase.from("user_books").insert(raceUserBookData);
           }
+
+          const rcTitle = raceConditionBook.title ?? "Unknown";
+          const rcAuthor = raceConditionBook.author ?? null;
+          const rcAuthorDisplay = rcAuthor
+            ? rcAuthor.split(AUTHOR_DELIMITER).map((a: string) => a.trim()).filter(Boolean).join(", ")
+            : null;
+          const rcLabel = rcAuthorDisplay ? `${rcTitle} by ${rcAuthorDisplay}` : rcTitle;
 
           return NextResponse.json({
             book_id: raceConditionBook.id,
             duplicate: true,
-            message: "Book already exists and has been added to your library",
+            message: `"${rcLabel}" already exists and has been added to your library`,
+            book_title: rcTitle,
+            book_author: rcAuthorDisplay,
           });
         }
       }
@@ -291,12 +341,16 @@ export async function POST(request: NextRequest) {
 
     // Link book to user
     console.log("[UPLOAD] Linking book to user...");
+    const userBookData: { user_id: string; book_id: string; file_name?: string } = {
+      user_id: user.id,
+      book_id: bookId,
+    };
+    if (cleanedFileName) {
+      userBookData.file_name = cleanedFileName;
+    }
     const { error: linkError } = await supabase
       .from("user_books")
-      .insert({
-        user_id: user.id,
-        book_id: bookId,
-      });
+      .insert(userBookData);
 
     if (linkError) {
       console.error("[UPLOAD] Error linking book to user:", linkError);

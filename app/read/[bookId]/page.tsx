@@ -42,7 +42,7 @@ export default async function ReadBookPage({ params }: PageProps) {
   if (user) {
     const { data } = await supabase
       .from("user_books")
-      .select("id, current_page, reading_position, bookmarks")
+      .select("id, current_page, reading_position, bookmarks, custom_title, custom_author, file_name")
       .eq("user_id", user.id)
       .eq("book_id", bookId)
       .single();
@@ -93,10 +93,19 @@ export default async function ReadBookPage({ params }: PageProps) {
       );
     }
 
+    const ub = userBook as { custom_title?: string | null; file_name?: string | null } | null;
+    const customTitle = ub?.custom_title;
+    const displayTitle =
+      (customTitle != null && customTitle !== "" ? customTitle : null) ??
+      book.title ??
+      ub?.file_name ??
+      book.file_name ??
+      "";
+
     return (
       <PdfReaderClient
         pdfUrl={signedUrl.signedUrl}
-        fileName={book.file_name || book.title}
+        fileName={displayTitle}
         bookId={bookId}
         initialPage={userBook?.current_page ?? undefined}
         initialBookmarks={userBook?.bookmarks ?? undefined}

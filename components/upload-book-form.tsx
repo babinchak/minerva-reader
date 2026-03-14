@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Upload, CheckCircle2, XCircle, Loader2, BookOpen } from 'lucide-react';
+import { Upload, CheckCircle2, XCircle, Loader2, BookOpen, User } from 'lucide-react';
 import Link from 'next/link';
 import { CREDITS_REFRESH_EVENT } from '@/lib/credits-refresh';
 
@@ -25,6 +25,12 @@ export function UploadBookForm({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [alreadyInLibraryOpen, setAlreadyInLibraryOpen] = useState(false);
+  const [alreadyInLibraryBook, setAlreadyInLibraryBook] = useState<{
+    title?: string;
+    author?: string;
+    coverUrl?: string | null;
+    bookType?: string | null;
+  } | null>(null);
   const [uploadLimit, setUploadLimit] = useState<{
     booksUploadedThisWeek: number;
     booksUploadLimit: number;
@@ -84,6 +90,12 @@ export function UploadBookForm({
       }
 
       if (data.alreadyInLibrary) {
+        setAlreadyInLibraryBook({
+          title: data.book_title ?? undefined,
+          author: data.book_author ?? undefined,
+          coverUrl: data.book_cover_url ?? null,
+          bookType: data.book_type ?? null,
+        });
         setAlreadyInLibraryOpen(true);
       } else {
         setMessage(data.duplicate ? data.message : `Success: ${data.message}`);
@@ -177,9 +189,56 @@ export function UploadBookForm({
                   Already in library
                 </DialogTitle>
                 <DialogDescription>
-                  You already have this book in your library. No need to upload it again.
+                  {alreadyInLibraryBook?.title || alreadyInLibraryBook?.author ? (
+                    <>
+                      You already have{' '}
+                      <span className="font-medium text-foreground">
+                        {alreadyInLibraryBook.title ?? 'this book'}
+                        {alreadyInLibraryBook.author ? ` by ${alreadyInLibraryBook.author}` : ''}
+                      </span>
+                      {' '}in your library. No need to upload it again.
+                    </>
+                  ) : (
+                    'You already have this book in your library. No need to upload it again.'
+                  )}
                 </DialogDescription>
               </DialogHeader>
+              {alreadyInLibraryBook && (
+                <div
+                  className="flex flex-col rounded-lg border bg-card px-3 pt-3 pb-2 pointer-events-none select-none"
+                  aria-hidden
+                >
+                  <div className="relative mb-3 aspect-[2/3] w-full max-w-[120px] mx-auto flex-none overflow-hidden rounded-md bg-muted shadow-sm">
+                    {alreadyInLibraryBook.coverUrl ? (
+                      <img
+                        src={alreadyInLibraryBook.coverUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <BookOpen className="h-12 w-12 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 text-center">
+                    <p className="min-h-[2rem] line-clamp-2 font-medium text-foreground text-sm">
+                      {alreadyInLibraryBook.title ?? 'Unknown'}
+                    </p>
+                    {alreadyInLibraryBook.author && (
+                      <p className="mt-0 line-clamp-1 flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                        <User className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{alreadyInLibraryBook.author}</span>
+                      </p>
+                    )}
+                  </div>
+                  {alreadyInLibraryBook.bookType && (
+                    <p className="mt-1 text-center text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+                      {alreadyInLibraryBook.bookType}
+                    </p>
+                  )}
+                </div>
+              )}
               <DialogFooter>
                 <Button onClick={() => setAlreadyInLibraryOpen(false)}>OK</Button>
               </DialogFooter>
