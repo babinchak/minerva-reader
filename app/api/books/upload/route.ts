@@ -75,14 +75,15 @@ export async function POST(request: NextRequest) {
       // Check if user already has access (service client for consistency with RLS)
       const { data: existingLink } = await serviceSupabase
         .from("user_books")
-        .select("id")
+        .select("id, custom_title, file_name")
         .eq("user_id", user.id)
         .eq("book_id", existingBook.id)
         .maybeSingle();
 
+      const cleanedFileName = file.name.replace(/\.(epub|pdf)$/i, "");
+
       // Link if not already linked
       if (!existingLink) {
-        const cleanedFileName = file.name.replace(/\.(epub|pdf)$/i, "");
         const userBookData: { user_id: string; book_id: string; file_name?: string } = {
           user_id: user.id,
           book_id: existingBook.id,
@@ -102,8 +103,14 @@ export async function POST(request: NextRequest) {
           }, { status: 500 });
         }
       }
-      
-      const bookTitle = existingBook.title ?? "Unknown";
+
+      // Display title: custom_title ?? books.title ?? file_name (same as book card)
+      const bookTitle =
+        existingLink?.custom_title ??
+        existingBook.title ??
+        existingLink?.file_name ??
+        cleanedFileName ??
+        "Unknown";
       const bookAuthor = existingBook.author ?? null;
       const authorDisplay = bookAuthor
         ? bookAuthor.split(AUTHOR_DELIMITER).map((a: string) => a.trim()).filter(Boolean).join(", ")
@@ -290,27 +297,33 @@ export async function POST(request: NextRequest) {
           .maybeSingle();
 
         if (raceConditionBook) {
+          const rcCleanedFileName = file.name.replace(/\.(epub|pdf)$/i, "");
+
           // Link to user_books
-          const { data: existingLink } = await serviceSupabase
+          const { data: rcExistingLink } = await serviceSupabase
             .from("user_books")
-            .select("id")
+            .select("id, custom_title, file_name")
             .eq("user_id", user.id)
             .eq("book_id", raceConditionBook.id)
             .maybeSingle();
 
-          if (!existingLink) {
-            const cleanedFileName = file.name.replace(/\.(epub|pdf)$/i, "");
+          if (!rcExistingLink) {
             const raceUserBookData: { user_id: string; book_id: string; file_name?: string } = {
               user_id: user.id,
               book_id: raceConditionBook.id,
             };
-            if (cleanedFileName) {
-              raceUserBookData.file_name = cleanedFileName;
+            if (rcCleanedFileName) {
+              raceUserBookData.file_name = rcCleanedFileName;
             }
             await serviceSupabase.from("user_books").insert(raceUserBookData);
           }
 
-          const rcTitle = raceConditionBook.title ?? "Unknown";
+          const rcTitle =
+            rcExistingLink?.custom_title ??
+            raceConditionBook.title ??
+            rcExistingLink?.file_name ??
+            rcCleanedFileName ??
+            "Unknown";
           const rcAuthor = raceConditionBook.author ?? null;
           const rcAuthorDisplay = rcAuthor
             ? rcAuthor.split(AUTHOR_DELIMITER).map((a: string) => a.trim()).filter(Boolean).join(", ")

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Upload, CheckCircle2, XCircle, Loader2, BookOpen, User } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 import { CREDITS_REFRESH_EVENT } from '@/lib/credits-refresh';
 
 export function UploadBookForm({
@@ -22,6 +23,7 @@ export function UploadBookForm({
 }: { onSuccess?: () => void; compact?: boolean } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [alreadyInLibraryOpen, setAlreadyInLibraryOpen] = useState(false);
@@ -129,19 +131,57 @@ export function UploadBookForm({
             <label htmlFor="book-file" className="text-sm font-medium text-foreground">
               Select EPUB or PDF File
             </label>
-            <Input
-              id="book-file"
-              type="file"
-              accept=".epub,.pdf,application/epub+zip,application/pdf"
-              onChange={(e) => {
-                const selectedFile = e.target.files?.[0] || null;
-                setFile(selectedFile);
-                setMessage(null);
-                setError(null);
+            <div
+              className={cn(
+                "rounded-lg border-2 border-dashed border-primary/30 bg-muted/30 px-4 py-6 transition-colors",
+                isDragOver && "border-primary bg-primary/5"
+              )}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer.types.includes("Files")) setIsDragOver(true);
               }}
-              disabled={uploading}
-              className="cursor-pointer file:cursor-pointer file:text-foreground"
-            />
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const related = e.relatedTarget as Node | null;
+                if (!related || !e.currentTarget.contains(related)) setIsDragOver(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(false);
+                const droppedFile = e.dataTransfer.files?.[0];
+                if (droppedFile) {
+                  const lower = droppedFile.name.toLowerCase();
+                  const valid = droppedFile.type === "application/epub+zip" || droppedFile.type === "application/pdf" || lower.endsWith(".epub") || lower.endsWith(".pdf");
+                  if (valid) {
+                    setFile(droppedFile);
+                    setMessage(null);
+                    setError(null);
+                  }
+                }
+              }}
+            >
+              <label htmlFor="book-file" className="block cursor-pointer">
+                <Input
+                  id="book-file"
+                  type="file"
+                  accept=".epub,.pdf,application/epub+zip,application/pdf"
+                  onChange={(e) => {
+                    const selectedFile = e.target.files?.[0] || null;
+                    setFile(selectedFile);
+                    setMessage(null);
+                    setError(null);
+                  }}
+                  disabled={uploading}
+                  className="cursor-pointer file:cursor-pointer file:text-foreground border-0 bg-transparent p-0 h-auto file:mr-2 file:border-0 file:bg-transparent file:font-medium file:text-foreground"
+                />
+                <span className="text-sm text-muted-foreground dark:text-foreground/80">
+                  {isDragOver ? "Drop EPUB or PDF here" : "Drag and drop or click to browse"}
+                </span>
+              </label>
+            </div>
             {file && (
               <p className="text-sm text-muted-foreground dark:text-foreground/80">
                 Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
