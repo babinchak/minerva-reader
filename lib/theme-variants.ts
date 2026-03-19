@@ -31,7 +31,7 @@ const PREVIEW_COLORS: Record<
   { light: { bg: string; primary: string; accent: string }; dark: { bg: string; primary: string; accent: string } }
 > = {
   minerva: {
-    light: { bg: hsl(35, 25, 97), primary: hsl(85, 25, 35), accent: hsl(35, 18, 90) },
+    light: { bg: hsl(35, 25, 97), primary: hsl(82, 32, 35), accent: hsl(35, 18, 90) },
     dark: { bg: hsl(25, 15, 8), primary: hsl(38, 80, 55), accent: hsl(25, 12, 18) },
   },
   sepia: {
