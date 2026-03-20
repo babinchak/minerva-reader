@@ -23,6 +23,7 @@ import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
 import { hapticLight } from "@/lib/haptic";
 import { getCachedPdf, setCachedPdf } from "@/lib/pdf-cache";
+import { ReadPageSkeleton } from "@/components/read-page-skeleton";
 
 type PDFDocumentLoadingTask = {
   promise: Promise<PDFDocumentProxy>;
@@ -854,13 +855,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   }, [currentPage, isMobilePagedMode]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-muted-foreground">Loading PDF...</p>
-        </div>
-      </div>
-    );
+    return <ReadPageSkeleton />;
   }
 
   if (error || !pdfDoc) {

@@ -28,6 +28,7 @@ import { useIsMobile } from "@/lib/use-media-query";
 import { hapticLight } from "@/lib/haptic";
 import { getLiveSelectedText, getTextSelection } from "@/lib/book-position-utils";
 import { getThoriumThemeFromStoredVariants } from "@/lib/theme-variants";
+import { ReadPageSkeleton } from "@/components/read-page-skeleton";
 
 /** Fallback when document theme can't be read (SSR, etc.) */
 const FALLBACK_LIGHT = {
@@ -264,13 +265,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   }, [selfHref, initialReadingPosition]);
 
   if (!mounted || !storageReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-muted-foreground">Loading reader...</p>
-        </div>
-      </div>
-    );
+    return <ReadPageSkeleton />;
   }
 
   return (

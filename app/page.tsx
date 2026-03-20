@@ -8,6 +8,8 @@ import { FullPageLibraryDropZone } from "@/components/full-page-library-drop-zon
 import { UpgradeCta } from "@/components/upgrade-cta";
 import { HeroReplay } from "@/components/marketing/hero-replay";
 import { ServerSiteNav } from "@/components/server-site-nav";
+import { LibraryPageSkeleton } from "@/components/library-grid-skeleton";
+import { HomeContentSkeleton } from "@/components/home-content-skeleton";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
@@ -147,7 +149,7 @@ async function HomeContent({
     return (
       <div className="w-full max-w-7xl space-y-6">
         {showUpgrade && <UpgradeCta />}
-        <Suspense>
+        <Suspense fallback={<LibraryPageSkeleton />}>
           <LibraryView />
         </Suspense>
       </div>
@@ -248,7 +250,7 @@ export default async function Home({
           }
         />
         <div className="flex-1 w-full flex flex-col gap-6 max-w-7xl px-6 pt-2 pb-8 items-center">
-          <Suspense>
+          <Suspense fallback={<HomeContentSkeleton />}>
             <HomeContent showUpgrade={showUpgrade} />
           </Suspense>
         </div>

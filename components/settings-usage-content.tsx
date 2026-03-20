@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Coins, Upload, Sparkles, Zap, MessageSquare, BookOpen } from "lucide-react";
+import { UsageContentSkeleton } from "@/components/usage-content-skeleton";
 import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
 type OnDemandLimitType = "disabled" | "fixed" | "unlimited";
@@ -132,15 +133,7 @@ export function UsageContent() {
   };
 
   if (!info) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return <UsageContentSkeleton />;
   }
 
   if (info.tier === "anonymous") {
