@@ -8,6 +8,8 @@ import {
   ArrowLeft,
   Bookmark,
   BookOpenText,
+  ChevronDown,
+  ChevronUp,
   Highlighter,
   LayoutGrid,
   List,
@@ -23,6 +25,11 @@ import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
 import { hapticLight } from "@/lib/haptic";
 import { getCachedPdf, setCachedPdf } from "@/lib/pdf-cache";
+import {
+  PdfFindTextHighlighter,
+  type PdfFindControllerForHighlight,
+  type PdfFindEventBus,
+} from "@/lib/pdf-find-text-highlighter";
 import { ReadPageSkeleton } from "@/components/read-page-skeleton";
 
 type PDFDocumentLoadingTask = {
@@ -42,6 +49,196 @@ interface PdfReaderProps {
 const MOBILE_PAGE_SIDE_MARGIN_PX = 2;
 const MOBILE_FIT_WIDTH_BUFFER_PX = 2;
 const PDF_INVERT_STORAGE_KEY = "minerva-pdf-invert";
+
+/** Matches `FindState.PENDING` in pdfjs-dist web viewer (not exported as a stable runtime constant). */
+const PDF_FIND_STATE_PENDING = 3;
+
+type PdfFindApi = {
+  /** pdf.js `EventBus` */
+  eventBus: {
+    dispatch: (name: string, data?: object) => void;
+    on: (name: string, fn: (data: unknown) => void) => void;
+    off: (name: string, fn: (data: unknown) => void) => void;
+  };
+  /** pdf.js `PDFFindController` instance */
+  findController: { setDocument: (doc: PDFDocumentProxy) => void };
+};
+
+/** pdf.js find controller fields we read for snippets / jumping (not all are public API). */
+type PdfFindControllerRuntime = {
+  pageMatches?: number[][];
+  pageMatchesLength?: number[][];
+  _pageMatches?: number[][];
+  _pageMatchesLength?: number[][];
+  _pageContents?: string[];
+  _selected?: { pageIdx: number; matchIdx: number };
+  _offset?: { pageIdx: number; matchIdx: number; wrapped: boolean };
+  _scrollMatches?: boolean;
+  _matchesCountTotal?: number;
+  highlightMatches?: boolean;
+};
+
+type PdfFindResultEntry = {
+  key: string;
+  pageIdx: number;
+  matchIdx: number;
+  pageLabel: number;
+  snippet: string;
+};
+
+function buildPdfFindResultEntries(fc: PdfFindControllerRuntime): PdfFindResultEntry[] {
+  const matches = fc.pageMatches ?? fc._pageMatches;
+  const lengths = fc.pageMatchesLength ?? fc._pageMatchesLength;
+  const contents = fc._pageContents;
+  if (!matches || !contents?.length) return [];
+
+  const out: PdfFindResultEntry[] = [];
+  for (let p = 0; p < matches.length; p++) {
+    const pageMatchStarts = matches[p];
+    const pageMatchLens = lengths?.[p];
+    const text = contents[p] ?? "";
+    if (!pageMatchStarts?.length) continue;
+
+    for (let m = 0; m < pageMatchStarts.length; m++) {
+      const start = pageMatchStarts[m];
+      const len = pageMatchLens?.[m] ?? 0;
+      const sliceStart = Math.max(0, start - 24);
+      const sliceEnd = Math.min(text.length, start + len + 48);
+      let snippet = text.slice(sliceStart, sliceEnd).replace(/\s+/g, " ").trim();
+      if (sliceStart > 0) snippet = `…${snippet}`;
+      if (sliceEnd < text.length) snippet = `${snippet}…`;
+      out.push({
+        key: `${p}-${m}`,
+        pageIdx: p,
+        matchIdx: m,
+        pageLabel: p + 1,
+        snippet: snippet || "(match)",
+      });
+    }
+  }
+  return out;
+}
+
+function PdfToolbarSearchPanel({
+  searchQuery,
+  onSearchQueryChange,
+  onClose,
+  pdfFindReady,
+  findMatches,
+  findPending,
+  findResults,
+  onSearch,
+  onFindNext,
+  onFindPrev,
+  onSelectResult,
+}: {
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  onClose: () => void;
+  pdfFindReady: boolean;
+  findMatches: { current: number; total: number } | null;
+  findPending: boolean;
+  findResults: PdfFindResultEntry[];
+  onSearch: () => void;
+  onFindNext: () => void;
+  onFindPrev: () => void;
+  onSelectResult: (pageIdx: number, matchIdx: number) => void;
+}) {
+  const canQuery = Boolean(searchQuery.trim());
+  const canSearch = pdfFindReady && canQuery;
+  const hasMatches = findMatches != null && findMatches.total > 0;
+  const statusLine = findPending
+    ? "Searching…"
+    : findMatches && findMatches.total === 0
+      ? "No matches"
+      : findMatches && findMatches.total > 0
+        ? `${findMatches.current} / ${findMatches.total}`
+        : null;
+
+  return (
+    <div className="absolute right-4 top-full mt-2 z-50 w-[min(520px,calc(100vw-2rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium">Search</span>
+        <div className="flex-1" />
+        <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close search">
+          <span className="text-lg leading-none">×</span>
+        </Button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Input
+          value={searchQuery}
+          onChange={(e) => onSearchQueryChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onSearch();
+            }
+          }}
+          placeholder="Search text…"
+          className="h-9 flex-1 min-w-[140px]"
+          aria-label="Search in document"
+        />
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            disabled={!hasMatches}
+            title="Previous match"
+            aria-label="Previous match"
+            onClick={onFindPrev}
+          >
+            <ChevronUp className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            disabled={!hasMatches}
+            title="Next match"
+            aria-label="Next match"
+            onClick={onFindNext}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </div>
+        <Button type="button" disabled={!canSearch} title="Find in document" onClick={onSearch}>
+          Find
+        </Button>
+      </div>
+
+      <div
+        className="mt-3 text-sm text-muted-foreground min-h-[1.25rem]"
+        aria-live="polite"
+      >
+        {!pdfFindReady ? "Preparing search…" : statusLine}
+      </div>
+
+      {findResults.length > 0 && (
+        <ul
+          className="mt-3 max-h-44 overflow-y-auto rounded-md border border-border divide-y divide-border"
+          aria-label="Search hits in document"
+        >
+          {findResults.map((r) => (
+            <li key={r.key}>
+              <button
+                type="button"
+                className="w-full text-left px-2.5 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                onClick={() => onSelectResult(r.pageIdx, r.matchIdx)}
+              >
+                <span className="font-medium text-foreground">Page {r.pageLabel}</span>
+                <span className="block text-muted-foreground truncate" title={r.snippet}>
+                  {r.snippet}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function isPdfDebugEnabled() {
   if (typeof window === "undefined") return false;
@@ -95,6 +292,13 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [pdfInvert, setPdfInvert] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [pdfFindApi, setPdfFindApi] = useState<PdfFindApi | null>(null);
+  const pdfFindApiRef = useRef<PdfFindApi | null>(null);
+  const searchQueryRef = useRef(searchQuery);
+  const currentPageForFindRef = useRef(currentPage);
+  const [findMatches, setFindMatches] = useState<{ current: number; total: number } | null>(null);
+  const [findPending, setFindPending] = useState(false);
+  const [findResultEntries, setFindResultEntries] = useState<PdfFindResultEntry[]>([]);
   const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unknown; items?: unknown[] }> | null>(null);
   const [isTocOpen, setIsTocOpen] = useState(false);
   const [tocDrawerMode, setTocDrawerMode] = useState<"contents" | "pages" | "bookmarks">("contents");
@@ -124,6 +328,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
       // Ignore localStorage errors
     }
   }, [pdfInvert]);
+
+  searchQueryRef.current = searchQuery;
+  currentPageForFindRef.current = currentPage;
+  pdfFindApiRef.current = pdfFindApi;
 
   useEffect(() => {
     if (initialBookmarks === undefined) return;
@@ -385,6 +593,10 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
       const t = e.target as Node | null;
       if (!t) return;
       if (toolbarRef.current?.contains(t)) return;
+      pdfFindApiRef.current?.eventBus.dispatch("findbarclose", {});
+      setFindMatches(null);
+      setFindResultEntries([]);
+      setFindPending(false);
       setIsSearchOpen(false);
     };
     document.addEventListener("mousedown", onDown);
@@ -462,6 +674,72 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
     return true;
   };
   goToPageRef.current = goToPage;
+
+  const dispatchPdfFind = (opts: { type?: string; findPrevious?: boolean }) => {
+    const api = pdfFindApiRef.current;
+    if (!api) return;
+    const payload: Record<string, unknown> = {
+      type: opts.type ?? "",
+      query: searchQueryRef.current,
+      caseSensitive: false,
+      entireWord: false,
+      highlightAll: true,
+      findPrevious: opts.findPrevious ?? false,
+      matchDiacritics: false,
+    };
+    api.eventBus.dispatch("find", payload);
+  };
+
+  const runPdfToolbarFind = () => {
+    if (!pdfFindApiRef.current || !searchQueryRef.current.trim()) return;
+    setFindMatches(null);
+    setFindResultEntries([]);
+    dispatchPdfFind({ type: "" });
+  };
+
+  const findPdfNext = () => dispatchPdfFind({ type: "again", findPrevious: false });
+  const findPdfPrev = () => dispatchPdfFind({ type: "again", findPrevious: true });
+
+  const activatePdfFindMatch = (pageIdx: number, matchIdx: number) => {
+    const api = pdfFindApiRef.current;
+    if (!api) return;
+    goToPage(pageIdx + 1);
+    const applySelection = () => {
+      const fc = api.findController as PdfFindControllerRuntime;
+      const prevPage = fc._selected?.pageIdx ?? -1;
+      fc._selected = { pageIdx, matchIdx };
+      fc._offset = { pageIdx, matchIdx, wrapped: false };
+      fc._scrollMatches = true;
+      if (prevPage >= 0 && prevPage !== pageIdx) {
+        api.eventBus.dispatch("updatetextlayermatches", {
+          source: api.findController,
+          pageIndex: prevPage,
+        });
+      }
+      api.eventBus.dispatch("updatetextlayermatches", {
+        source: api.findController,
+        pageIndex: pageIdx,
+      });
+      api.eventBus.dispatch("updatetextlayermatches", {
+        source: api.findController,
+        pageIndex: -1,
+      });
+      const pm = fc.pageMatches ?? fc._pageMatches ?? [];
+      let ord = 0;
+      for (let p = 0; p < pageIdx; p++) ord += pm[p]?.length ?? 0;
+      const total = fc._matchesCountTotal ?? ord + matchIdx + 1;
+      setFindMatches({ current: ord + matchIdx + 1, total });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(applySelection));
+  };
+
+  const closePdfSearch = () => {
+    pdfFindApiRef.current?.eventBus.dispatch("findbarclose", {});
+    setFindMatches(null);
+    setFindResultEntries([]);
+    setFindPending(false);
+    setIsSearchOpen(false);
+  };
 
   const commitPageInput = () => {
     const parsed = Number.parseInt(pageInput, 10);
@@ -687,6 +965,112 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
       }
     };
   }, [pdfUrl, bookId]);
+
+  useEffect(() => {
+    if (!pdfDoc) {
+      setPdfFindApi(null);
+      return;
+    }
+    let cancelled = false;
+    let activeApi: PdfFindApi | null = null;
+    const tearDownFind = (api: PdfFindApi) => {
+      try {
+        api.eventBus.dispatch("findbarclose", {});
+      } catch {
+        // ignore
+      }
+      try {
+        (api.findController as { setDocument: (d: PDFDocumentProxy | null) => void }).setDocument(null);
+      } catch {
+        // ignore
+      }
+    };
+    (async () => {
+      const { EventBus, PDFFindController } = await import("pdfjs-dist/web/pdf_viewer.mjs");
+      if (cancelled) return;
+      const eventBus = new EventBus();
+      const linkService = {
+        get pagesCount() {
+          return pdfDoc.numPages;
+        },
+        get page() {
+          return currentPageForFindRef.current;
+        },
+        set page(value: number) {
+          const n = Math.floor(Number(value));
+          if (!Number.isFinite(n) || n < 1) return;
+          queueMicrotask(() => {
+            goToPageRef.current(n);
+          });
+        },
+      };
+      const findController = new PDFFindController({
+        linkService,
+        eventBus,
+      } as ConstructorParameters<typeof PDFFindController>[0]);
+      findController.setDocument(pdfDoc);
+      findController.onIsPageVisible = (pageNumber: number) => {
+        const viewer = viewerRef.current;
+        if (!viewer) return true;
+        const pages = viewer.querySelectorAll<HTMLElement>(".page");
+        const el = pages[pageNumber - 1];
+        return Boolean(el?.querySelector(".textLayer"));
+      };
+      const api: PdfFindApi = {
+        eventBus: eventBus as PdfFindApi["eventBus"],
+        findController: findController as PdfFindApi["findController"],
+      };
+      if (cancelled) {
+        tearDownFind(api);
+        return;
+      }
+      activeApi = api;
+      pdfFindApiRef.current = api;
+      setPdfFindApi(api);
+    })().catch(() => {
+      if (!cancelled) setPdfFindApi(null);
+    });
+    return () => {
+      cancelled = true;
+      if (activeApi) {
+        tearDownFind(activeApi);
+        activeApi = null;
+      }
+      pdfFindApiRef.current = null;
+      setPdfFindApi(null);
+    };
+  }, [pdfDoc]);
+
+  useEffect(() => {
+    if (!pdfFindApi) {
+      setFindResultEntries([]);
+      return;
+    }
+    const { eventBus } = pdfFindApi;
+    const onCount = (evt: unknown) => {
+      const e = evt as {
+        matchesCount?: { current: number; total: number };
+        source?: PdfFindControllerRuntime;
+      };
+      if (e.matchesCount) setFindMatches(e.matchesCount);
+      const total = e.matchesCount?.total ?? 0;
+      if (total === 0) {
+        setFindResultEntries([]);
+      } else if (e.source) {
+        setFindResultEntries(buildPdfFindResultEntries(e.source));
+      }
+    };
+    const onControl = (evt: unknown) => {
+      const e = evt as { state?: number };
+      setFindPending(e.state === PDF_FIND_STATE_PENDING);
+    };
+    eventBus.on("updatefindmatchescount", onCount);
+    eventBus.on("updatefindcontrolstate", onControl);
+    return () => {
+      eventBus.off("updatefindmatchescount", onCount);
+      eventBus.off("updatefindcontrolstate", onControl);
+    };
+  }, [pdfFindApi]);
 
   // Mobile: native pinch zoom disabled via touch-action on scroll host; use app zoom buttons instead.
 
@@ -1138,31 +1522,23 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                 </div>
 
                 {isSearchOpen && (
-                  <div className="absolute right-4 top-full mt-2 z-50 w-[min(520px,calc(100vw-2rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Search</span>
-                      <div className="flex-1" />
-                      <Button type="button" variant="ghost" size="icon" onClick={() => setIsSearchOpen(false)} aria-label="Close search">
-                        <span className="text-lg leading-none">×</span>
-                      </Button>
-                    </div>
-
-                    <div className="mt-3 flex gap-2">
-                      <Input
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search text..."
-                        className="h-9 flex-1"
-                      />
-                      <Button type="button" disabled={!searchQuery.trim()} title="Search (not implemented yet)">
-                        Search
-                      </Button>
-                    </div>
-
-                    <div className="mt-3 text-sm text-muted-foreground">
-                      <p>Text search results will appear here. Not implemented yet.</p>
-                    </div>
-                  </div>
+                  <PdfToolbarSearchPanel
+                    searchQuery={searchQuery}
+                    onSearchQueryChange={(v) => {
+                      setSearchQuery(v);
+                      setFindMatches(null);
+                      setFindResultEntries([]);
+                    }}
+                    onClose={closePdfSearch}
+                    pdfFindReady={Boolean(pdfFindApi)}
+                    findMatches={findMatches}
+                    findPending={findPending}
+                    findResults={findResultEntries}
+                    onSearch={runPdfToolbarFind}
+                    onFindNext={findPdfNext}
+                    onFindPrev={findPdfPrev}
+                    onSelectResult={activatePdfFindMatch}
+                  />
                 )}
             </div>
           )}
@@ -1340,31 +1716,23 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                 </div>
 
                 {isSearchOpen && (
-                  <div className="absolute right-4 top-full mt-2 z-50 w-[min(520px,calc(100vw-2rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Search</span>
-                      <div className="flex-1" />
-                      <Button type="button" variant="ghost" size="icon" onClick={() => setIsSearchOpen(false)} aria-label="Close search">
-                        <span className="text-lg leading-none">×</span>
-                      </Button>
-                    </div>
-
-                    <div className="mt-3 flex gap-2">
-                      <Input
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search text..."
-                        className="h-9 flex-1"
-                      />
-                      <Button type="button" disabled={!searchQuery.trim()} title="Search (not implemented yet)">
-                        Search
-                      </Button>
-                    </div>
-
-                    <div className="mt-3 text-sm text-muted-foreground">
-                      <p>Text search results will appear here. Not implemented yet.</p>
-                    </div>
-                  </div>
+                  <PdfToolbarSearchPanel
+                    searchQuery={searchQuery}
+                    onSearchQueryChange={(v) => {
+                      setSearchQuery(v);
+                      setFindMatches(null);
+                      setFindResultEntries([]);
+                    }}
+                    onClose={closePdfSearch}
+                    pdfFindReady={Boolean(pdfFindApi)}
+                    findMatches={findMatches}
+                    findPending={findPending}
+                    findResults={findResultEntries}
+                    onSearch={runPdfToolbarFind}
+                    onFindNext={findPdfNext}
+                    onFindPrev={findPdfPrev}
+                    onSelectResult={activatePdfFindMatch}
+                  />
                 )}
               </div>
             </>
@@ -1482,6 +1850,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                         fitViewport={isAtMobileMinScale}
                         itemTextsCacheRef={itemTextsCacheRef}
                         invert={pdfInvert}
+                        pdfFind={pdfFindApi ?? undefined}
                       />
                     </div>
                   ) : (
@@ -1522,6 +1891,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                                   fitViewport={isAtMobileMinScale}
                                   itemTextsCacheRef={itemTextsCacheRef}
                                   invert={pdfInvert}
+                                  pdfFind={pdfFindApi ?? undefined}
                                 />
                               </div>
                               <div className="flex h-full w-1/2 shrink-0 items-center justify-center">
@@ -1535,6 +1905,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                                   fitViewport={isAtMobileMinScale}
                                   itemTextsCacheRef={itemTextsCacheRef}
                                   invert={pdfInvert}
+                                  pdfFind={pdfFindApi ?? undefined}
                                 />
                               </div>
                             </>
@@ -1556,6 +1927,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                       itemTextsCacheRef={itemTextsCacheRef}
                       initialPage={initialPage}
                       invert={pdfInvert}
+                      pdfFind={pdfFindApi ?? undefined}
                     />
                   ))
                 )}
@@ -1887,6 +2259,8 @@ interface PdfPageProps {
   onRenderComplete?: () => void;
   /** When true, inverts the PDF page colors (canvas + text) only */
   invert?: boolean;
+  /** When set, text layer is wired to pdf.js find / highlight */
+  pdfFind?: PdfFindApi | null;
 }
 
 function LazyPdfPage({
@@ -1899,6 +2273,7 @@ function LazyPdfPage({
   itemTextsCacheRef,
   initialPage,
   invert,
+  pdfFind,
 }: PdfPageProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   // Pre-render pages 1, 2, and initialPage ±2 (for reading position restoration on desktop;
@@ -1954,6 +2329,7 @@ function LazyPdfPage({
           mobilePagedMode={mobilePagedMode}
           itemTextsCacheRef={itemTextsCacheRef}
           invert={invert}
+          pdfFind={pdfFind}
         />
       ) : (
         <div className="w-full flex justify-center">
@@ -1983,6 +2359,7 @@ function PdfPage({
   itemTextsCacheRef,
   onRenderComplete,
   invert = false,
+  pdfFind,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerHostRef = useRef<HTMLDivElement | null>(null);
@@ -2104,8 +2481,18 @@ function PdfPage({
       textLayerHost.style.setProperty("--scale-factor", viewport.scale.toString());
       setLayerDimensions(textLayerHost, viewport);
 
+      const findHighlighter =
+        pdfFind != null
+          ? new PdfFindTextHighlighter({
+              findController: pdfFind.findController as unknown as PdfFindControllerForHighlight,
+              eventBus: pdfFind.eventBus as PdfFindEventBus,
+              pageIndex: pageNumber - 1,
+            })
+          : null;
+
       textLayerBuilder = new TextLayerBuilder({
         pdfPage: page,
+        highlighter: (findHighlighter ?? undefined) as never,
         onAppend: (div: HTMLDivElement) => {
           // Only index leaf text spans (exclude structural wrapper spans) so
           // position itemIndex stays aligned with actual text runs.
@@ -2169,6 +2556,15 @@ function PdfPage({
       }) as unknown as { cancel?: () => void; render?: (opts: { viewport: unknown }) => Promise<unknown> };
 
       await textLayerBuilder?.render?.({ viewport });
+      if (!cancelled && pdfFind) {
+        const fc = pdfFind.findController as PdfFindControllerRuntime;
+        if (fc.highlightMatches) {
+          pdfFind.eventBus.dispatch("updatetextlayermatches", {
+            source: pdfFind.findController,
+            pageIndex: pageNumber - 1,
+          });
+        }
+      }
       if (debugVerbose) {
         const renderEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
         console.log("[PdfDebug] page:render:done", {
@@ -2192,7 +2588,7 @@ function PdfPage({
       if (renderTask?.cancel) renderTask.cancel();
       textLayerBuilder?.cancel?.();
     };
-  }, [pdf, pageNumber, scale, isMobile, scrollContainerRef, itemTextsCacheRef, onRenderComplete]);
+  }, [pdf, pageNumber, scale, isMobile, scrollContainerRef, itemTextsCacheRef, onRenderComplete, pdfFind]);
 
   return (
     <div className={mobilePagedMode ? `w-full flex items-center justify-center ${fitViewport ? "h-full" : "min-h-full shrink-0"}` : "w-full flex justify-center"}>
@@ -2211,10 +2607,10 @@ function PdfPage({
           ...(invert ? { filter: "invert(1)" } : {}),
         }}
       >
-        <div className="canvasWrapper">
+        <div className="canvasWrapper relative z-0">
           <canvas ref={canvasRef} className="pointer-events-none block" />
         </div>
-        <div ref={textLayerHostRef} className="absolute inset-0" />
+        <div ref={textLayerHostRef} className="absolute inset-0 z-[1]" />
       </div>
     </div>
   );

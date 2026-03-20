@@ -1117,6 +1117,12 @@
     text-transform: none !important;
   }
 
+  /* Find matches: pdf.js defaults are subtle; use theme primary so hits read clearly on white pages. */
+  .pdf-scroll-host .pdfViewer .textLayer .highlight {
+    --highlight-bg-color: hsl(var(--primary) / 0.32);
+    --highlight-selected-bg-color: hsl(var(--primary) / 0.52);
+  }
+
   /* Make text selection clearly visible inside the AI pane (both themes). */
   [data-ai-pane="true"] ::selection {
     background: hsl(var(--primary) / 0.35);
