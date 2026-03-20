@@ -93,7 +93,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   const [mobileSlideTransitionEnabled, setMobileSlideTransitionEnabled] = useState(false);
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchMode, setSearchMode] = useState<"normal" | "semantic">("normal");
   const [pdfInvert, setPdfInvert] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unknown; items?: unknown[] }> | null>(null);
@@ -1141,23 +1140,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                 {isSearchOpen && (
                   <div className="absolute right-4 top-full mt-2 z-50 w-[min(520px,calc(100vw-2rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-3">
                     <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant={searchMode === "normal" ? "default" : "outline"}
-                        onClick={() => setSearchMode("normal")}
-                        className="h-8"
-                      >
-                        Normal
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={searchMode === "semantic" ? "default" : "outline"}
-                        onClick={() => setSearchMode("semantic")}
-                        className="h-8"
-                        title="Semantic search (vector matches) - not implemented yet"
-                      >
-                        Semantic
-                      </Button>
+                      <span className="text-sm font-medium">Search</span>
                       <div className="flex-1" />
                       <Button type="button" variant="ghost" size="icon" onClick={() => setIsSearchOpen(false)} aria-label="Close search">
                         <span className="text-lg leading-none">×</span>
@@ -1168,7 +1151,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                       <Input
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder={searchMode === "semantic" ? "Search by meaning..." : "Search text..."}
+                        placeholder="Search text..."
                         className="h-9 flex-1"
                       />
                       <Button type="button" disabled={!searchQuery.trim()} title="Search (not implemented yet)">
@@ -1177,11 +1160,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                     </div>
 
                     <div className="mt-3 text-sm text-muted-foreground">
-                      {searchMode === "semantic" ? (
-                        <p>Semantic search results will appear here (top vector matches). Not implemented yet.</p>
-                      ) : (
-                        <p>Text search results will appear here. Not implemented yet.</p>
-                      )}
+                      <p>Text search results will appear here. Not implemented yet.</p>
                     </div>
                   </div>
                 )}
@@ -1363,23 +1342,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                 {isSearchOpen && (
                   <div className="absolute right-4 top-full mt-2 z-50 w-[min(520px,calc(100vw-2rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-3">
                     <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant={searchMode === "normal" ? "default" : "outline"}
-                        onClick={() => setSearchMode("normal")}
-                        className="h-8"
-                      >
-                        Normal
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={searchMode === "semantic" ? "default" : "outline"}
-                        onClick={() => setSearchMode("semantic")}
-                        className="h-8"
-                        title="Semantic search (vector matches) - not implemented yet"
-                      >
-                        Semantic
-                      </Button>
+                      <span className="text-sm font-medium">Search</span>
                       <div className="flex-1" />
                       <Button type="button" variant="ghost" size="icon" onClick={() => setIsSearchOpen(false)} aria-label="Close search">
                         <span className="text-lg leading-none">×</span>
@@ -1390,7 +1353,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                       <Input
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder={searchMode === "semantic" ? "Search by meaning..." : "Search text..."}
+                        placeholder="Search text..."
                         className="h-9 flex-1"
                       />
                       <Button type="button" disabled={!searchQuery.trim()} title="Search (not implemented yet)">
@@ -1399,11 +1362,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                     </div>
 
                     <div className="mt-3 text-sm text-muted-foreground">
-                      {searchMode === "semantic" ? (
-                        <p>Semantic search results will appear here (top vector matches). Not implemented yet.</p>
-                      ) : (
-                        <p>Text search results will appear here. Not implemented yet.</p>
-                      )}
+                      <p>Text search results will appear here. Not implemented yet.</p>
                     </div>
                   </div>
                 )}
