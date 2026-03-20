@@ -30,6 +30,7 @@ import {
   type PdfFindControllerForHighlight,
   type PdfFindEventBus,
 } from "@/lib/pdf-find-text-highlighter";
+import { centerElementInScroller } from "@/lib/pdf-center-match-in-scroller";
 import { ReadPageSkeleton } from "@/components/read-page-skeleton";
 
 type PDFDocumentLoadingTask = {
@@ -1009,6 +1010,42 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
         eventBus,
       } as ConstructorParameters<typeof PDFFindController>[0]);
       findController.setDocument(pdfDoc);
+
+      const fcScroll = findController as unknown as {
+        _scrollMatches?: boolean;
+        scrollMatchIntoView: (opts: {
+          element?: HTMLElement | null;
+          selectedLeft?: number;
+          pageIndex?: number;
+          matchIndex?: number;
+        }) => void;
+      };
+      const origScrollMatchIntoView = fcScroll.scrollMatchIntoView.bind(findController);
+      fcScroll.scrollMatchIntoView = (opts) => {
+        const element = opts.element ?? null;
+        const matchIndex = opts.matchIndex ?? -1;
+        const pageIndex = opts.pageIndex ?? -1;
+        if (!fcScroll._scrollMatches || !element) return;
+        const sel = findController.selected;
+        if (!sel) return;
+        if (matchIndex === -1 || matchIndex !== sel.matchIdx) return;
+        if (pageIndex === -1 || pageIndex !== sel.pageIdx) return;
+        fcScroll._scrollMatches = false;
+
+        const scroller = scrollRef.current;
+        if (!scroller) {
+          origScrollMatchIntoView(opts);
+          return;
+        }
+
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const inner = element.querySelector(".highlight.selected");
+            centerElementInScroller(scroller, inner ?? element);
+          });
+        });
+      };
+
       findController.onIsPageVisible = (pageNumber: number) => {
         const viewer = viewerRef.current;
         if (!viewer) return true;
