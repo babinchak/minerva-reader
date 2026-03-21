@@ -16,6 +16,7 @@ import { Upload, CheckCircle2, XCircle, Loader2, BookOpen, User } from 'lucide-r
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { CREDITS_REFRESH_EVENT } from '@/lib/credits-refresh';
+import { uploadBookViaDirectStorage } from '@/lib/upload-book-client';
 
 export function UploadBookForm({
   onSuccess,
@@ -77,30 +78,24 @@ export function UploadBookForm({
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      const result = await uploadBookViaDirectStorage(file);
 
-      const response = await fetch('/api/books/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+      if (!result.ok) {
+        throw new Error(result.error);
       }
 
-      if (data.alreadyInLibrary) {
+      if (result.alreadyInLibrary) {
         setAlreadyInLibraryBook({
-          title: data.book_title ?? undefined,
-          author: data.book_author ?? undefined,
-          coverUrl: data.book_cover_url ?? null,
-          bookType: data.book_type ?? null,
+          title: result.book_title ?? undefined,
+          author: result.book_author ?? undefined,
+          coverUrl: result.book_cover_url ?? null,
+          bookType: result.book_type ?? null,
         });
         setAlreadyInLibraryOpen(true);
       } else {
-        setMessage(data.duplicate ? data.message : `Success: ${data.message}`);
+        setMessage(
+          result.duplicate ? result.message ?? 'Book added' : `Success: ${result.message ?? 'OK'}`,
+        );
         onSuccess?.();
       }
       setFile(null);
