@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookOpen, Trash2, Loader2 } from "lucide-react";
+import { BookOpen, Trash2, Loader2, Users } from "lucide-react";
 import { MinervaLogo } from "@/components/minerva-logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ type Book = {
   isCurated: boolean;
   createdAt: string | null;
   coverUrl: string | null;
+  userCount: number;
 };
 
 export function AdminBooksList() {
@@ -141,6 +142,10 @@ export function AdminBooksList() {
                           Curated
                         </span>
                       )}
+                      <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+                        <Users className="h-3 w-3" />
+                        {book.userCount}
+                      </span>
                     </div>
                   </div>
                 </div>
