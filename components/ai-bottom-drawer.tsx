@@ -264,7 +264,7 @@ export function AIBottomDrawer({
       <div
         className={`fixed left-0 right-0 z-50 bg-background ${anchor === "top" ? "top-0" : "bottom-0"}`}
         style={{
-          height: `${heightPx}px`,
+          height: mode === "full" && !isDragging ? "100dvh" : `${heightPx}px`,
           transition: isDragging ? "none" : `height ${SNAP_DURATION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
         }}
       >
