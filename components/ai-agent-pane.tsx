@@ -609,6 +609,14 @@ export function AIAgentPanel({
     fetchChats();
   }, [userId, bookId, supabase]);
 
+  // Scroll messages container to bottom (called imperatively, not on every render).
+  const scrollMessagesToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = messagesScrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }, []);
+
   // Load messages when selecting a chat (skip while sending/streaming to avoid overwriting optimistic messages)
   // Anonymous: never clear on !activeChatId - we keep ephemeral messages in state (and sessionStorage)
   useEffect(() => {
@@ -650,9 +658,15 @@ export function AIAgentPanel({
       } else {
         setMessages([]);
       }
+      scrollMessagesToBottom();
     };
     loadMessages();
-  }, [activeChatId, isLoading, supabase]);
+  }, [activeChatId, isLoading, supabase, scrollMessagesToBottom]);
+
+  // Scroll to bottom when messages become visible (e.g. mobile drawer expanding).
+  useEffect(() => {
+    if (showMessages) scrollMessagesToBottom();
+  }, [showMessages, scrollMessagesToBottom]);
 
   const handleNewChat = () => {
     setActiveChatId(null);
@@ -916,6 +930,7 @@ export function AIAgentPanel({
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    scrollMessagesToBottom();
 
     if (bookId) {
       if (!hasSelection && bookType === "pdf") {
@@ -1094,6 +1109,7 @@ export function AIAgentPanel({
           } else {
             setMessages([userMessage, assistantMessage]);
           }
+          scrollMessagesToBottom();
           await persistUserMessage(
             chatId,
             userInput,
@@ -1468,6 +1484,7 @@ export function AIAgentPanel({
           } else {
             setMessages([userMessage, assistantMessage]);
           }
+          scrollMessagesToBottom();
           await persistUserMessage(
             chatId,
             explainUserMessage,
@@ -1479,6 +1496,7 @@ export function AIAgentPanel({
       } else {
         historyForAPI = messages.map((m) => ({ role: m.role, content: m.content }));
         setMessages((prev) => [...prev, userMessage, assistantMessage]);
+        scrollMessagesToBottom();
       }
 
       const userMsgIndex = msgCount;
