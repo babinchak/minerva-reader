@@ -41,6 +41,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+.claude/
 .vscode/
 personal/
 supabase-migration.sql
