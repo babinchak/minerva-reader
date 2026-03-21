@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { hapticLight, hapticHeader } from "@/lib/haptic";
-import { useIsMobile } from "@/lib/use-media-query";
 
 const DEFAULT_MAX_EXPLAIN_SELECTION_CHARS = 4000;
 const MAX_EXPLAIN_SELECTION_CHARS = (() => {
@@ -260,7 +259,6 @@ export function AIAgentPanel({
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const sendingRef = useRef(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
-  const isMobile = useIsMobile();
   const supabase = createClient();
 
   const getSelectionSnapshot = useCallback((): SelectionSnapshot | null => {
@@ -1561,19 +1559,6 @@ export function AIAgentPanel({
     lastAutoRunNonceRef.current = autoRun.nonce;
     handleExplain(autoRun.action).catch(console.error);
   }, [autoRun, handleExplain]);
-
-  // Mobile: scroll to bottom when user sends or assistant streams, so new question and response stay visible
-  useEffect(() => {
-    if (!isMobile || messages.length === 0) return;
-    const el = messagesScrollRef.current;
-    if (!el) return;
-    const scrollToBottom = () => {
-      el.scrollTop = el.scrollHeight - el.clientHeight;
-    };
-    requestAnimationFrame(() => {
-      requestAnimationFrame(scrollToBottom);
-    });
-  }, [isMobile, messages, isLoading]);
 
   return (
     <div
