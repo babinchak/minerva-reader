@@ -609,11 +609,20 @@ export function AIAgentPanel({
     fetchChats();
   }, [userId, bookId, supabase]);
 
-  // Scroll messages container to bottom (called imperatively, not on every render).
-  const scrollMessagesToBottom = useCallback(() => {
+  // Scroll so the last user message is pinned to the top of the viewport (ChatGPT-style).
+  // The bottom spacer in the messages container ensures there's enough room to scroll past.
+  const scrollToLastUserMessage = useCallback(() => {
     requestAnimationFrame(() => {
-      const el = messagesScrollRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
+      const container = messagesScrollRef.current;
+      if (!container) return;
+      const userMsgs = container.querySelectorAll("[data-user-message]");
+      const last = userMsgs[userMsgs.length - 1] as HTMLElement | undefined;
+      if (last) {
+        // Scroll so the user message sits at the top of the scroll container
+        container.scrollTop = last.offsetTop - container.offsetTop;
+      } else {
+        container.scrollTop = container.scrollHeight;
+      }
     });
   }, []);
 
@@ -658,15 +667,15 @@ export function AIAgentPanel({
       } else {
         setMessages([]);
       }
-      scrollMessagesToBottom();
+      scrollToLastUserMessage();
     };
     loadMessages();
-  }, [activeChatId, isLoading, supabase, scrollMessagesToBottom]);
+  }, [activeChatId, isLoading, supabase, scrollToLastUserMessage]);
 
   // Scroll to bottom when messages become visible (e.g. mobile drawer expanding).
   useEffect(() => {
-    if (showMessages) scrollMessagesToBottom();
-  }, [showMessages, scrollMessagesToBottom]);
+    if (showMessages) scrollToLastUserMessage();
+  }, [showMessages, scrollToLastUserMessage]);
 
   const handleNewChat = () => {
     setActiveChatId(null);
@@ -930,7 +939,7 @@ export function AIAgentPanel({
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
-    scrollMessagesToBottom();
+    scrollToLastUserMessage();
 
     if (bookId) {
       if (!hasSelection && bookType === "pdf") {
@@ -1109,7 +1118,7 @@ export function AIAgentPanel({
           } else {
             setMessages([userMessage, assistantMessage]);
           }
-          scrollMessagesToBottom();
+          scrollToLastUserMessage();
           await persistUserMessage(
             chatId,
             userInput,
@@ -1484,7 +1493,7 @@ export function AIAgentPanel({
           } else {
             setMessages([userMessage, assistantMessage]);
           }
-          scrollMessagesToBottom();
+          scrollToLastUserMessage();
           await persistUserMessage(
             chatId,
             explainUserMessage,
@@ -1496,7 +1505,7 @@ export function AIAgentPanel({
       } else {
         historyForAPI = messages.map((m) => ({ role: m.role, content: m.content }));
         setMessages((prev) => [...prev, userMessage, assistantMessage]);
-        scrollMessagesToBottom();
+        scrollToLastUserMessage();
       }
 
       const userMsgIndex = msgCount;
@@ -1774,64 +1783,85 @@ export function AIAgentPanel({
                 (m.toolCalls?.length ?? 0) > 0 ||
                 (isLoading && messages[messages.length - 1]?.id === m.id)
             );
-            return filteredMessages.map((message, index) => {
-              const isLastMessage = index === filteredMessages.length - 1;
+
+            // Group messages into Q&A pairs: each user message starts a new group
+            const groups: { user: typeof filteredMessages[0]; assistant?: typeof filteredMessages[0] }[] = [];
+            for (const msg of filteredMessages) {
+              if (msg.role === "user") {
+                groups.push({ user: msg });
+              } else if (groups.length > 0) {
+                groups[groups.length - 1].assistant = msg;
+              }
+            }
+
+            return groups.map((group, groupIndex) => {
+              const isLastGroup = groupIndex === groups.length - 1;
+              const assistantMsg = group.assistant;
               const isStreaming =
                 isLoading &&
-                isLastMessage &&
-                message.role === "assistant" &&
-                !message.content.trim();
-              if (message.role === "user") {
-                return (
-                  <div key={message.id} className="flex flex-col gap-2 items-end">
+                assistantMsg &&
+                filteredMessages[filteredMessages.length - 1]?.id === assistantMsg.id &&
+                !assistantMsg.content.trim();
+
+              return (
+                <div
+                  key={group.user.id}
+                  data-user-message
+                  className="space-y-4"
+                  style={isLastGroup ? { minHeight: "100%" } : undefined}
+                >
+                  {/* User message */}
+                  <div className="flex flex-col gap-2 items-end">
                     <div className="flex justify-end w-full max-w-[85%]">
                       <Card className="p-3 bg-primary text-primary-foreground">
                         <p className="text-sm whitespace-pre-wrap break-words">
-                          {message.content}
+                          {group.user.content}
                         </p>
-                        {message.selectionPositionLabel && (
+                        {group.user.selectionPositionLabel && (
                           <div className="mt-2">
                             <span
-                              title={message.selectionPositionTitle}
+                              title={group.user.selectionPositionTitle}
                               className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium text-primary-foreground/80 border-primary-foreground/40 bg-primary-foreground/10"
                             >
-                              {message.selectionPositionLabel}
+                              {group.user.selectionPositionLabel}
                             </span>
                           </div>
                         )}
                       </Card>
                     </div>
                   </div>
-                );
-              }
-              return (
-                <div key={message.id} className="flex flex-col gap-2 w-full">
-                  {message.toolCalls && message.toolCalls.length > 0 && (
-                    <div className="w-full text-left">
-                      <ToolCallSteps toolCalls={message.toolCalls} />
+
+                  {/* Assistant message */}
+                  {assistantMsg && (
+                    <div className="flex flex-col gap-2 w-full">
+                      {assistantMsg.toolCalls && assistantMsg.toolCalls.length > 0 && (
+                        <div className="w-full text-left">
+                          <ToolCallSteps toolCalls={assistantMsg.toolCalls} />
+                        </div>
+                      )}
+                      <div className="w-full text-foreground select-text">
+                        {assistantMsg.content.trim() ? (
+                          <Markdown content={assistantMsg.content} />
+                        ) : isStreaming ? (
+                          <div className="flex gap-1">
+                            <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
+                            <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
+                            <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
+                          </div>
+                        ) : null}
+                        {assistantMsg.selectionPositionLabel && (
+                          <div className="mt-2">
+                            <span
+                              title={assistantMsg.selectionPositionTitle}
+                              className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium text-foreground/80 border-border bg-muted"
+                            >
+                              {assistantMsg.selectionPositionLabel}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
-                  <div className="w-full text-foreground select-text">
-                    {message.content.trim() ? (
-                      <Markdown content={message.content} />
-                    ) : isStreaming ? (
-                      <div className="flex gap-1">
-                        <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
-                        <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
-                        <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
-                      </div>
-                    ) : null}
-                    {message.selectionPositionLabel && (
-                      <div className="mt-2">
-                        <span
-                          title={message.selectionPositionTitle}
-                          className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium text-foreground/80 border-border bg-muted"
-                        >
-                          {message.selectionPositionLabel}
-                        </span>
-                      </div>
-                    )}
-                  </div>
                 </div>
               );
             });
