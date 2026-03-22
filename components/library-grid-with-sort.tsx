@@ -19,6 +19,7 @@ export interface LibraryBook {
   author: string | null;
   coverUrl: string | null;
   dateAdded: string;
+  lastOpened: string | null;
   bookType: "epub" | "pdf" | null;
 }
 
@@ -31,7 +32,7 @@ function formatAuthorDisplay(author: string | null): string {
 
 export function LibraryWithBooks({
   books,
-  initialSort = "dateAdded",
+  initialSort = "lastOpened",
   initialDir = "desc",
   initialFilter = "all",
 }: {
@@ -62,6 +63,17 @@ export function LibraryWithBooks({
       return [...filteredBooks].sort((a, b) => {
         const da = new Date(a.dateAdded).getTime();
         const db = new Date(b.dateAdded).getTime();
+        return asc ? da - db : db - da;
+      });
+    }
+    if (sort === "lastOpened") {
+      return [...filteredBooks].sort((a, b) => {
+        // Books never opened go to the end
+        if (!a.lastOpened && !b.lastOpened) return 0;
+        if (!a.lastOpened) return 1;
+        if (!b.lastOpened) return -1;
+        const da = new Date(a.lastOpened).getTime();
+        const db = new Date(b.lastOpened).getTime();
         return asc ? da - db : db - da;
       });
     }

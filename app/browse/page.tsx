@@ -81,6 +81,7 @@ export default async function BrowsePage() {
         ? `${supabaseUrl}/storage/v1/object/public/covers/${book.cover_path}`
         : null,
     dateAdded: book.created_at ?? "",
+    lastOpened: null,
     bookType:
       book.book_type === "pdf"
         ? "pdf" as const

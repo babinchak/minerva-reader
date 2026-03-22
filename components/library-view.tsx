@@ -19,7 +19,7 @@ function getInitialLibrarySort(cookieValue: string | undefined): {
   filter: LibraryBookFilter;
 } {
   const fallback = {
-    sort: "dateAdded" as const,
+    sort: "lastOpened" as const,
     dir: "desc" as const,
     filter: "all" as const,
   };
@@ -33,7 +33,7 @@ function getInitialLibrarySort(cookieValue: string | undefined): {
     };
 
     return {
-      sort: parsed.sort === "title" ? "title" : "dateAdded",
+      sort: parsed.sort === "title" ? "title" : parsed.sort === "dateAdded" ? "dateAdded" : "lastOpened",
       dir: parsed.dir === "asc" ? "asc" : "desc",
       filter:
         parsed.filter === "epub" || parsed.filter === "pdf"
@@ -57,7 +57,7 @@ export async function LibraryView() {
 
   const { data: userBookRows, error: linksError } = await supabase
     .from("user_books")
-    .select("book_id, created_at, updated_at, custom_title, custom_author, file_name")
+    .select("book_id, created_at, updated_at, last_opened_at, custom_title, custom_author, file_name")
     .eq("user_id", user.id);
 
   if (linksError) {
@@ -76,6 +76,7 @@ export async function LibraryView() {
     author: string | null;
     coverUrl: string | null;
     dateAdded: string;
+    lastOpened: string | null;
     bookType: "epub" | "pdf" | null;
   }[] = [];
   if (hasBooks && userBookRows) {
@@ -105,6 +106,9 @@ export async function LibraryView() {
     const fileNameMap = new Map(
       userBookRows.map((r) => [r.book_id, r.file_name])
     );
+    const lastOpenedMap = new Map(
+      userBookRows.map((r) => [r.book_id, r.last_opened_at])
+    );
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     books = (booksData || []).map((book) => {
       const customTitle = customTitleMap.get(book.id);
@@ -118,6 +122,7 @@ export async function LibraryView() {
           ? `${supabaseUrl}/storage/v1/object/public/covers/${book.cover_path}`
           : null,
         dateAdded: dateAddedMap.get(book.id) ?? "",
+        lastOpened: lastOpenedMap.get(book.id) ?? null,
         bookType: book.book_type === "pdf" ? "pdf" : book.book_type === "epub" ? "epub" : null,
       };
     });

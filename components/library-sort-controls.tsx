@@ -14,15 +14,17 @@ import {
   BookOpen,
   Calendar,
   ChevronDown,
+  Clock,
   FileText,
 } from "lucide-react";
 
-export type LibrarySortType = "dateAdded" | "title";
+export type LibrarySortType = "dateAdded" | "lastOpened" | "title";
 export type LibrarySortDir = "asc" | "desc";
 export type LibraryBookFilter = "all" | "epub" | "pdf";
 
 const SORT_TYPE_OPTIONS: { value: LibrarySortType; label: string; icon: React.ReactNode }[] = [
   { value: "dateAdded", label: "Date added", icon: <Calendar className="h-4 w-4" /> },
+  { value: "lastOpened", label: "Last opened", icon: <Clock className="h-4 w-4" /> },
   { value: "title", label: "Title", icon: <ArrowDownAZ className="h-4 w-4" /> },
 ];
 
@@ -119,6 +121,7 @@ export function LibrarySortControls({
   filter = "all",
   onSortChange,
   onFilterChange,
+  excludeSortOptions,
 }: {
   sort?: LibrarySortType;
   dir?: LibrarySortDir;
@@ -126,6 +129,8 @@ export function LibrarySortControls({
   /** When provided, uses callback instead of URL - for instant in-memory sorting */
   onSortChange?: (sort: LibrarySortType, dir: LibrarySortDir) => void;
   onFilterChange?: (filter: LibraryBookFilter) => void;
+  /** Sort options to hide from the dropdown */
+  excludeSortOptions?: LibrarySortType[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -156,7 +161,7 @@ export function LibrarySortControls({
     <div className="flex items-center gap-2">
       <FilterToggleGroup value={filter} onSelect={(v) => updateParams({ filter: v })} />
       <OptionDropdown
-        options={SORT_TYPE_OPTIONS}
+        options={excludeSortOptions ? SORT_TYPE_OPTIONS.filter((o) => !excludeSortOptions.includes(o.value)) : SORT_TYPE_OPTIONS}
         value={sort}
         onSelect={(v) => updateParams({ sort: v })}
         aria-label="Sort by"

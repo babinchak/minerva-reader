@@ -85,6 +85,7 @@ export function BrowseCuratedView({
               setDir(d);
             }}
             onFilterChange={setFilter}
+            excludeSortOptions={["lastOpened"]}
           />
           <Link
             href="/"
