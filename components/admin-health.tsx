@@ -4,9 +4,13 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Check,
   Loader2,
-  XCircle,
   RefreshCw,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,16 +28,170 @@ type Summary = {
   warnings: number;
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  orphaned_book: "Orphaned Book",
-  orphaned_embedding: "Orphaned Data",
-  empty_chat: "Empty Chat",
-  missing_storage: "Missing Storage",
-  orphaned_user_book: "Orphaned Link",
+type GroupMeta = {
+  label: string;
+  explanation: string;
+  severity: "warning" | "error";
 };
 
+const GROUP_META: Record<string, GroupMeta> = {
+  orphaned_book: {
+    label: "Orphaned books",
+    explanation: "Books with 0 users linked — candidates for cleanup",
+    severity: "warning",
+  },
+  orphaned_embedding: {
+    label: "Orphaned embeddings",
+    explanation: "Embedding sections referencing books that no longer exist in the database",
+    severity: "error",
+  },
+  orphaned_chat: {
+    label: "Orphaned chats",
+    explanation: "Chats referencing books that no longer exist in the database",
+    severity: "error",
+  },
+  orphaned_user_book: {
+    label: "Orphaned user-book links",
+    explanation: "user_books rows referencing books that no longer exist",
+    severity: "error",
+  },
+  orphaned_summary: {
+    label: "Orphaned summaries",
+    explanation: "Summaries referencing books that no longer exist in the database",
+    severity: "error",
+  },
+  empty_chat: {
+    label: "Empty chats",
+    explanation: "Chats that have zero messages",
+    severity: "warning",
+  },
+  missing_storage: {
+    label: "Missing storage path",
+    explanation: "Books with no storage_path set — file may be missing",
+    severity: "warning",
+  },
+  no_embeddings: {
+    label: "Books without embeddings",
+    explanation: "Books that have not been processed for vector search — AI search won't work for these",
+    severity: "warning",
+  },
+  no_summaries: {
+    label: "Books without summaries",
+    explanation: "Books that have no generated summaries",
+    severity: "warning",
+  },
+};
+
+// Order groups should appear in
+const GROUP_ORDER = [
+  "orphaned_embedding",
+  "orphaned_chat",
+  "orphaned_user_book",
+  "orphaned_summary",
+  "orphaned_book",
+  "missing_storage",
+  "no_embeddings",
+  "no_summaries",
+  "empty_chat",
+];
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+      title="Copy ID"
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+}
+
+function IssueGroup({ type, issues }: { type: string; issues: Issue[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const meta = GROUP_META[type] ?? {
+    label: type,
+    explanation: "",
+    severity: "warning" as const,
+  };
+  const isError = meta.severity === "error";
+
+  return (
+    <div className={`rounded-lg border overflow-hidden ${
+      isError ? "border-red-500/30" : "border-orange-500/30"
+    }`}>
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors ${
+          isError ? "bg-red-500/5" : "bg-orange-500/5"
+        }`}
+      >
+        {isError ? (
+          <XCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+        ) : (
+          <AlertTriangle className="h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{meta.label}</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+              isError
+                ? "bg-red-500/10 text-red-700 dark:text-red-400"
+                : "bg-orange-500/10 text-orange-700 dark:text-orange-400"
+            }`}>
+              {issues.length}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">{meta.explanation}</p>
+        </div>
+        {expanded ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border">
+          {issues.map((issue, i) => (
+            <div
+              key={`${issue.resourceId}-${i}`}
+              className="flex items-center gap-3 px-4 py-2.5 border-t border-border first:border-t-0 text-sm"
+            >
+              <div className="min-w-0 flex-1">
+                <p>{issue.description}</p>
+              </div>
+              <div className="shrink-0 flex items-center gap-1">
+                <span className="text-xs text-muted-foreground font-mono">
+                  {issue.resourceId.slice(0, 8)}...
+                </span>
+                <CopyButton text={issue.resourceId} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminHealth() {
-  const [issues, setIssues] = useState<Issue[]>([]);
+  const [groups, setGroups] = useState<Record<string, Issue[]>>({});
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +206,7 @@ export function AdminHealth() {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      setIssues(data.issues ?? []);
+      setGroups(data.groups ?? {});
       setSummary(data.summary ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to run health check");
@@ -77,6 +235,15 @@ export function AdminHealth() {
     );
   }
 
+  // Get ordered list of groups that have issues
+  const activeGroups = GROUP_ORDER.filter((type) => groups[type]?.length > 0);
+  // Include any types not in GROUP_ORDER (safety net)
+  for (const type of Object.keys(groups)) {
+    if (!GROUP_ORDER.includes(type) && groups[type].length > 0) {
+      activeGroups.push(type);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Summary banner */}
@@ -102,15 +269,20 @@ export function AdminHealth() {
                   All clear — no data integrity issues found
                 </p>
               ) : (
-                <p className="text-sm font-medium text-foreground">
-                  {summary.total} issue{summary.total !== 1 ? "s" : ""} found
-                  {summary.errors > 0 && (
-                    <span className="text-red-600 dark:text-red-400"> ({summary.errors} error{summary.errors !== 1 ? "s" : ""})</span>
-                  )}
-                  {summary.warnings > 0 && (
-                    <span className="text-orange-600 dark:text-orange-400"> ({summary.warnings} warning{summary.warnings !== 1 ? "s" : ""})</span>
-                  )}
-                </p>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {summary.total} issue{summary.total !== 1 ? "s" : ""} across {activeGroups.length} categor{activeGroups.length !== 1 ? "ies" : "y"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {summary.errors > 0 && (
+                      <span className="text-red-600 dark:text-red-400">{summary.errors} error{summary.errors !== 1 ? "s" : ""}</span>
+                    )}
+                    {summary.errors > 0 && summary.warnings > 0 && " · "}
+                    {summary.warnings > 0 && (
+                      <span className="text-orange-600 dark:text-orange-400">{summary.warnings} warning{summary.warnings !== 1 ? "s" : ""}</span>
+                    )}
+                  </p>
+                </div>
               )}
             </div>
           </div>
@@ -121,42 +293,11 @@ export function AdminHealth() {
         </div>
       )}
 
-      {/* Issue list */}
-      {issues.length > 0 && (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="hidden sm:grid grid-cols-[auto_1fr_auto] gap-4 px-4 py-2.5 bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            <span className="w-8">Sev</span>
-            <span>Issue</span>
-            <span className="w-32 text-right">Type</span>
-          </div>
-          {issues.map((issue, i) => (
-            <div
-              key={`${issue.type}-${issue.resourceId}-${i}`}
-              className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] gap-1 sm:gap-4 items-center px-4 py-3 border-t border-border first:border-t-0 hover:bg-muted/30 transition-colors"
-            >
-              <div className="w-8 flex items-center">
-                {issue.severity === "error" ? (
-                  <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                ) : (
-                  <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm">{issue.description}</p>
-                <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">
-                  {issue.resourceId}
-                </p>
-              </div>
-              <div className="sm:w-32 sm:text-right">
-                <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
-                  issue.severity === "error"
-                    ? "bg-red-500/10 text-red-700 dark:text-red-400"
-                    : "bg-orange-500/10 text-orange-700 dark:text-orange-400"
-                }`}>
-                  {TYPE_LABELS[issue.type] ?? issue.type}
-                </span>
-              </div>
-            </div>
+      {/* Grouped issues */}
+      {activeGroups.length > 0 && (
+        <div className="space-y-3">
+          {activeGroups.map((type) => (
+            <IssueGroup key={type} type={type} issues={groups[type]} />
           ))}
         </div>
       )}
