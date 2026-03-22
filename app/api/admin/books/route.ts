@@ -17,7 +17,7 @@ export async function GET() {
 
     const { data: books, error } = await serviceSupabase
       .from("books")
-      .select("id, title, author, book_type, is_curated, created_at, cover_path, user_books(count)")
+      .select("id, title, author, book_type, is_curated, created_at, last_opened_at, cover_path, user_books(count)")
       .order("title");
 
     if (error) {
@@ -32,6 +32,7 @@ export async function GET() {
       bookType: b.book_type,
       isCurated: b.is_curated ?? false,
       createdAt: b.created_at,
+      lastOpenedAt: (b as any).last_opened_at ?? null,
       coverUrl:
         b.cover_path && supabaseUrl
           ? `${supabaseUrl}/storage/v1/object/public/covers/${b.cover_path}`
