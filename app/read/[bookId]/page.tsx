@@ -64,6 +64,13 @@ export default async function ReadBookPage({ params }: PageProps) {
     redirect("/auth/login");
   }
 
+  // Record last_opened_at (fire-and-forget)
+  const now = new Date().toISOString();
+  serviceSupabase.from("books").update({ last_opened_at: now }).eq("id", bookId).then();
+  if (user && userBook) {
+    supabase.from("user_books").update({ last_opened_at: now }).eq("user_id", user.id).eq("book_id", bookId).then();
+  }
+
   const bookType = book.book_type || "epub";
 
   if (bookType === "pdf") {
