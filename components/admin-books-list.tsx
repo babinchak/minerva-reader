@@ -8,8 +8,11 @@ import {
   Calendar,
   ChevronDown,
   Clock,
+  Database,
   FileText,
+  Info,
   Loader2,
+  MessageSquare,
   Trash2,
   Users,
 } from "lucide-react";
@@ -40,6 +43,24 @@ type Book = {
   lastOpenedAt: string | null;
   coverUrl: string | null;
   userCount: number;
+};
+
+type BookDetail = {
+  book: {
+    id: string;
+    title: string;
+    author: string | null;
+    bookType: string | null;
+    isCurated: boolean;
+    createdAt: string | null;
+    lastOpenedAt: string | null;
+    storagePath: string | null;
+    fileName: string | null;
+  };
+  users: { email: string; addedAt: string | null; lastOpenedAt: string | null }[];
+  chatCount: number;
+  embeddingCount: number;
+  summaryCounts: Record<string, number>;
 };
 
 type SortType = "lastOpened" | "dateAdded" | "title" | "userCount";
@@ -114,6 +135,10 @@ export function AdminBooksList() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Book | null>(null);
 
+  const [detailBook, setDetailBook] = useState<Book | null>(null);
+  const [detail, setDetail] = useState<BookDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
   const [sort, setSort] = useState<SortType>("lastOpened");
   const [dir, setDir] = useState<SortDir>("desc");
   const [bookFilter, setBookFilter] = useState<BookFilter>("all");
@@ -177,6 +202,22 @@ export function AdminBooksList() {
       return asc ? da - db : db - da;
     });
   }, [books, sort, dir, bookFilter, curatedFilter]);
+
+  const handleDetailClick = async (book: Book) => {
+    setDetailBook(book);
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/admin/books/${book.id}/detail`);
+      if (!res.ok) throw new Error("Failed to load details");
+      const data = await res.json();
+      setDetail(data);
+    } catch {
+      // detail stays null, dialog shows error state
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   const handleDeleteClick = (book: Book) => {
     setConfirmDelete(book);
@@ -313,9 +354,17 @@ export function AdminBooksList() {
                   </div>
                 </div>
                 <div className="mt-4 flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDetailClick(book)}
+                  >
+                    <Info className="h-4 w-4" />
+                    Details
+                  </Button>
                   <a
                     href={`/read/${book.id}`}
-                    className="text-sm text-primary hover:underline"
+                    className="text-sm text-primary hover:underline flex items-center"
                   >
                     Open
                   </a>
@@ -362,6 +411,121 @@ export function AdminBooksList() {
               Delete
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Book detail drill-down */}
+      <Dialog open={!!detailBook} onOpenChange={(open) => !open && setDetailBook(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="line-clamp-2">{detailBook?.title}</DialogTitle>
+            {detailBook?.author && (
+              <DialogDescription>{detailBook.author}</DialogDescription>
+            )}
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !detail ? (
+            <p className="text-sm text-destructive py-4">Failed to load book details.</p>
+          ) : (
+            <div className="space-y-5">
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-md border border-border p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                    <Users className="h-3.5 w-3.5" />
+                    <span className="text-xs">Users</span>
+                  </div>
+                  <span className="text-lg font-bold">{detail.users.length}</span>
+                </div>
+                <div className="rounded-md border border-border p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    <span className="text-xs">Chats</span>
+                  </div>
+                  <span className="text-lg font-bold">{detail.chatCount}</span>
+                </div>
+                <div className="rounded-md border border-border p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                    <Database className="h-3.5 w-3.5" />
+                    <span className="text-xs">Embeddings</span>
+                  </div>
+                  <span className="text-lg font-bold">{detail.embeddingCount}</span>
+                </div>
+              </div>
+
+              {/* Summaries */}
+              {Object.keys(detail.summaryCounts).length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Summaries</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(detail.summaryCounts).map(([type, count]) => (
+                      <span key={type} className="rounded-md bg-muted px-2.5 py-1 text-sm">
+                        <span className="text-muted-foreground">{type}:</span>{" "}
+                        <span className="font-medium">{count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Book metadata */}
+              <div>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Details</h4>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Type</span>
+                    <span className="uppercase text-xs font-medium">{detail.book.bookType ?? "Unknown"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Curated</span>
+                    <span>{detail.book.isCurated ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Added</span>
+                    <span>{detail.book.createdAt ? new Date(detail.book.createdAt).toLocaleDateString() : "Unknown"}</span>
+                  </div>
+                  {detail.book.fileName && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground shrink-0">File</span>
+                      <span className="truncate">{detail.book.fileName}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Users list */}
+              <div>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  Users ({detail.users.length})
+                </h4>
+                {detail.users.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No users have this book.</p>
+                ) : (
+                  <div className="rounded-md border border-border overflow-hidden">
+                    {detail.users.map((u, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between px-3 py-2 text-sm border-t border-border first:border-t-0"
+                      >
+                        <span className="truncate min-w-0">{u.email}</span>
+                        <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                          {u.lastOpenedAt
+                            ? `Opened ${new Date(u.lastOpenedAt).toLocaleDateString()}`
+                            : u.addedAt
+                              ? `Added ${new Date(u.addedAt).toLocaleDateString()}`
+                              : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
