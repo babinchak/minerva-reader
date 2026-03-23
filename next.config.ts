@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["192.168.68.55", "192.168.68.55:3000"],
   // Keep pdf-to-img out of the Next.js bundle so pdfjs worker paths resolve
   // correctly at runtime (needed for PDF cover thumbnail generation).
-  serverExternalPackages: ["pdf-to-img"],
+  serverExternalPackages: ["pdf-to-img", "@napi-rs/canvas"],
   experimental: {
     proxyClientMaxBodySize: "50mb",
   },
