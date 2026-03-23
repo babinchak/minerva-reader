@@ -2,15 +2,15 @@
  * Extract the first page of a PDF as a thumbnail image for library display.
  * Outputs JPEG, resized to max 400px on longest edge, ~80% quality.
  *
- * Runs via a standalone Node script (scripts/extract-pdf-cover.mjs) to avoid
- * pdfjs worker path issues when bundled by Next.js. The API route uses pdfjs
- * for the PDF viewer; cover extraction runs in a separate process.
+ * Uses pdf-to-img (marked as a serverExternalPackage in next.config.ts so
+ * pdfjs worker paths resolve correctly without Next.js bundling interference).
  */
 
-import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { pdf } from "pdf-to-img";
+import sharp from "sharp";
+
+const THUMBNAIL_MAX_DIM = 400;
+const THUMBNAIL_JPEG_QUALITY = 80;
 
 /**
  * Render the first page of a PDF as a thumbnail JPEG buffer.
@@ -18,34 +18,16 @@ import path from "node:path";
  * @returns JPEG buffer or null if extraction fails
  */
 export async function extractPdfFirstPageAsPng(pdfBuffer: ArrayBuffer): Promise<Buffer | null> {
-  let tmpDir: string | null = null;
   try {
-    tmpDir = await mkdtemp(path.join(tmpdir(), "pdf-cover-"));
-    const pdfPath = path.join(tmpDir, "input.pdf");
-    await writeFile(pdfPath, Buffer.from(pdfBuffer));
-
-    const scriptPath = path.join(process.cwd(), "scripts", "extract-pdf-cover.mjs");
-    const child = spawn(process.execPath, [scriptPath, pdfPath], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    const chunks: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
-    const stderr: Buffer[] = [];
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-
-    await new Promise<void>((resolve, reject) => {
-      child.on("error", reject);
-      child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`exit ${code}`))));
-    });
-
-    return Buffer.concat(chunks);
+    const document = await pdf(Buffer.from(pdfBuffer), { scale: 1 });
+    const firstPageBuffer = await document.getPage(1);
+    const jpegBuffer = await sharp(Buffer.from(firstPageBuffer))
+      .resize(THUMBNAIL_MAX_DIM, THUMBNAIL_MAX_DIM, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: THUMBNAIL_JPEG_QUALITY })
+      .toBuffer();
+    return jpegBuffer;
   } catch (err) {
     console.warn("[pdf-cover] Extraction failed:", err);
     return null;
-  } finally {
-    if (tmpDir) {
-      await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
-    }
   }
 }

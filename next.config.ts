@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   // Add more origins here if you use a different IP/port.
   // NOTE: Next expects hostnames (no scheme). Ports may be included.
   allowedDevOrigins: ["192.168.68.55", "192.168.68.55:3000"],
+  // Keep pdf-to-img out of the Next.js bundle so pdfjs worker paths resolve
+  // correctly at runtime (needed for PDF cover thumbnail generation).
+  serverExternalPackages: ["pdf-to-img"],
   experimental: {
     proxyClientMaxBodySize: "50mb",
   },
