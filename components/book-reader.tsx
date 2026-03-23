@@ -132,7 +132,6 @@ function createThoriumPreferences(isMobile: boolean) {
 }
 
 const EPUB_STORAGE_KEY_SUFFIX = "-current-location";
-const EPUB_LAYOUT_FIX_STYLE_ID = "minerva-epub-layout-fix-style";
 
 interface BookReaderProps {
   rawManifest: { readingOrder?: Array<{ href?: string }> };
@@ -277,9 +276,13 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
         <ThI18nProvider>
           <ThoriumThemeSync />
           <EpubMobileLayoutForce />
+          <EpubMobileIframeHeightFix enabled={isMobile} />
           <EpubSelectionTouchGuard enabled={isMobile} />
           <EpubMobileCenterTapToggle enabled={isMobile} onToggle={toggleChrome} />
-          <div className={`epub-reader-with-custom-toolbar w-full flex flex-col ${isMobile ? "h-svh" : "h-screen"}`}>
+          <div
+            className={`epub-reader-with-custom-toolbar w-full flex flex-col box-border ${isMobile ? "h-svh" : "h-screen"}`}
+            style={isMobile ? { paddingBottom: "env(safe-area-inset-bottom, 0px)" } : undefined}
+          >
             {isMobile ? (
               <div className="relative flex-1 min-h-0 flex flex-col">
                 {/* Mobile: toolbar overlays (no layout shift, avoids text reflow) */}
@@ -665,40 +668,10 @@ function applyThemeToEpubIframes(tokens: Record<string, string>) {
       root.setProperty("--USER__visitedColor", tokens.visited ?? "");
       root.setProperty("--USER__selectionBackgroundColor", tokens.select ?? "");
       root.setProperty("--USER__selectionTextColor", tokens.onSelect ?? "");
-      ensureEpubIframeLayoutFix(doc);
     } catch {
       // Cross-origin or inaccessible iframe
     }
   }
-}
-
-function ensureEpubIframeLayoutFix(targetDoc: Document): void {
-  if (!targetDoc.head) return;
-  if (targetDoc.getElementById(EPUB_LAYOUT_FIX_STYLE_ID)) return;
-  const style = targetDoc.createElement("style");
-  style.id = EPUB_LAYOUT_FIX_STYLE_ID;
-  style.textContent = `
-@media (hover: none) and (pointer: coarse), (max-width: 767px) {
-  :root {
-    /* Readium uses strict 100vh + overflow clip in paginated mode; keep a tiny vertical buffer. */
-    --readium-noOverflow-on: 1 !important;
-    min-height: calc(100vh - 10px) !important;
-    height: calc(100vh - 10px) !important;
-    max-height: calc(100vh - 10px) !important;
-    padding-bottom: 10px !important;
-    overflow: visible !important;
-    overflow-clip-margin: border-box !important;
-  }
-
-  body {
-    /* Keep bottom descenders away from the clip edge. */
-    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px)) !important;
-    overflow: visible !important;
-    overflow-clip-margin: border-box !important;
-  }
-}
-`;
-  targetDoc.head.appendChild(style);
 }
 
 /** Forces paginated mode on mobile. Settings hiding happens in the initial preferences. */
@@ -711,6 +684,80 @@ function EpubMobileLayoutForce() {
       dispatch(setScroll(false));
     }
   }, [isMobile, dispatch]);
+  return null;
+}
+
+/**
+ * On iOS Safari, CSS viewport units (100vh) inside iframes can reference the
+ * top-level page viewport rather than the iframe's own dimensions.  Readium's
+ * column-based pagination sets :root height to 100vh, so columns end up taller
+ * than the actual iframe, clipping the bottom line of text.
+ *
+ * This component bypasses viewport-unit confusion entirely: it measures the
+ * iframe element's real pixel height via ResizeObserver and writes it directly
+ * onto the iframe document's :root as an inline style.
+ */
+function EpubMobileIframeHeightFix({ enabled }: { enabled: boolean }) {
+  useEffect(() => {
+    if (!enabled) return;
+
+    const observers = new Map<HTMLIFrameElement, ResizeObserver>();
+    const loadHandlers = new Map<HTMLIFrameElement, () => void>();
+
+    function syncHeight(iframe: HTMLIFrameElement) {
+      try {
+        const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+        if (!doc?.documentElement) return;
+        const h = iframe.clientHeight;
+        if (h <= 0) return;
+        // Subtract a bottom margin so Readium's column layout never fills to
+        // the exact pixel edge.  Without this buffer the last text line can
+        // straddle the column boundary and be partially clipped.  24 px ≈ one
+        // line of body text — enough to guarantee clearance on any device.
+        const safeH = h - 24;
+        const root = doc.documentElement.style;
+        root.setProperty("height", `${safeH}px`, "important");
+        root.setProperty("min-height", `${safeH}px`, "important");
+        root.setProperty("max-height", `${safeH}px`, "important");
+      } catch {
+        // cross-origin iframe
+      }
+    }
+
+    function attachIframe(iframe: HTMLIFrameElement) {
+      if (observers.has(iframe)) return;
+      const ro = new ResizeObserver(() => syncHeight(iframe));
+      ro.observe(iframe);
+      observers.set(iframe, ro);
+      const onLoad = () => syncHeight(iframe);
+      loadHandlers.set(iframe, onLoad);
+      iframe.addEventListener("load", onLoad);
+      syncHeight(iframe);
+    }
+
+    function syncIframes() {
+      const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+      for (const iframe of iframes) {
+        if (iframe instanceof HTMLIFrameElement) attachIframe(iframe);
+      }
+    }
+
+    syncIframes();
+    const mo = new MutationObserver(syncIframes);
+    mo.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      mo.disconnect();
+      for (const [iframe, ro] of observers) {
+        ro.disconnect();
+        const onLoad = loadHandlers.get(iframe);
+        if (onLoad) iframe.removeEventListener("load", onLoad);
+      }
+      observers.clear();
+      loadHandlers.clear();
+    };
+  }, [enabled]);
+
   return null;
 }
 
