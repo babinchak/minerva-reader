@@ -144,20 +144,12 @@ export async function finalizeNewBookAfterDirectStorageUpload(params: {
   let pdfMetadata: Awaited<ReturnType<typeof extractPdfMetadata>> | null = null;
   let epubMetadata: Awaited<ReturnType<typeof import("@/lib/epub-metadata").extractEpubMetadata>> | null =
     null;
-  let coverPng: Buffer | null = null;
 
   if (isPdf) {
     try {
       pdfMetadata = await extractPdfMetadata(arrayBuffer);
-      const { extractPdfFirstPageAsPng } = await import("@/lib/pdf-cover");
-      coverPng = await extractPdfFirstPageAsPng(arrayBuffer);
-      if (coverPng) {
-        console.log("[UPLOAD] PDF cover extracted:", coverPng.length, "bytes");
-      } else {
-        console.warn("[UPLOAD] PDF cover extraction returned null");
-      }
     } catch (err) {
-      console.warn("[UPLOAD] PDF metadata/cover extraction failed (non-fatal):", err);
+      console.warn("[UPLOAD] PDF metadata extraction failed (non-fatal):", err);
     }
   } else {
     try {
@@ -189,26 +181,6 @@ export async function finalizeNewBookAfterDirectStorageUpload(params: {
     bookData.author_sort_name = epubMetadata.authorSortName;
   if (pdfMetadata?.publishedAt != null) bookData.published_at = pdfMetadata.publishedAt;
 
-  let coverPath: string | null = null;
-  if (isPdf && coverPng && coverPng.length > 0) {
-    try {
-      coverPath = `covers/${bookId}.jpg`;
-      const { error: coverUploadError } = await serviceSupabase.storage.from("covers").upload(coverPath, coverPng, {
-        contentType: "image/jpeg",
-        upsert: true,
-      });
-      if (!coverUploadError) {
-        bookData.cover_path = coverPath;
-        console.log("[UPLOAD] Cover uploaded:", coverPath);
-      } else {
-        console.warn("[UPLOAD] Cover upload failed:", coverUploadError);
-        coverPath = null;
-      }
-    } catch (coverErr) {
-      console.warn("[UPLOAD] Cover upload failed (non-fatal):", coverErr);
-    }
-  }
-
   const { error: bookError } = await supabase.from("books").insert(bookData);
 
   if (bookError) {
@@ -220,9 +192,6 @@ export async function finalizeNewBookAfterDirectStorageUpload(params: {
     });
 
     await serviceSupabase.storage.from(bucketName).remove([storagePath]);
-    if (coverPath) {
-      await serviceSupabase.storage.from("covers").remove([coverPath]);
-    }
 
     if (bookError.code === "23505") {
       const { data: raceConditionBook } = await serviceSupabase
