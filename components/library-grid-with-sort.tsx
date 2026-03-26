@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { MinervaLogo } from "@/components/minerva-logo";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { BookCard } from "@/components/book-card";
 import { LibrarySortControls } from "@/components/library-sort-controls";
@@ -21,6 +22,8 @@ export interface LibraryBook {
   dateAdded: string;
   lastOpened: string | null;
   bookType: "epub" | "pdf" | null;
+  epubNotReady?: "processing" | "error" | null;
+  aiProcessing?: "processing" | "error" | null;
 }
 
 const LIBRARY_SORT_COOKIE = "librarySortPreferences";
@@ -41,6 +44,7 @@ export function LibraryWithBooks({
   initialDir?: LibrarySortDir;
   initialFilter?: LibraryBookFilter;
 }) {
+  const router = useRouter();
   const [sort, setSort] = useState<LibrarySortType>(initialSort);
   const [dir, setDir] = useState<LibrarySortDir>(initialDir);
   const [filter, setFilter] = useState<LibraryBookFilter>(initialFilter);
@@ -52,6 +56,21 @@ export function LibraryWithBooks({
       )}; ` +
       "path=/; max-age=31536000; samesite=lax";
   }, [sort, dir, filter]);
+
+  // Poll for processing books: refresh server data every 10s while any book is still processing
+  const hasProcessing = books.some(
+    (b) => b.epubNotReady === "processing" || b.aiProcessing === "processing"
+  );
+  const hasProcessingRef = useRef(hasProcessing);
+  hasProcessingRef.current = hasProcessing;
+
+  useEffect(() => {
+    if (!hasProcessing) return;
+    const id = setInterval(() => {
+      if (hasProcessingRef.current) router.refresh();
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [hasProcessing, router]);
 
   const visibleBooks = useMemo(() => {
     const filteredBooks =
@@ -123,6 +142,8 @@ export function LibraryWithBooks({
               author={book.author}
               coverUrl={book.coverUrl}
               bookType={book.bookType}
+              epubNotReady={book.epubNotReady}
+              aiProcessing={book.aiProcessing}
             />
           ))}
         </div>

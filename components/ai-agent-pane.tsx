@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter } from "lucide-react";
+import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -538,6 +538,7 @@ export function AIAgentPanel({
   const [processingStatus, setProcessingStatus] = useState<{
     summariesReady: boolean;
     vectorsReady: boolean;
+    failed: boolean;
   } | null>(null);
 
   // Fetch book metadata and processing status when bookId is available; poll while incomplete
@@ -549,6 +550,7 @@ export function AIAgentPanel({
     }
 
     let intervalId: ReturnType<typeof setInterval> | null = null;
+    const TIMEOUT_MS = 10 * 60 * 1000;
 
     const poll = async () => {
       const res = await fetch(`/api/books/${bookId}/metadata`);
@@ -558,13 +560,19 @@ export function AIAgentPanel({
           author?: string;
           summaries_processed_at?: string | null;
           vectors_processed_at?: string | null;
+          created_at?: string | null;
         };
         const summariesReady = Boolean(data.summaries_processed_at);
         const vectorsReady = Boolean(data.vectors_processed_at);
+        const allDone = summariesReady && vectorsReady;
+        const timedOut = !allDone && data.created_at
+          ? Date.now() - new Date(data.created_at).getTime() > TIMEOUT_MS
+          : false;
         setBookTitle(data.title || "");
         setBookAuthor(data.author || "");
-        setProcessingStatus({ summariesReady, vectorsReady });
-        return summariesReady && vectorsReady;
+        setProcessingStatus({ summariesReady, vectorsReady, failed: timedOut });
+        // Stop polling if complete or timed out
+        return allDone || timedOut;
       }
       setProcessingStatus(null);
       return false;
@@ -1715,18 +1723,27 @@ export function AIAgentPanel({
               role="status"
               aria-live="polite"
             >
-              <div className="flex items-center justify-between gap-3 rounded-md border border-amber-500/40 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-                <p className="min-w-0 flex-1">
-                  {!processingStatus.summariesReady && !processingStatus.vectorsReady ? (
-                    "Book is still processing. AI context will be limited until summaries and vector search are ready."
-                  ) : !processingStatus.summariesReady ? (
-                    "Summaries processing… Responses will have limited context until done."
-                  ) : (
-                    "Vector search processing… Deep mode uses keyword search until semantic search is ready."
-                  )}
-                </p>
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-600 dark:text-amber-400" aria-hidden />
-              </div>
+              {processingStatus.failed ? (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/5 dark:bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  <p className="min-w-0 flex-1">
+                    Processing failed. AI features may be unavailable for this book.
+                  </p>
+                  <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-amber-500/40 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+                  <p className="min-w-0 flex-1">
+                    {!processingStatus.summariesReady && !processingStatus.vectorsReady ? (
+                      "Book is still processing. AI context will be limited until summaries and vector search are ready."
+                    ) : !processingStatus.summariesReady ? (
+                      "Summaries processing… Responses will have limited context until done."
+                    ) : (
+                      "Vector search processing… Deep mode uses keyword search until semantic search is ready."
+                    )}
+                  </p>
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-600 dark:text-amber-400" aria-hidden />
+                </div>
+              )}
             </div>
           )}
         </div>

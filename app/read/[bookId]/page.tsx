@@ -2,6 +2,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { BookReader } from "@/components/book-reader";
 import PdfReaderClient from "@/components/pdf-reader-client";
+import { EpubProcessingWait } from "@/components/epub-processing-wait";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -131,19 +132,7 @@ export default async function ReadBookPage({ params }: PageProps) {
     .download(manifestPath);
 
   if (manifestError || !manifestData) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">Manifest Not Found</h1>
-          <p className="text-muted-foreground">
-            The book manifest could not be loaded. The book may still be processing.
-          </p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Path: {manifestPath}
-          </p>
-        </div>
-      </div>
-    );
+    return <EpubProcessingWait bookTitle={book.title ?? book.file_name ?? "Your book"} />;
   }
 
   // Parse the manifest JSON

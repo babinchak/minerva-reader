@@ -78,12 +78,16 @@ export async function LibraryView() {
     dateAdded: string;
     lastOpened: string | null;
     bookType: "epub" | "pdf" | null;
+    /** Stage 1: EPUB manifest not ready — book is unopenable. */
+    epubNotReady: "processing" | "error" | null;
+    /** Stage 2: Summaries/vectors still generating — book is readable but AI features pending. */
+    aiProcessing: "processing" | "error" | null;
   }[] = [];
   if (hasBooks && userBookRows) {
     const bookIds = userBookRows.map((r) => r.book_id);
     const { data: booksData, error: booksError } = await supabase
       .from("books")
-      .select("id, title, author, cover_path, book_type")
+      .select("id, title, author, cover_path, book_type, readium_manifest_path, summaries_processed_at, vectors_processed_at, created_at")
       .in("id", bookIds);
 
     if (booksError) {
@@ -110,6 +114,11 @@ export async function LibraryView() {
       userBookRows.map((r) => [r.book_id, r.last_opened_at])
     );
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const TIMEOUT_MS = 10 * 60 * 1000;
+    const timedStatus = (createdAt: string | null): "processing" | "error" => {
+      if (createdAt && Date.now() - new Date(createdAt).getTime() > TIMEOUT_MS) return "error";
+      return "processing";
+    };
     books = (booksData || []).map((book) => {
       const customTitle = customTitleMap.get(book.id);
       const fileName = fileNameMap.get(book.id);
@@ -124,6 +133,14 @@ export async function LibraryView() {
         dateAdded: dateAddedMap.get(book.id) ?? "",
         lastOpened: lastOpenedMap.get(book.id) ?? null,
         bookType: book.book_type === "pdf" ? "pdf" : book.book_type === "epub" ? "epub" : null,
+        epubNotReady: book.book_type !== "epub"
+          ? null
+          : book.readium_manifest_path
+            ? null
+            : timedStatus(book.created_at),
+        aiProcessing: (book.summaries_processed_at && book.vectors_processed_at)
+          ? null
+          : timedStatus(book.created_at),
       };
     });
   }

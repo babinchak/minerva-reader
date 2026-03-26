@@ -252,6 +252,34 @@ export async function finalizeNewBookAfterDirectStorageUpload(params: {
     );
   }
 
+  // Best-effort: upload EPUB cover image extracted during metadata parsing
+  let coverUrl: string | null = null;
+  if (epubMetadata?.coverImage && epubMetadata.coverImage.length > 0) {
+    try {
+      const ext = mimeToExt(epubMetadata.coverMimeType);
+      const coverStoragePath = `covers/${bookId}.${ext}`;
+      const coverContentType = epubMetadata.coverMimeType ?? "image/jpeg";
+      const coverBuffer = Buffer.from(epubMetadata.coverImage);
+
+      const { error: coverUploadError } = await serviceSupabase.storage
+        .from("covers")
+        .upload(coverStoragePath, coverBuffer, { contentType: coverContentType, upsert: true });
+
+      if (coverUploadError) {
+        console.warn("[UPLOAD] EPUB cover upload failed (non-fatal):", coverUploadError.message);
+      } else {
+        // Update book record with cover path
+        await serviceSupabase.from("books").update({ cover_path: coverStoragePath }).eq("id", bookId);
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if (supabaseUrl) {
+          coverUrl = `${supabaseUrl}/storage/v1/object/public/covers/${coverStoragePath}`;
+        }
+      }
+    } catch (err) {
+      console.warn("[UPLOAD] EPUB cover extraction failed (non-fatal):", err);
+    }
+  }
+
   const userBookData: { user_id: string; book_id: string; file_name?: string } = {
     user_id: userId,
     book_id: bookId,
@@ -269,8 +297,25 @@ export async function finalizeNewBookAfterDirectStorageUpload(params: {
     );
   }
 
+  const displayAuthor = (epubMetadata?.author ?? pdfMetadata?.author ?? null);
+  const authorDisplay = displayAuthor
+    ? displayAuthor.split(AUTHOR_DELIMITER).map((a: string) => a.trim()).filter(Boolean).join(", ")
+    : null;
+
   return NextResponse.json({
     book_id: bookId,
     message: "Book uploaded successfully",
+    book_title: titleFromMetadata ?? null,
+    book_author: authorDisplay,
+    book_cover_url: coverUrl,
+    book_type: bookType,
   });
+}
+
+function mimeToExt(mime: string | null): string {
+  if (!mime) return "jpg";
+  if (mime.includes("png")) return "png";
+  if (mime.includes("gif")) return "gif";
+  if (mime.includes("webp")) return "webp";
+  return "jpg";
 }

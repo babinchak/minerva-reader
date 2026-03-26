@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BookOpen, MoreVertical, Pencil, Trash2, User } from "lucide-react";
+import { AlertCircle, BookOpen, Loader2, MoreVertical, Pencil, Trash2, User } from "lucide-react";
 import { hapticLight } from "@/lib/haptic";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +23,10 @@ interface BookCardProps {
   bookType: "epub" | "pdf" | null;
   /** When false, hides the remove-from-library dropdown. Default true. */
   showRemove?: boolean;
+  /** Stage 1: EPUB manifest not ready — book is unopenable. */
+  epubNotReady?: "processing" | "error" | null;
+  /** Stage 2: Summaries/vectors still generating — book is readable but AI features pending. */
+  aiProcessing?: "processing" | "error" | null;
 }
 
 export function BookCard({
@@ -33,6 +37,8 @@ export function BookCard({
   coverUrl,
   bookType,
   showRemove = true,
+  epubNotReady,
+  aiProcessing,
 }: BookCardProps) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
@@ -54,50 +60,99 @@ export function BookCard({
     }
   };
 
+  // Stage 1: book can't be opened at all
+  const isBlocked = epubNotReady === "processing" || epubNotReady === "error";
+
+  const cardContent = (
+    <>
+      <div className={`relative mb-3 aspect-[2/3] w-full flex-none overflow-hidden rounded-md bg-muted shadow-sm ${isBlocked ? "opacity-50" : ""}`}>
+        {coverUrl ? (
+          <img
+            src={coverUrl}
+            alt={`Cover of ${title}`}
+            className={`absolute inset-0 h-full w-full object-cover ${isBlocked ? "" : "transition-transform group-hover:scale-[1.02]"}`}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <BookOpen className="h-12 w-12 text-muted-foreground" />
+          </div>
+        )}
+      </div>
+      <div className="flex-1">
+        <h3 className={`min-h-[2.75rem] line-clamp-2 font-medium ${isBlocked ? "text-muted-foreground" : "text-foreground group-hover:text-primary"}`}>
+          {title}
+        </h3>
+        {authorDisplay && (
+          <p className="mt-0 line-clamp-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <User className="h-3 w-3 shrink-0" />
+            <span className="truncate">{authorDisplay}</span>
+          </p>
+        )}
+      </div>
+    </>
+  );
+
+  // Determine the status badge
+  let statusBadge: React.ReactNode;
+  if (epubNotReady === "error") {
+    statusBadge = (
+      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.12em] text-destructive/80">
+        <AlertCircle className="h-3 w-3" />
+        Processing failed
+      </span>
+    );
+  } else if (epubNotReady === "processing") {
+    statusBadge = (
+      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Preparing book
+      </span>
+    );
+  } else if (aiProcessing === "error") {
+    statusBadge = (
+      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.12em] text-destructive/80">
+        <AlertCircle className="h-3 w-3" />
+        Processing failed
+      </span>
+    );
+  } else if (aiProcessing === "processing") {
+    statusBadge = (
+      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Processing
+      </span>
+    );
+  } else if (bookType) {
+    statusBadge = (
+      <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+        {bookType}
+      </span>
+    );
+  } else {
+    statusBadge = <div />;
+  }
+
   return (
     <div
-      className={`group flex h-full flex-col rounded-lg border bg-card px-3 pt-3 pb-2 transition-colors hover:bg-accent/50 transition-opacity ${
+      className={`group flex h-full flex-col rounded-lg border bg-card px-3 pt-3 pb-2 transition-colors ${isBlocked ? "" : "hover:bg-accent/50"} transition-opacity ${
         isRemoving ? "pointer-events-none opacity-0" : ""
       }`}
     >
-      <a
-        href={`/read/${id}`}
-        onClick={() => hapticLight()}
-        className="flex flex-1 flex-col"
-      >
-        <div className="relative mb-3 aspect-[2/3] w-full flex-none overflow-hidden rounded-md bg-muted shadow-sm">
-          {coverUrl ? (
-            <img
-              src={coverUrl}
-              alt={`Cover of ${title}`}
-              className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <BookOpen className="h-12 w-12 text-muted-foreground" />
-            </div>
-          )}
+      {isBlocked ? (
+        <div className="flex flex-1 flex-col cursor-default">
+          {cardContent}
         </div>
-        <div className="flex-1">
-          <h3 className="min-h-[2.75rem] line-clamp-2 font-medium text-foreground group-hover:text-primary">
-            {title}
-          </h3>
-          {authorDisplay && (
-            <p className="mt-0 line-clamp-1 flex items-center gap-1 text-xs text-muted-foreground">
-              <User className="h-3 w-3 shrink-0" />
-              <span className="truncate">{authorDisplay}</span>
-            </p>
-          )}
-        </div>
-      </a>
+      ) : (
+        <a
+          href={`/read/${id}`}
+          onClick={() => hapticLight()}
+          className="flex flex-1 flex-col"
+        >
+          {cardContent}
+        </a>
+      )}
       <div className="mt-1 flex h-8 items-center justify-between">
-        {bookType ? (
-          <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
-            {bookType}
-          </span>
-        ) : (
-          <div />
-        )}
+        {statusBadge}
         {showRemove ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

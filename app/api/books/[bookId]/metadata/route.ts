@@ -14,7 +14,7 @@ export async function GET(
 
     const { data: book, error: bookError } = await serviceSupabase
       .from("books")
-      .select("title, author, summaries_processed_at, vectors_processed_at, is_curated")
+      .select("title, author, summaries_processed_at, vectors_processed_at, is_curated, created_at")
       .eq("id", bookId)
       .single();
 
@@ -54,6 +54,7 @@ export async function GET(
       author: displayAuthor,
       summaries_processed_at: book.summaries_processed_at ?? null,
       vectors_processed_at: book.vectors_processed_at ?? null,
+      created_at: book.created_at ?? null,
     });
   } catch (err) {
     console.error("[metadata] Error:", err);
