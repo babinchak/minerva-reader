@@ -68,15 +68,18 @@ export function Markdown({ content, className, onRefClick }: MarkdownProps) {
           a: ({ children, href, ...props }) => {
             const ref = parsePassageRef(href);
             if (ref && onRefClick) {
+              // Strip surrounding quotation marks from the displayed text
+              const raw = extractText(children);
+              const display = raw.replace(/^[""\u201C\u201D]+/, "").replace(/[""\u201C\u201D]+$/, "").trim();
               return (
                 <button
                   type="button"
-                  onClick={() => onRefClick({ ...ref, quotedText: extractText(children) })}
-                  className="inline-flex items-baseline gap-1 text-left underline decoration-dotted underline-offset-2 text-primary hover:text-primary/90 hover:decoration-solid break-words cursor-pointer"
+                  onClick={() => onRefClick({ ...ref, quotedText: raw })}
+                  className="my-1.5 flex items-start gap-2 w-full text-left rounded-md border border-border bg-muted/50 px-3 py-2 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors cursor-pointer break-words"
                   title="Jump to this passage in the book"
                 >
-                  <BookOpen className="inline h-3 w-3 shrink-0 self-center" />
-                  {children}
+                  <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="italic">{display}</span>
                 </button>
               );
             }
