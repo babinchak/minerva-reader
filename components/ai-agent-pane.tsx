@@ -529,39 +529,120 @@ export function AIAgentPanel({
           .replace(/[""\u201C\u201D]+$/, "")
           .trim();
 
-        // If we have contentText and pageBreaks, find which page the quote is on
+        // Normalize typography: curly quotes, ligatures, dashes, ellipsis
+        const normalizeTypo = (s: string) =>
+          s
+            .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+            .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+            .replace(/\uFB01/g, "fi").replace(/\uFB02/g, "fl")
+            .replace(/\uFB00/g, "ff").replace(/\uFB03/g, "ffi").replace(/\uFB04/g, "ffl")
+            .replace(/[\u2013\u2014]/g, "-")
+            .replace(/\u2026/g, "...");
+
+        // If we have contentText and pageBreaks, find which page the quote is on.
+        // page_breaks offsets are into the RAW contentText, so we need to map back.
         if (quotedText && section.contentText && section.pageBreaks?.length) {
-          const contentLower = section.contentText.toLowerCase();
-          const quoteLower = quotedText.toLowerCase().replace(/\s+/g, " ");
-          // Try exact match first (offsets align with page_breaks)
-          let idx = contentLower.indexOf(quoteLower);
-          console.log("Exact match idx:", idx);
-          if (idx < 0) {
-            // Fuzzy: normalize whitespace in content too, but map back to original offset
-            const normalize = (s: string) => s.replace(/\s+/g, " ");
-            const normContent = normalize(contentLower);
-            const normIdx = normContent.indexOf(quoteLower);
-            console.log("Normalized match normIdx:", normIdx);
-            if (normIdx >= 0) {
-              let origIdx = 0;
-              let normCount = 0;
-              for (; origIdx < contentLower.length && normCount < normIdx; origIdx++) {
-                const ch = contentLower[origIdx];
-                const prevCh = origIdx > 0 ? contentLower[origIdx - 1] : "";
-                if (/\s/.test(ch!) && /\s/.test(prevCh!)) continue;
-                normCount++;
+          const rawContent = section.contentText;
+          const normContent = normalizeTypo(rawContent.toLowerCase()).replace(/\s+/g, " ");
+          const normQuote = normalizeTypo(quotedText.toLowerCase()).replace(/\s+/g, " ");
+
+          // Build mapping: normContent index → rawContent index
+          // We need this because page_breaks are offsets into rawContent
+          const normToRawMap: number[] = [];
+          {
+            const ligatures: Record<string, string> = {
+              "\uFB00": "ff", "\uFB01": "fi", "\uFB02": "fl",
+              "\uFB03": "ffi", "\uFB04": "ffl",
+            };
+            const ellipsis = "\u2026";
+            let prevWasSpace = false;
+            for (let ri = 0; ri < rawContent.length; ri++) {
+              const ch = rawContent[ri]!;
+              if (/\s/.test(ch)) {
+                if (!prevWasSpace) { normToRawMap.push(ri); prevWasSpace = true; }
+              } else if (ligatures[ch]) {
+                for (let k = 0; k < ligatures[ch]!.length; k++) normToRawMap.push(ri);
+                prevWasSpace = false;
+              } else if (ch === ellipsis) {
+                normToRawMap.push(ri); normToRawMap.push(ri); normToRawMap.push(ri);
+                prevWasSpace = false;
+              } else {
+                normToRawMap.push(ri);
+                prevWasSpace = false;
               }
-              idx = origIdx;
             }
           }
+
+          console.log("normQuote:", normQuote);
+          console.log("normContent (first 500):", normContent.slice(0, 500));
+          console.log("normContent (last 500):", normContent.slice(-500));
+
+          let idx = normContent.indexOf(normQuote);
+          console.log("Normalized match idx:", idx);
+
+          // Spaceless fallback
+          if (idx < 0) {
+            const stripContent = normContent.replace(/\s+/g, "");
+            const stripQuote = normQuote.replace(/\s+/g, "");
+            const stripIdx = stripContent.indexOf(stripQuote);
+            console.log("Spaceless match idx:", stripIdx);
+            if (stripIdx >= 0) {
+              let si = 0;
+              idx = 0;
+              for (; idx < normContent.length && si < stripIdx; idx++) {
+                if (!/\s/.test(normContent[idx]!)) si++;
+              }
+              while (idx < normContent.length && /\s/.test(normContent[idx]!)) idx++;
+            }
+          }
+
+          // Alpha-only fallback: strip everything except letters/digits
+          if (idx < 0) {
+            const alphaOnly = (s: string) => s.replace(/[^a-z0-9]/g, "");
+            const alphaContent = alphaOnly(normContent);
+            const alphaQuote = alphaOnly(normQuote);
+            const alphaIdx = alphaContent.indexOf(alphaQuote);
+            console.log("Alpha-only match idx:", alphaIdx);
+            if (alphaIdx >= 0) {
+              let ai = 0;
+              idx = 0;
+              for (; idx < normContent.length && ai < alphaIdx; idx++) {
+                if (/[a-z0-9]/.test(normContent[idx]!)) ai++;
+              }
+              while (idx < normContent.length && !/[a-z0-9]/.test(normContent[idx]!)) idx++;
+            }
+          }
+
+          // Partial match fallback: try first ~40 alphanumeric chars of the quote
+          if (idx < 0) {
+            const alphaOnly = (s: string) => s.replace(/[^a-z0-9]/g, "");
+            const alphaContent = alphaOnly(normContent);
+            const alphaQuote = alphaOnly(normQuote);
+            const partialQuote = alphaQuote.slice(0, 40);
+            if (partialQuote.length >= 15) {
+              const partialIdx = alphaContent.indexOf(partialQuote);
+              console.log("Partial alpha match idx:", partialIdx, "(query:", partialQuote, ")");
+              if (partialIdx >= 0) {
+                let ai = 0;
+                idx = 0;
+                for (; idx < normContent.length && ai < partialIdx; idx++) {
+                  if (/[a-z0-9]/.test(normContent[idx]!)) ai++;
+                }
+                while (idx < normContent.length && !/[a-z0-9]/.test(normContent[idx]!)) idx++;
+              }
+            }
+          }
+
           if (idx >= 0) {
+            // Map normContent index → rawContent index, then walk pageBreaks
+            const rawIdx = normToRawMap[idx] ?? 0;
             let currentPage = startPage;
             for (const breakOffset of section.pageBreaks) {
-              if (idx >= breakOffset) currentPage++;
+              if (rawIdx >= breakOffset) currentPage++;
               else break;
             }
             page = currentPage;
-            console.log("Resolved page:", page, "(startPage:", startPage, "idx:", idx, ")");
+            console.log("Resolved page:", page, "(startPage:", startPage, "rawIdx:", rawIdx, ")");
           } else {
             console.warn("Quote not found in contentText — defaulting to startPage:", startPage);
           }

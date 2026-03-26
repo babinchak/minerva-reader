@@ -835,6 +835,44 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
             return;
           }
 
+          // Alpha-only fallback: strip everything except letters/digits
+          const alphaOnly = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+          const alphaFlat = alphaOnly(normalizedFlat);
+          const alphaQuote = alphaOnly(normalizedQuote);
+          let alphaIdx = alphaFlat.indexOf(alphaQuote);
+
+          // Partial match: try first ~40 alphanumeric chars
+          if (alphaIdx < 0 && alphaQuote.length >= 15) {
+            const partialQuote = alphaQuote.slice(0, 40);
+            alphaIdx = alphaFlat.indexOf(partialQuote);
+            console.log("[NAV_REF] partial alpha matchIdx:", alphaIdx, "(query:", partialQuote, ")");
+          } else {
+            console.log("[NAV_REF] alpha-only matchIdx:", alphaIdx);
+          }
+
+          if (alphaIdx >= 0) {
+            // Map alpha index back to normalizedFlat index
+            let ai = 0;
+            let normStartIdx = 0;
+            for (normStartIdx = 0; normStartIdx < normalizedFlat.length && ai < alphaIdx; normStartIdx++) {
+              if (/[a-z0-9]/i.test(normalizedFlat[normStartIdx]!)) ai++;
+            }
+            // Walk the matched alpha length to find end
+            const matchAlphaLen = alphaIdx < 0 ? 0 : (alphaQuote.length <= 40 ? alphaQuote.length : 40);
+            let normEndIdx = normStartIdx;
+            let ac = 0;
+            while (normEndIdx < normalizedFlat.length && ac < matchAlphaLen) {
+              if (/[a-z0-9]/i.test(normalizedFlat[normEndIdx]!)) ac++;
+              normEndIdx++;
+            }
+
+            const origStart = normToOrigMap[normStartIdx] ?? 0;
+            const origEnd = (normToOrigMap[normEndIdx - 1] ?? origStart) + 1;
+            console.log("[NAV_REF] alpha match → origStart:", origStart, "origEnd:", origEnd);
+            highlightRange(origStart, origEnd);
+            return;
+          }
+
           console.warn("[NAV_REF] Quote NOT found on page", ref.page, "— no highlight");
           console.log("[NAV_REF] Full normalizedFlat:", normalizedFlat);
           return;
