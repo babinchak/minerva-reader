@@ -2,9 +2,6 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isAdminEmail } from "@/lib/admin";
 import { NextRequest, NextResponse } from "next/server";
 
-const VECTOR_BUCKET = process.env.VECTOR_BUCKET_NAME ?? "book-embeddings";
-const VECTOR_INDEX = process.env.VECTOR_INDEX_NAME ?? "sections-openai";
-
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ bookId: string }> }
@@ -33,23 +30,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Book not found" }, { status: 404 });
     }
 
-    // 1. Delete vectors from Supabase Vector storage (keys = embedding_section ids)
-    const { data: sections } = await serviceSupabase
-      .from("embedding_sections")
-      .select("id")
-      .eq("book_id", bookId);
-    const sectionIds = (sections ?? []).map((s) => s.id);
-    if (sectionIds.length > 0) {
-      try {
-        const bucket = serviceSupabase.storage.vectors.from(VECTOR_BUCKET);
-        const index = bucket.index(VECTOR_INDEX);
-        await index.deleteVectors({ keys: sectionIds });
-      } catch (vecErr) {
-        console.warn("[ADMIN] Vector deletion failed (non-fatal):", vecErr);
-      }
-    }
-
-    // 2. Delete chat_messages for chats referencing this book (then delete chats)
+    // 1. Delete chat_messages for chats referencing this book (then delete chats)
     const { data: chats } = await serviceSupabase
       .from("chats")
       .select("id")
@@ -60,10 +41,10 @@ export async function DELETE(
       await serviceSupabase.from("chats").delete().eq("book_id", bookId);
     }
 
-    // 3. Delete user_books
+    // 2. Delete user_books
     await serviceSupabase.from("user_books").delete().eq("book_id", bookId);
 
-    // 4. Null parent refs for summaries (self-reference), then delete summaries
+    // 3. Null parent refs for summaries (self-reference), then delete summaries
     const { data: summaryRows } = await serviceSupabase
       .from("summaries")
       .select("id")
@@ -78,10 +59,10 @@ export async function DELETE(
     }
     await serviceSupabase.from("summaries").delete().eq("book_id", bookId);
 
-    // 5. Delete embedding_sections
+    // 4. Delete embedding_sections (includes pgvector embeddings)
     await serviceSupabase.from("embedding_sections").delete().eq("book_id", bookId);
 
-    // 6. Delete storage files
+    // 5. Delete storage files
     const bucketName = book.book_type === "pdf" ? "pdfs" : "epubs";
     if (book.storage_path) {
       await serviceSupabase.storage.from(bucketName).remove([book.storage_path]);
@@ -92,7 +73,7 @@ export async function DELETE(
     const manifestPath = `books/${bookId}/manifest.json`;
     await serviceSupabase.storage.from("readium-manifests").remove([manifestPath]);
 
-    // 7. Delete the book row
+    // 6. Delete the book row
     const { error: deleteError } = await serviceSupabase.from("books").delete().eq("id", bookId);
 
     if (deleteError) {

@@ -26,7 +26,7 @@ export function createAgentTools(
       if (error) {
         return JSON.stringify({ results: [], error });
       }
-      // Fallback to text search when vector bucket is empty (e.g. vectors_processed_at is null)
+      // Fallback to text search when no embeddings exist (e.g. vectors_processed_at is null)
       if (results.length === 0) {
         const firstWord = query.trim().split(/\s+/).find((w) => w.length > 2) ?? query.trim().split(/\s+/)[0] ?? query;
         if (firstWord) {
