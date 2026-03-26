@@ -151,6 +151,11 @@ export interface AIAgentPanelProps {
    * If provided, show a close button in the header.
    */
   onClose?: () => void;
+  /**
+   * Called when the user clicks a navigable reference (ref: link) in an AI response.
+   * The parent reader should navigate to the position and highlight the text.
+   */
+  onNavigateToRef?: (ref: { page: number; quotedText?: string }) => void;
 }
 
 interface SummaryContext {
@@ -189,9 +194,9 @@ function isLikelyValidEpubPosition(pos: { start: string; end: string } | undefin
 function isLikelyValidPdfPosition(pos: { start: string; end: string } | undefined): boolean {
   if (!pos) return false;
   const isValid = (value: string) => {
+    // Accept both page-only ("5") and legacy "5/12/0" formats
     const parts = value.split(/[/:]/);
-    if (parts.length < 3) return false;
-    return parts.every((part) => /^\d+$/.test(part));
+    return parts.length >= 1 && parts.every((part) => /^\d+$/.test(part));
   };
   return isValid(pos.start) && isValid(pos.end);
 }
@@ -239,6 +244,7 @@ export function AIAgentPanel({
   onActionComplete,
   className,
   onClose,
+  onNavigateToRef,
 }: AIAgentPanelProps) {
   const lastAutoRunNonceRef = useRef<number | null>(null);
 
@@ -259,6 +265,8 @@ export function AIAgentPanel({
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const sendingRef = useRef(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
+  /** Map of section_id → section data for resolving navigable references to pages. */
+  const sectionCacheRef = useRef<Map<string, { startPosition: string; pageBreaks: number[] | null; contentText: string | null }>>(new Map());
   const supabase = createClient();
 
   const getSelectionSnapshot = useCallback((): SelectionSnapshot | null => {
@@ -415,6 +423,15 @@ export function AIAgentPanel({
                       : msg
                   )
                 );
+              } else if (parsed.type === "section_map") {
+                // section_map events from stream — cache for quick lookups
+                if (typeof parsed.sectionId === "string") {
+                  sectionCacheRef.current.set(parsed.sectionId, {
+                    startPosition: parsed.startPosition,
+                    pageBreaks: parsed.pageBreaks ?? null,
+                    contentText: parsed.contentText ?? null,
+                  });
+                }
               } else if (parsed.type === "status" && typeof parsed.message === "string") {
                 onStatus?.(parsed.message);
               } else if (parsed.type === "usage") {
@@ -449,6 +466,113 @@ export function AIAgentPanel({
       onActionComplete?.();
     },
     [onActionComplete]
+  );
+
+  /** Resolve a section_id ref to a page number + quoted text, then delegate to parent handler. */
+  /** Fetch section data — check in-memory cache first, then hit API. */
+  const fetchSection = useCallback(
+    async (sectionId: string): Promise<{ startPosition: string; pageBreaks: number[] | null; contentText: string | null } | null> => {
+      const cached = sectionCacheRef.current.get(sectionId);
+      if (cached) return cached;
+
+      if (!bookId) return null;
+      try {
+        const res = await fetch(`/api/books/${bookId}/sections?sectionId=${encodeURIComponent(sectionId)}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        const section = {
+          startPosition: data.startPosition as string,
+          pageBreaks: (data.pageBreaks as number[] | null) ?? null,
+          contentText: (data.contentText as string | null) ?? null,
+        };
+        sectionCacheRef.current.set(sectionId, section);
+        return section;
+      } catch {
+        return null;
+      }
+    },
+    [bookId]
+  );
+
+  const handleRefClick = useCallback(
+    (ref: { sectionId: string; quotedText?: string }) => {
+      if (!onNavigateToRef) return;
+
+      // Fire async lookup, then navigate
+      (async () => {
+        console.group("[REF_CLICK] handleRefClick");
+        console.log("sectionId:", ref.sectionId, "quotedText:", ref.quotedText);
+
+        const section = await fetchSection(ref.sectionId);
+        if (!section) {
+          console.warn("Section not found for id:", ref.sectionId);
+          console.groupEnd();
+          return;
+        }
+
+        console.log("Section:", {
+          startPosition: section.startPosition,
+          pageBreaks: section.pageBreaks,
+          contentTextLength: section.contentText?.length ?? 0,
+        });
+
+        const startPage = parseInt(section.startPosition, 10);
+        if (Number.isNaN(startPage)) {
+          console.warn("startPosition is not a number:", section.startPosition);
+          console.groupEnd();
+          return;
+        }
+
+        let page = startPage;
+        const quotedText = ref.quotedText
+          ?.replace(/^[""\u201C\u201D]+/, "")
+          .replace(/[""\u201C\u201D]+$/, "")
+          .trim();
+
+        // If we have contentText and pageBreaks, find which page the quote is on
+        if (quotedText && section.contentText && section.pageBreaks?.length) {
+          const contentLower = section.contentText.toLowerCase();
+          const quoteLower = quotedText.toLowerCase().replace(/\s+/g, " ");
+          // Try exact match first (offsets align with page_breaks)
+          let idx = contentLower.indexOf(quoteLower);
+          console.log("Exact match idx:", idx);
+          if (idx < 0) {
+            // Fuzzy: normalize whitespace in content too, but map back to original offset
+            const normalize = (s: string) => s.replace(/\s+/g, " ");
+            const normContent = normalize(contentLower);
+            const normIdx = normContent.indexOf(quoteLower);
+            console.log("Normalized match normIdx:", normIdx);
+            if (normIdx >= 0) {
+              let origIdx = 0;
+              let normCount = 0;
+              for (; origIdx < contentLower.length && normCount < normIdx; origIdx++) {
+                const ch = contentLower[origIdx];
+                const prevCh = origIdx > 0 ? contentLower[origIdx - 1] : "";
+                if (/\s/.test(ch!) && /\s/.test(prevCh!)) continue;
+                normCount++;
+              }
+              idx = origIdx;
+            }
+          }
+          if (idx >= 0) {
+            let currentPage = startPage;
+            for (const breakOffset of section.pageBreaks) {
+              if (idx >= breakOffset) currentPage++;
+              else break;
+            }
+            page = currentPage;
+            console.log("Resolved page:", page, "(startPage:", startPage, "idx:", idx, ")");
+          } else {
+            console.warn("Quote not found in contentText — defaulting to startPage:", startPage);
+          }
+        }
+
+        console.log("Navigating to page", page);
+        console.groupEnd();
+        onNavigateToRef({ page, quotedText: ref.quotedText });
+      })();
+    },
+    [onNavigateToRef, fetchSection]
   );
 
   const [authChecked, setAuthChecked] = useState(false);
@@ -1858,7 +1982,7 @@ export function AIAgentPanel({
                       )}
                       <div className="w-full text-foreground select-text">
                         {assistantMsg.content.trim() ? (
-                          <Markdown content={assistantMsg.content} />
+                          <Markdown content={assistantMsg.content} onRefClick={handleRefClick} />
                         ) : isStreaming ? (
                           <div className="flex gap-1">
                             <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />

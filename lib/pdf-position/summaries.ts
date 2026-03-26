@@ -9,30 +9,11 @@ interface PdfSummary {
   summary_text: string | null;
 }
 
-interface PdfPosition {
-  page: number;
-  line: number;
-  charOffset: number;
-}
-
-function parsePdfPosition(position: string | null | undefined): PdfPosition | null {
+/** Parse the page number from a position string. Supports both "5" and legacy "5/12/0". */
+function parsePdfPage(position: string | null | undefined): number | null {
   if (!position) return null;
-  const parts = position.split(/[/:]/).map((part) => parseInt(part, 10));
-  if (parts.length < 3 || parts.some((value) => Number.isNaN(value))) {
-    return null;
-  }
-
-  return {
-    page: parts[0],
-    line: parts[1],
-    charOffset: parts[2],
-  };
-}
-
-function comparePdfPositions(a: PdfPosition, b: PdfPosition): number {
-  if (a.page !== b.page) return a.page - b.page;
-  if (a.line !== b.line) return a.line - b.line;
-  return a.charOffset - b.charOffset;
+  const page = parseInt(position.split("/")[0], 10);
+  return Number.isNaN(page) ? null : page;
 }
 
 function positionsIntersect(
@@ -41,19 +22,14 @@ function positionsIntersect(
   summaryStart: string | null,
   summaryEnd: string | null
 ): boolean {
-  const selStart = parsePdfPosition(selectionStart);
-  const selEnd = parsePdfPosition(selectionEnd);
-  const sumStart = parsePdfPosition(summaryStart);
-  const sumEnd = summaryEnd ? parsePdfPosition(summaryEnd) : null;
+  const selStartPage = parsePdfPage(selectionStart);
+  const selEndPage = parsePdfPage(selectionEnd);
+  const sumStartPage = parsePdfPage(summaryStart);
+  const sumEndPage = parsePdfPage(summaryEnd) ?? sumStartPage;
 
-  if (!selStart || !selEnd || !sumStart) {
-    return false;
-  }
+  if (selStartPage == null || selEndPage == null || sumStartPage == null) return false;
 
-  const startsBeforeEnd = sumEnd ? comparePdfPositions(selStart, sumEnd) <= 0 : true;
-  const endsAfterStart = comparePdfPositions(selEnd, sumStart) >= 0;
-
-  return startsBeforeEnd && endsAfterStart;
+  return selStartPage <= (sumEndPage ?? sumStartPage) && selEndPage >= sumStartPage;
 }
 
 export async function queryPdfSummariesForPosition(

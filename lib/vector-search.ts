@@ -11,6 +11,7 @@ export interface VectorSearchResult {
   content_text: string;
   start_position: string | null;
   end_position: string | null;
+  page_breaks: number[] | null;
   similarity: number | null;
   section_id?: string;
 }
@@ -68,6 +69,7 @@ export async function vectorSearch(
         content_text: content,
         start_position: row.start_position ?? null,
         end_position: row.end_position ?? null,
+        page_breaks: Array.isArray(row.page_breaks) ? row.page_breaks : null,
         similarity: typeof row.similarity === "number" ? row.similarity : null,
         section_id: row.id ?? undefined,
       };
@@ -86,6 +88,7 @@ export interface PassageContentResult {
   content_text: string;
   start_position: string | null;
   end_position: string | null;
+  page_breaks: number[] | null;
 }
 
 /** Fetch full content for specific sections. Use after vector_search when you need full text to quote or cite. */
@@ -126,7 +129,7 @@ export async function getPassageContent(
     const supabase = createServiceClient();
     const { data: sections, error } = await supabase
       .from("embedding_sections")
-      .select("id, content_text, start_position, end_position")
+      .select("id, content_text, start_position, end_position, page_breaks")
       .eq("book_id", bookId)
       .in("id", uniqueIds);
 
@@ -135,11 +138,12 @@ export async function getPassageContent(
       return { passages: [], error: error.message };
     }
 
-    const passages: PassageContentResult[] = (sections ?? []).map((row) => ({
+    const passages: PassageContentResult[] = (sections ?? []).map((row: any) => ({
       section_id: row.id,
       content_text: row.content_text ?? "",
       start_position: row.start_position ?? null,
       end_position: row.end_position ?? null,
+      page_breaks: Array.isArray(row.page_breaks) ? row.page_breaks : null,
     }));
 
     return { passages };

@@ -9,7 +9,10 @@ export interface PdfLocalSelectionContext {
 
 function parsePosition(pos: string): { page: number; itemIndex: number; charOffset: number } | null {
   const parts = pos.split(/[/:]/).map((p) => parseInt(p, 10));
-  if (parts.length < 3 || parts.some((v) => Number.isNaN(v))) return null;
+  if (parts.length === 0 || parts.some((v) => Number.isNaN(v))) return null;
+  // Support page-only format ("5") — treat as start of page
+  if (parts.length === 1) return { page: parts[0], itemIndex: 0, charOffset: 0 };
+  if (parts.length < 3) return null;
   return { page: parts[0], itemIndex: parts[1], charOffset: parts[2] };
 }
 

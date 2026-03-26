@@ -39,6 +39,7 @@ export function createAgentTools(
                 snippet: r.content_text,
                 start_position: r.start_position,
                 end_position: r.end_position,
+                page_breaks: r.page_breaks,
                 section_id: r.section_id,
                 similarity: null,
               })),
@@ -53,6 +54,7 @@ export function createAgentTools(
           snippet: r.content_text,
           start_position: r.start_position,
           end_position: r.end_position,
+          page_breaks: r.page_breaks,
           section_id: r.section_id,
           similarity: r.similarity,
         })),
@@ -90,6 +92,7 @@ export function createAgentTools(
           content_text: p.content_text,
           start_position: p.start_position,
           end_position: p.end_position,
+          page_breaks: p.page_breaks,
         })),
       });
     },
@@ -122,6 +125,7 @@ export function createAgentTools(
           snippet: r.content_text,
           start_position: r.start_position,
           end_position: r.end_position,
+          page_breaks: r.page_breaks,
           section_id: r.section_id,
         })),
         _hint: vectorsReady

@@ -31,6 +31,10 @@ export interface AIAssistantProps {
    * Called when the desktop AI pane opens or closes. Used to hide toolbar buttons (e.g. "Ask Minerva") when the pane is open.
    */
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Called when the user clicks a navigable reference in an AI response.
+   */
+  onNavigateToRef?: (ref: { page: number; quotedText?: string }) => void;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -50,6 +54,7 @@ export function AIAssistant(props: AIAssistantProps) {
       pdfDocument={props.pdfDocument}
       minMode={props.mobileDrawerMinMode}
       anchor={props.mobileDrawerAnchor}
+      onNavigateToRef={props.onNavigateToRef}
     />
   );
   }
@@ -66,6 +71,7 @@ function DesktopAIAssistant({
   requestRun = null,
   requestOpen = null,
   onOpenChange,
+  onNavigateToRef,
 }: AIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const openedViaRequestRunRef = useRef(false);
@@ -156,8 +162,9 @@ function DesktopAIAssistant({
       showSelectionChip: true,
       onClose: () => setIsOpen(false),
       onActionComplete: handleActionComplete,
+      onNavigateToRef,
     }),
-    [autoRun, bookId, bookType, currentPage, pdfDocument, rawManifest, selectedText, handleActionComplete]
+    [autoRun, bookId, bookType, currentPage, pdfDocument, rawManifest, selectedText, handleActionComplete, onNavigateToRef]
   );
 
   return (

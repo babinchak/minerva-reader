@@ -93,8 +93,8 @@ export function getCurrentPdfPageContext(options?: {
   return {
     pageNumber,
     text,
-    startPosition: `${pageNumber}/0/0`,
-    endPosition: `${pageNumber}/${Number.isNaN(lastItemIndex) ? spans.length - 1 : lastItemIndex}/${endCharOffset}`,
+    startPosition: `${pageNumber}`,
+    endPosition: `${pageNumber}`,
   };
 }
 

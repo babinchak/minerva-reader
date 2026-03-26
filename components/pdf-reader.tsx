@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -675,6 +675,252 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
     return true;
   };
   goToPageRef.current = goToPage;
+
+  // --- Navigable reference highlight ---
+  const refHighlightCleanupRef = useRef<(() => void) | null>(null);
+
+  const handleNavigateToRef = useCallback(
+    (ref: { page: number; quotedText?: string }) => {
+      console.group("[NAV_REF] handleNavigateToRef");
+      console.log("page:", ref.page, "quotedText:", ref.quotedText);
+
+      // Clean up any previous ref highlight
+      refHighlightCleanupRef.current?.();
+      refHighlightCleanupRef.current = null;
+
+      const quotedText = ref.quotedText?.trim();
+      // Strip surrounding quotes the AI often wraps around the text
+      const cleanQuote = quotedText
+        ?.replace(/^[""\u201C\u201D]+/, "")
+        .replace(/[""\u201C\u201D]+$/, "")
+        .trim();
+
+      console.log("cleanQuote:", cleanQuote);
+
+      if (!cleanQuote || !ref.page) {
+        console.warn("Aborting: no cleanQuote or no page", { cleanQuote, page: ref.page });
+        console.groupEnd();
+        return;
+      }
+
+      // Navigate to the target page
+      console.log("Calling goToPage:", ref.page);
+      goToPageRef.current(ref.page);
+
+      // Poll for the text layer to render (async), then find and highlight text
+      let attempt = 0;
+      const maxAttempts = 15;
+      let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const tryHighlight = () => {
+        attempt++;
+        // Find spans for this page number anywhere in the viewer
+        const selector = `.pdfViewer [data-page-number="${ref.page}"][data-item-index]`;
+        const allSpans = document.querySelectorAll<HTMLSpanElement>(selector);
+        console.log(`[NAV_REF] tryHighlight attempt ${attempt}/${maxAttempts}: selector="${selector}", spans found: ${allSpans.length}`);
+        if (allSpans.length === 0) {
+          if (attempt < maxAttempts) {
+            pollTimer = setTimeout(tryHighlight, 100);
+          } else {
+            console.warn("[NAV_REF] Gave up polling — no spans found after", maxAttempts, "attempts");
+          }
+          return;
+        }
+
+        const spans = Array.from(allSpans);
+
+        // Concatenate all span text to build the page's flat string,
+        // tracking each span's start offset in the flat string.
+        const spanOffsets: { span: HTMLSpanElement; start: number; end: number }[] = [];
+        let flatText = "";
+        for (const span of spans) {
+          const text = span.textContent ?? "";
+          const start = flatText.length;
+          flatText += text;
+          spanOffsets.push({ span, start, end: flatText.length });
+        }
+
+        console.log("[NAV_REF] flatText length:", flatText.length);
+        console.log("[NAV_REF] flatText preview (first 500):", flatText.slice(0, 500));
+
+        // Normalize for comparison: collapse whitespace, standardize quotes/ligatures
+        const normalizeTypography = (s: string) =>
+          s
+            .replace(/[\u2018\u2019\u201A\u2032]/g, "'")  // curly single quotes → straight
+            .replace(/[\u201C\u201D\u201E\u2033]/g, '"')   // curly double quotes → straight
+            .replace(/\uFB01/g, "fi")                       // fi ligature
+            .replace(/\uFB02/g, "fl")                       // fl ligature
+            .replace(/\uFB00/g, "ff")                       // ff ligature
+            .replace(/\uFB03/g, "ffi")                      // ffi ligature
+            .replace(/\uFB04/g, "ffl")                      // ffl ligature
+            .replace(/[\u2013\u2014]/g, "-")                // en/em dash → hyphen
+            .replace(/\u2026/g, "...")                       // ellipsis
+            .replace(/\s+/g, " ");
+        const normalizedFlat = normalizeTypography(flatText);
+        const normalizedQuote = normalizeTypography(cleanQuote!);
+
+        console.log("[NAV_REF] normalizedFlat length:", normalizedFlat.length);
+        console.log("[NAV_REF] normalizedQuote:", normalizedQuote);
+
+        // Build a mapping from normalizedFlat index → original flatText index.
+        // Ligatures expand (e.g. ﬁ→fi = 1 orig char → 2 norm chars), so multiple
+        // norm indices can map to the same orig index.
+        const ligatureExpansions: Record<string, string> = {
+          "\uFB00": "ff", "\uFB01": "fi", "\uFB02": "fl",
+          "\uFB03": "ffi", "\uFB04": "ffl",
+        };
+        const normToOrigMap: number[] = [];
+        {
+          let oi = 0;
+          let prevWasSpace = false;
+          while (oi < flatText.length) {
+            const ch = flatText[oi]!;
+            const expansion = ligatureExpansions[ch];
+            if (/\s/.test(ch)) {
+              if (!prevWasSpace) {
+                normToOrigMap.push(oi); // collapsed space
+                prevWasSpace = true;
+              }
+              oi++;
+            } else if (expansion) {
+              // Ligature: 1 orig char maps to N norm chars
+              for (let k = 0; k < expansion.length; k++) {
+                normToOrigMap.push(oi);
+              }
+              prevWasSpace = false;
+              oi++;
+            } else {
+              normToOrigMap.push(oi);
+              prevWasSpace = false;
+              oi++;
+            }
+          }
+        }
+
+        // Try case-insensitive match
+        let matchIdx = normalizedFlat.toLowerCase().indexOf(normalizedQuote.toLowerCase());
+        console.log("[NAV_REF] matchIdx (case-insensitive):", matchIdx);
+
+        // Fallback: strip ALL spaces from both and match, then map back.
+        // PDF spans often concatenate without spaces between them (e.g. "Muggle,he'd").
+        if (matchIdx < 0) {
+          const stripSpaces = (s: string) => s.replace(/\s+/g, "");
+          const strippedFlat = stripSpaces(normalizedFlat.toLowerCase());
+          const strippedQuote = stripSpaces(normalizedQuote.toLowerCase());
+          const strippedIdx = strippedFlat.indexOf(strippedQuote);
+          console.log("[NAV_REF] spaceless matchIdx:", strippedIdx);
+
+          if (strippedIdx >= 0) {
+            // Map stripped index back to normalizedFlat index
+            let si = 0;
+            let normStartIdx = 0;
+            for (normStartIdx = 0; normStartIdx < normalizedFlat.length && si < strippedIdx; normStartIdx++) {
+              if (!/\s/.test(normalizedFlat[normStartIdx]!)) si++;
+            }
+            // Skip any leading whitespace at the match point
+            while (normStartIdx < normalizedFlat.length && /\s/.test(normalizedFlat[normStartIdx]!)) normStartIdx++;
+
+            // Find the end: walk strippedQuote.length non-space chars from normStartIdx
+            let normEndIdx = normStartIdx;
+            let sc = 0;
+            while (normEndIdx < normalizedFlat.length && sc < strippedQuote.length) {
+              if (!/\s/.test(normalizedFlat[normEndIdx]!)) sc++;
+              normEndIdx++;
+            }
+
+            const origStart = normToOrigMap[normStartIdx] ?? 0;
+            const origEnd = (normToOrigMap[normEndIdx - 1] ?? origStart) + 1;
+            console.log("[NAV_REF] spaceless match → origStart:", origStart, "origEnd:", origEnd);
+            highlightRange(origStart, origEnd);
+            return;
+          }
+
+          console.warn("[NAV_REF] Quote NOT found on page", ref.page, "— no highlight");
+          console.log("[NAV_REF] Full normalizedFlat:", normalizedFlat);
+          return;
+        }
+
+        // Map normalized match range back to original flat text offsets
+        const origStart = normToOrigMap[matchIdx] ?? 0;
+        const normEnd = matchIdx + normalizedQuote.length - 1;
+        const origEnd = (normToOrigMap[normEnd] ?? origStart) + 1;
+        console.log("[NAV_REF] origStart:", origStart, "origEnd:", origEnd);
+
+        highlightRange(origStart, origEnd);
+
+        function highlightRange(origStart: number, origEnd: number) {
+          // Find which spans overlap with [origStart, origEnd) and wrap matched chars in <mark>
+          const marks: HTMLElement[] = [];
+          for (const { span, start, end } of spanOffsets) {
+            if (end <= origStart || start >= origEnd) continue;
+            const text = span.textContent ?? "";
+            const localStart = Math.max(0, origStart - start);
+            const localEnd = Math.min(text.length, origEnd - start);
+
+            const frag = document.createDocumentFragment();
+            if (localStart > 0) {
+              frag.appendChild(document.createTextNode(text.slice(0, localStart)));
+            }
+            const mark = document.createElement("mark");
+            mark.className = "ref-highlight";
+            mark.style.backgroundColor = "rgba(255, 200, 0, 0.4)";
+            mark.style.borderRadius = "2px";
+            mark.style.color = "transparent";
+            mark.textContent = text.slice(localStart, localEnd);
+            marks.push(mark);
+            frag.appendChild(mark);
+            if (localEnd < text.length) {
+              frag.appendChild(document.createTextNode(text.slice(localEnd)));
+            }
+            span.textContent = "";
+            span.appendChild(frag);
+          }
+
+          console.log("[NAV_REF] marks created:", marks.length);
+
+          // Center the first mark in the scroll container
+          if (marks[0]) {
+            const scroller = scrollRef.current;
+            console.log("[NAV_REF] scrollRef available:", !!scroller);
+            if (scroller) {
+              centerElementInScroller(scroller, marks[0]);
+            } else {
+              marks[0].scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }
+
+          // Auto-clear highlight after 5 seconds
+          const cleanup = () => {
+            for (const mark of marks) {
+              const parent = mark.parentElement;
+              if (!parent) continue;
+              parent.textContent =
+                Array.from(parent.childNodes)
+                  .map((n) => n.textContent ?? "")
+                  .join("");
+            }
+            refHighlightCleanupRef.current = null;
+          };
+
+          const clearTimer = setTimeout(cleanup, 5000);
+          refHighlightCleanupRef.current = () => {
+            clearTimeout(clearTimer);
+            cleanup();
+          };
+        }
+      };
+
+      // Start polling after a short delay to let goToPage trigger rendering
+      pollTimer = setTimeout(tryHighlight, 150);
+      console.groupEnd();
+
+      // Ensure poll timer gets cleaned up if another ref click happens before it fires
+      refHighlightCleanupRef.current = () => {
+        if (pollTimer) clearTimeout(pollTimer);
+      };
+    },
+    []
+  );
 
   const dispatchPdfFind = (opts: { type?: string; findPrevious?: boolean }) => {
     const api = pdfFindApiRef.current;
@@ -1992,6 +2238,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
             requestRun={aiRequest}
             requestOpen={openAiRequest}
             onOpenChange={(open) => setIsAiPaneOpen(open)}
+            onNavigateToRef={handleNavigateToRef}
           />
         )}
       </div>

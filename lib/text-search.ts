@@ -4,6 +4,7 @@ export interface TextSearchResult {
   content_text: string;
   start_position: string | null;
   end_position: string | null;
+  page_breaks: number[] | null;
   section_id?: string;
 }
 
@@ -73,7 +74,7 @@ export async function textSearch(
   const db = userId ? supabase : serviceSupabase;
   let queryBuilder = db
     .from("embedding_sections")
-    .select("id, content_text, start_position, end_position")
+    .select("id, content_text, start_position, end_position, page_breaks")
     .eq("book_id", bookId);
 
   if (terms.length === 0) {
@@ -124,6 +125,7 @@ export async function textSearch(
       content_text: content,
       start_position: row.start_position ?? null,
       end_position: row.end_position ?? null,
+      page_breaks: Array.isArray((row as any).page_breaks) ? (row as any).page_breaks : null,
       section_id: row.id,
     });
     if (results.length >= maxResults) break;

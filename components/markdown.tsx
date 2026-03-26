@@ -1,14 +1,47 @@
 "use client";
 
+import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { BookOpen } from "lucide-react";
+
+/** Recursively extract plain text from React children. */
+function extractText(node: React.ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (!node) return "";
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (React.isValidElement(node)) {
+    return extractText((node.props as { children?: React.ReactNode }).children);
+  }
+  return "";
+}
+
+export interface PassageRef {
+  /** The section_id (UUID) from the embedding_sections table. */
+  sectionId: string;
+  /** The quoted text shown in the link — used for text-based search on the page. */
+  quotedText?: string;
+}
+
+/** Parse a `ref:<section_id>` href into a PassageRef, or null if it doesn't match. */
+export function parsePassageRef(href: string | undefined): PassageRef | null {
+  if (!href) return null;
+  // ref:<section_id> where section_id is a UUID or any non-empty string
+  const match = href.match(/^ref:(.+)$/);
+  if (match && match[1]) {
+    return { sectionId: match[1] };
+  }
+  return null;
+}
 
 type MarkdownProps = {
   content: string;
   className?: string;
+  onRefClick?: (ref: PassageRef) => void;
 };
 
-export function Markdown({ content, className }: MarkdownProps) {
+export function Markdown({ content, className, onRefClick }: MarkdownProps) {
   return (
     <div
       className={[
@@ -25,17 +58,40 @@ export function Markdown({ content, className }: MarkdownProps) {
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={(url) => {
+          // Allow ref: links through without sanitization
+          if (url.startsWith("ref:")) return url;
+          // Fall back to default sanitization for everything else
+          return url;
+        }}
         components={{
-          a: ({ children, ...props }) => (
-            <a
-              {...props}
-              target="_blank"
-              rel="noreferrer"
-              className="underline underline-offset-2 text-primary hover:text-primary/90 break-words"
-            >
-              {children}
-            </a>
-          ),
+          a: ({ children, href, ...props }) => {
+            const ref = parsePassageRef(href);
+            if (ref && onRefClick) {
+              return (
+                <button
+                  type="button"
+                  onClick={() => onRefClick({ ...ref, quotedText: extractText(children) })}
+                  className="inline-flex items-baseline gap-1 text-left underline decoration-dotted underline-offset-2 text-primary hover:text-primary/90 hover:decoration-solid break-words cursor-pointer"
+                  title="Jump to this passage in the book"
+                >
+                  <BookOpen className="inline h-3 w-3 shrink-0 self-center" />
+                  {children}
+                </button>
+              );
+            }
+            return (
+              <a
+                {...props}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2 text-primary hover:text-primary/90 break-words"
+              >
+                {children}
+              </a>
+            );
+          },
           p: ({ children }) => (
             <p className="whitespace-pre-wrap break-words">{children}</p>
           ),

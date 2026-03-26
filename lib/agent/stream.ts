@@ -68,6 +68,33 @@ export async function* streamAgentToSSE(
       }
       if (updates.tools?.messages?.length) {
         yield `data: ${JSON.stringify({ type: "status", message: "Processing results..." })}\n\n`;
+        // Extract section data from tool results so the client can map section_id → page
+        for (const toolMsg of updates.tools.messages) {
+          const content = typeof (toolMsg as { content?: unknown }).content === "string"
+            ? (toolMsg as { content: string }).content
+            : null;
+          if (!content) continue;
+          try {
+            const parsed = JSON.parse(content) as {
+              results?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; content_text?: string }>;
+              passages?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; content_text?: string }>;
+            };
+            const items = parsed.results ?? parsed.passages ?? [];
+            for (const item of items) {
+              if (item.section_id && item.start_position) {
+                yield `data: ${JSON.stringify({
+                  type: "section_map",
+                  sectionId: item.section_id,
+                  startPosition: item.start_position,
+                  pageBreaks: item.page_breaks ?? null,
+                  contentText: item.content_text ?? null,
+                })}\n\n`;
+              }
+            }
+          } catch {
+            // Not JSON or unexpected shape — skip
+          }
+        }
       }
     }
 

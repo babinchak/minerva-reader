@@ -1123,6 +1123,19 @@
     --highlight-selected-bg-color: hsl(var(--primary) / 0.52);
   }
 
+  /* Navigable reference highlight: pulsing glow so the user spots the quoted passage. */
+  .pdf-scroll-host .pdfViewer .textLayer span.ref-highlight {
+    background-color: hsl(var(--primary) / 0.30);
+    border-radius: 2px;
+    animation: ref-highlight-fade 4s ease-out forwards;
+  }
+
+  @keyframes ref-highlight-fade {
+    0% { background-color: hsl(var(--primary) / 0.45); }
+    70% { background-color: hsl(var(--primary) / 0.30); }
+    100% { background-color: transparent; }
+  }
+
   /* Make text selection clearly visible inside the AI pane (both themes). */
   [data-ai-pane="true"] ::selection {
     background: hsl(var(--primary) / 0.35);

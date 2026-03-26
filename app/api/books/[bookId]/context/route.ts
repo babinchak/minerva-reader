@@ -10,20 +10,18 @@ export interface ContextSummary {
   summary_text: string | null;
 }
 
-function parsePdfPosition(position: string | null | undefined): { page: number; line: number; charOffset: number } | null {
+/** Parse a PDF position string. Supports both new page-only format ("5") and legacy "5/12/0". */
+function parsePdfPage(position: string | null | undefined): number | null {
   if (!position) return null;
-  const parts = position.split(/[/:]/).map((p) => parseInt(p, 10));
-  if (parts.length < 3 || parts.some((v) => Number.isNaN(v))) return null;
-  return { page: parts[0], line: parts[1], charOffset: parts[2] };
+  const page = parseInt(position.split("/")[0], 10);
+  return Number.isNaN(page) ? null : page;
 }
 
 function comparePdfPositions(a: string | null, b: string | null): number {
-  const pa = parsePdfPosition(a);
-  const pb = parsePdfPosition(b);
-  if (!pa || !pb) return (a || "").localeCompare(b || "");
-  if (pa.page !== pb.page) return pa.page - pb.page;
-  if (pa.line !== pb.line) return pa.line - pb.line;
-  return pa.charOffset - pb.charOffset;
+  const pa = parsePdfPage(a);
+  const pb = parsePdfPage(b);
+  if (pa == null || pb == null) return (a || "").localeCompare(b || "");
+  return pa - pb;
 }
 
 function pdfPositionsIntersect(
@@ -32,14 +30,13 @@ function pdfPositionsIntersect(
   sumStart: string | null,
   sumEnd: string | null
 ): boolean {
-  const s1 = parsePdfPosition(selStart);
-  const s2 = parsePdfPosition(selEnd);
-  const m1 = parsePdfPosition(sumStart);
-  const m2 = sumEnd ? parsePdfPosition(sumEnd) : null;
-  if (!s1 || !s2 || !m1) return false;
-  const beforeEnd = !m2 || comparePdfPositions(selStart, sumEnd) <= 0;
-  const afterStart = comparePdfPositions(selEnd, sumStart) >= 0;
-  return beforeEnd && afterStart;
+  const selStartPage = parsePdfPage(selStart);
+  const selEndPage = parsePdfPage(selEnd);
+  const sumStartPage = parsePdfPage(sumStart);
+  const sumEndPage = parsePdfPage(sumEnd) ?? sumStartPage;
+  if (selStartPage == null || selEndPage == null || sumStartPage == null) return false;
+  // Page ranges intersect if neither is entirely before the other
+  return selStartPage <= (sumEndPage ?? sumStartPage) && selEndPage >= sumStartPage;
 }
 
 function epubPositionsIntersect(
