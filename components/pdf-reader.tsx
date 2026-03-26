@@ -763,11 +763,12 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
         console.log("[NAV_REF] normalizedQuote:", normalizedQuote);
 
         // Build a mapping from normalizedFlat index → original flatText index.
-        // Ligatures expand (e.g. ﬁ→fi = 1 orig char → 2 norm chars), so multiple
-        // norm indices can map to the same orig index.
-        const ligatureExpansions: Record<string, string> = {
-          "\uFB00": "ff", "\uFB01": "fi", "\uFB02": "fl",
-          "\uFB03": "ffi", "\uFB04": "ffl",
+        // Characters that expand during normalization (ligatures, ellipsis) produce
+        // multiple normalized indices that all map back to the same original index.
+        const charExpansions: Record<string, number> = {
+          "\uFB00": 2, "\uFB01": 2, "\uFB02": 2,  // ff, fi, fl
+          "\uFB03": 3, "\uFB04": 3,                 // ffi, ffl
+          "\u2026": 3,                                // … → ...
         };
         const normToOrigMap: number[] = [];
         {
@@ -775,16 +776,16 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
           let prevWasSpace = false;
           while (oi < flatText.length) {
             const ch = flatText[oi]!;
-            const expansion = ligatureExpansions[ch];
+            const expLen = charExpansions[ch];
             if (/\s/.test(ch)) {
               if (!prevWasSpace) {
                 normToOrigMap.push(oi); // collapsed space
                 prevWasSpace = true;
               }
               oi++;
-            } else if (expansion) {
-              // Ligature: 1 orig char maps to N norm chars
-              for (let k = 0; k < expansion.length; k++) {
+            } else if (expLen) {
+              // 1 orig char → N norm chars
+              for (let k = 0; k < expLen; k++) {
                 normToOrigMap.push(oi);
               }
               prevWasSpace = false;
@@ -840,28 +841,36 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
           const alphaFlat = alphaOnly(normalizedFlat);
           const alphaQuote = alphaOnly(normalizedQuote);
           let alphaIdx = alphaFlat.indexOf(alphaQuote);
+          let usedAlphaLen = alphaQuote.length;
 
           // Partial match: try first ~40 alphanumeric chars
           if (alphaIdx < 0 && alphaQuote.length >= 15) {
             const partialQuote = alphaQuote.slice(0, 40);
             alphaIdx = alphaFlat.indexOf(partialQuote);
+            usedAlphaLen = partialQuote.length;
             console.log("[NAV_REF] partial alpha matchIdx:", alphaIdx, "(query:", partialQuote, ")");
           } else {
             console.log("[NAV_REF] alpha-only matchIdx:", alphaIdx);
           }
 
           if (alphaIdx >= 0) {
-            // Map alpha index back to normalizedFlat index
+            // Map alpha index back to normalizedFlat index:
+            // Skip past alphaIdx alpha chars, then land on the next alpha char (match start)
             let ai = 0;
             let normStartIdx = 0;
-            for (normStartIdx = 0; normStartIdx < normalizedFlat.length && ai < alphaIdx; normStartIdx++) {
+            while (normStartIdx < normalizedFlat.length && ai < alphaIdx) {
               if (/[a-z0-9]/i.test(normalizedFlat[normStartIdx]!)) ai++;
+              normStartIdx++;
             }
-            // Walk the matched alpha length to find end
-            const matchAlphaLen = alphaIdx < 0 ? 0 : (alphaQuote.length <= 40 ? alphaQuote.length : 40);
+            // normStartIdx now points to (or past) the match start; find exact alpha char
+            while (normStartIdx < normalizedFlat.length && !/[a-z0-9]/i.test(normalizedFlat[normStartIdx]!)) {
+              normStartIdx++;
+            }
+
+            // Walk usedAlphaLen alpha chars from normStartIdx to find end
             let normEndIdx = normStartIdx;
             let ac = 0;
-            while (normEndIdx < normalizedFlat.length && ac < matchAlphaLen) {
+            while (normEndIdx < normalizedFlat.length && ac < usedAlphaLen) {
               if (/[a-z0-9]/i.test(normalizedFlat[normEndIdx]!)) ac++;
               normEndIdx++;
             }

@@ -601,35 +601,26 @@ export function AIAgentPanel({
             const alphaOnly = (s: string) => s.replace(/[^a-z0-9]/g, "");
             const alphaContent = alphaOnly(normContent);
             const alphaQuote = alphaOnly(normQuote);
-            const alphaIdx = alphaContent.indexOf(alphaQuote);
+            let alphaIdx = alphaContent.indexOf(alphaQuote);
             console.log("Alpha-only match idx:", alphaIdx);
+
+            // Partial match fallback: try first ~40 alphanumeric chars
+            if (alphaIdx < 0 && alphaQuote.length >= 15) {
+              const partialQuote = alphaQuote.slice(0, 40);
+              alphaIdx = alphaContent.indexOf(partialQuote);
+              console.log("Partial alpha match idx:", alphaIdx, "(query:", partialQuote, ")");
+            }
+
             if (alphaIdx >= 0) {
+              // Skip past alphaIdx alpha chars, then land on the next alpha char
               let ai = 0;
               idx = 0;
-              for (; idx < normContent.length && ai < alphaIdx; idx++) {
+              while (idx < normContent.length && ai < alphaIdx) {
                 if (/[a-z0-9]/.test(normContent[idx]!)) ai++;
+                idx++;
               }
+              // Ensure we land on an alpha char (the match start)
               while (idx < normContent.length && !/[a-z0-9]/.test(normContent[idx]!)) idx++;
-            }
-          }
-
-          // Partial match fallback: try first ~40 alphanumeric chars of the quote
-          if (idx < 0) {
-            const alphaOnly = (s: string) => s.replace(/[^a-z0-9]/g, "");
-            const alphaContent = alphaOnly(normContent);
-            const alphaQuote = alphaOnly(normQuote);
-            const partialQuote = alphaQuote.slice(0, 40);
-            if (partialQuote.length >= 15) {
-              const partialIdx = alphaContent.indexOf(partialQuote);
-              console.log("Partial alpha match idx:", partialIdx, "(query:", partialQuote, ")");
-              if (partialIdx >= 0) {
-                let ai = 0;
-                idx = 0;
-                for (; idx < normContent.length && ai < partialIdx; idx++) {
-                  if (/[a-z0-9]/.test(normContent[idx]!)) ai++;
-                }
-                while (idx < normContent.length && !/[a-z0-9]/.test(normContent[idx]!)) idx++;
-              }
             }
           }
 
