@@ -681,7 +681,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   const refHighlightCleanupRef = useRef<(() => void) | null>(null);
 
   const handleNavigateToRef = useCallback(
-    (ref: { page: number; quotedText?: string }) => {
+    (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => {
       console.group("[NAV_REF] handleNavigateToRef");
       console.log("page:", ref.page, "quotedText:", ref.quotedText);
 

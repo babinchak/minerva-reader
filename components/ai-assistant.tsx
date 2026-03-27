@@ -34,7 +34,7 @@ export interface AIAssistantProps {
   /**
    * Called when the user clicks a navigable reference in an AI response.
    */
-  onNavigateToRef?: (ref: { page: number; quotedText?: string }) => void;
+  onNavigateToRef?: (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => void;
 }
 
 function clamp(n: number, min: number, max: number) {

@@ -155,7 +155,7 @@ export interface AIAgentPanelProps {
    * Called when the user clicks a navigable reference (ref: link) in an AI response.
    * The parent reader should navigate to the position and highlight the text.
    */
-  onNavigateToRef?: (ref: { page: number; quotedText?: string }) => void;
+  onNavigateToRef?: (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => void;
 }
 
 interface SummaryContext {
@@ -516,6 +516,21 @@ export function AIAgentPanel({
           contentTextLength: section.contentText?.length ?? 0,
         });
 
+        // EPUB: parse reading order index from startPosition (format: "readingOrderIndex/elementPath")
+        if (bookType === "epub") {
+          const parts = section.startPosition.split("/");
+          const readingOrderIndex = parseInt(parts[0], 10);
+          if (Number.isNaN(readingOrderIndex)) {
+            console.warn("EPUB startPosition has no valid reading order index:", section.startPosition);
+            console.groupEnd();
+            return;
+          }
+          console.log("EPUB: navigating to readingOrderIndex", readingOrderIndex);
+          console.groupEnd();
+          onNavigateToRef({ readingOrderIndex, quotedText: ref.quotedText });
+          return;
+        }
+
         const startPage = parseInt(section.startPosition, 10);
         if (Number.isNaN(startPage)) {
           console.warn("startPosition is not a number:", section.startPosition);
@@ -644,7 +659,7 @@ export function AIAgentPanel({
         onNavigateToRef({ page, quotedText: ref.quotedText });
       })();
     },
-    [onNavigateToRef, fetchSection]
+    [onNavigateToRef, fetchSection, bookType]
   );
 
   const [authChecked, setAuthChecked] = useState(false);

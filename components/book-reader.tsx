@@ -9,7 +9,9 @@ import {
   setScroll,
   useAppDispatch,
   usePreferences,
+  useEpubNavigator,
 } from "@edrlab/thorium-web/epub";
+import { Link } from "@readium/shared";
 import {
   createPreferences,
   defaultPreferences,
@@ -156,6 +158,15 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   const [isAiPaneOpen, setIsAiPaneOpen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [mobileDrawerAnchor, setMobileDrawerAnchor] = useState<"top" | "bottom">("bottom");
+  const epubNavNonceRef = useRef(0);
+  const [epubNavRef, setEpubNavRef] = useState<{ readingOrderIndex: number; quotedText?: string } | null>(null);
+  const handleNavigateToRef = useCallback((ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => {
+    if (typeof ref.readingOrderIndex === "number") {
+      epubNavNonceRef.current += 1;
+      // Create a new object each time to ensure useEffect triggers even for the same reading order index
+      setEpubNavRef({ readingOrderIndex: ref.readingOrderIndex, quotedText: ref.quotedText });
+    }
+  }, []);
   const toggleChrome = useCallback(() => {
     hapticLight();
     setChromeVisible((v) => !v);
@@ -366,6 +377,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                       requestRun={aiRequest}
                       requestOpen={openAiRequest}
                       onOpenChange={setIsAiPaneOpen}
+                      onNavigateToRef={handleNavigateToRef}
                     />
                   )}
                 </div>
@@ -395,11 +407,13 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     requestRun={aiRequest}
                     requestOpen={openAiRequest}
                     onOpenChange={setIsAiPaneOpen}
+                    onNavigateToRef={handleNavigateToRef}
                   />
                 </div>
               </>
             )}
 
+            <EpubRefNavigator navRef={epubNavRef} rawManifest={rawManifest} />
             <EpubPositionSync bookId={bookId} storageKey={`${selfHref}${EPUB_STORAGE_KEY_SUFFIX}`} isLoggedIn={isLoggedIn} />
           </div>
         </ThI18nProvider>
@@ -836,6 +850,383 @@ function ThoriumThemeSync() {
     };
   }, [resolvedTheme]);
   return null;
+}
+
+/** Navigates to a specific reading order item and highlights quoted text in the EPUB iframe. */
+function EpubRefNavigator({
+  navRef,
+  rawManifest,
+}: {
+  navRef: { readingOrderIndex: number; quotedText?: string } | null;
+  rawManifest: { readingOrder?: Array<{ href?: string }> };
+}) {
+  const { goLink, getCframes } = useEpubNavigator();
+  const highlightCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!navRef) return;
+
+    // Clean up previous highlight
+    highlightCleanupRef.current?.();
+    highlightCleanupRef.current = null;
+
+    const readingOrder = rawManifest.readingOrder ?? [];
+    const targetItem = readingOrder[navRef.readingOrderIndex];
+    if (!targetItem?.href) {
+      console.warn("[EPUB_NAV] No href for reading order index:", navRef.readingOrderIndex);
+      return;
+    }
+
+    const quotedText = navRef.quotedText
+      ?.replace(/^[""\u201C\u201D]+/, "")
+      .replace(/[""\u201C\u201D]+$/, "")
+      .trim();
+
+    console.log("[EPUB_NAV] Navigating to href:", targetItem.href, "readingOrderIndex:", navRef.readingOrderIndex, "quotedText:", quotedText?.slice(0, 60));
+
+    // Use goLink() to navigate to the chapter. We handle text finding + scrolling ourselves.
+    const link = new Link({ href: targetItem.href });
+    goLink(link, false, (ok) => {
+      console.log("[EPUB_NAV] goLink callback, ok:", ok);
+      if (!ok) return;
+      if (!quotedText) return;
+
+      // Poll for iframe content to be ready, then highlight + scroll
+      let attempt = 0;
+      const maxAttempts = 25;
+
+      const tryHighlight = () => {
+        attempt++;
+
+        // Try getCframes first, fall back to querying iframes directly
+        let iframeDocs: Document[] = [];
+        try {
+          const frames = getCframes();
+          if (frames) {
+            for (const frame of frames) {
+              if (!frame) continue;
+              try {
+                const doc = frame.iframe?.contentDocument;
+                if (doc?.body) iframeDocs.push(doc);
+              } catch { /* cross-origin */ }
+            }
+          }
+        } catch { /* getCframes not available */ }
+
+        // Fallback: query iframes directly
+        if (iframeDocs.length === 0) {
+          const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+          for (const iframe of iframes) {
+            if (!(iframe instanceof HTMLIFrameElement)) continue;
+            try {
+              const doc = iframe.contentDocument;
+              if (doc?.body) iframeDocs.push(doc);
+            } catch { /* cross-origin */ }
+          }
+        }
+
+        if (iframeDocs.length === 0) {
+          if (attempt < maxAttempts) {
+            setTimeout(tryHighlight, 150);
+          } else {
+            console.warn("[EPUB_NAV] Gave up polling for iframe content");
+          }
+          return;
+        }
+
+        console.log("[EPUB_NAV] Found", iframeDocs.length, "iframe doc(s), attempt:", attempt);
+
+        for (const doc of iframeDocs) {
+          const result = highlightQuoteInDocument(doc, quotedText);
+          if (result) {
+            console.log("[EPUB_NAV] Highlight applied successfully");
+            highlightCleanupRef.current = result.cleanup;
+            return;
+          }
+        }
+
+        // Text not found yet — iframe may still be loading content
+        if (attempt < maxAttempts) {
+          setTimeout(tryHighlight, 150);
+        } else {
+          console.warn("[EPUB_NAV] Quote not found in any iframe after", maxAttempts, "attempts");
+        }
+      };
+
+      // Delay to let Thorium load the iframe content
+      setTimeout(tryHighlight, 300);
+    });
+  }, [navRef, rawManifest, goLink, getCframes]);
+
+  return null;
+}
+
+/** Normalize typography for comparison: curly quotes, ligatures, dashes, ellipsis. */
+function normalizeTypography(s: string): string {
+  return s
+    .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+    .replace(/\uFB01/g, "fi").replace(/\uFB02/g, "fl")
+    .replace(/\uFB00/g, "ff").replace(/\uFB03/g, "ffi").replace(/\uFB04/g, "ffl")
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\u2026/g, "...");
+}
+
+/**
+ * Search for quoted text in an EPUB document, highlight it, scroll to it.
+ * Returns { cleanup } if found, or null if the quote wasn't found.
+ */
+function highlightQuoteInDocument(
+  doc: Document,
+  quotedText: string
+): { cleanup: () => void } | null {
+  // Collect text nodes and build flat text
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+  const textNodes: { node: Text; start: number; end: number }[] = [];
+  let flatText = "";
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const text = node.textContent ?? "";
+    if (!text) continue;
+    const start = flatText.length;
+    flatText += text;
+    textNodes.push({ node: node as Text, start, end: flatText.length });
+  }
+
+  if (!flatText) return null;
+
+  const normalizedFlat = normalizeTypography(flatText);
+  const normalizedQuote = normalizeTypography(quotedText);
+
+  // Build normToOrigMap for character expansion (ligatures, ellipsis)
+  const charExpansions: Record<string, number> = {
+    "\uFB00": 2, "\uFB01": 2, "\uFB02": 2,
+    "\uFB03": 3, "\uFB04": 3,
+    "\u2026": 3,
+  };
+  const normToOrigMap: number[] = [];
+  {
+    let prevWasSpace = false;
+    for (let oi = 0; oi < flatText.length; oi++) {
+      const ch = flatText[oi]!;
+      const expLen = charExpansions[ch];
+      if (/\s/.test(ch)) {
+        // normalizeTypography doesn't collapse spaces, but we handle whitespace normalization in matching
+        normToOrigMap.push(oi);
+        prevWasSpace = true;
+      } else if (expLen) {
+        for (let k = 0; k < expLen; k++) normToOrigMap.push(oi);
+        prevWasSpace = false;
+      } else {
+        normToOrigMap.push(oi);
+        prevWasSpace = false;
+      }
+    }
+    void prevWasSpace; // suppress unused warning
+  }
+
+  // Helper: map a position in a transformed string back to normalizedFlat position.
+  // `transformedIdx` is the index in a string where characters were filtered/collapsed.
+  // `charTest` returns true for characters that were KEPT in the transformation.
+  function mapTransformedIdxToNormalized(transformedIdx: number, charTest: (ch: string) => boolean): number {
+    let ti = 0;
+    let ni = 0;
+    while (ni < normalizedFlat.length && ti < transformedIdx) {
+      if (charTest(normalizedFlat[ni]!)) ti++;
+      ni++;
+    }
+    // Skip leading non-matching chars at target position
+    while (ni < normalizedFlat.length && !charTest(normalizedFlat[ni]!)) ni++;
+    return ni;
+  }
+
+  // Helper: find the end position in normalizedFlat by counting `count` chars that pass `charTest`
+  // starting from `startIdx`.
+  function findMatchEnd(startIdx: number, count: number, charTest: (ch: string) => boolean): number {
+    let matched = 0;
+    let ni = startIdx;
+    while (ni < normalizedFlat.length && matched < count) {
+      if (charTest(normalizedFlat[ni]!)) matched++;
+      ni++;
+    }
+    return ni;
+  }
+
+  const lowerFlat = normalizedFlat.toLowerCase();
+  const lowerQuote = normalizedQuote.toLowerCase();
+
+  // Try case-insensitive exact match (most reliable)
+  let matchStart = lowerFlat.indexOf(lowerQuote);
+  let matchEndNorm = matchStart >= 0 ? matchStart + normalizedQuote.length : -1;
+  let matchLevel = matchStart >= 0 ? "exact" : "";
+
+  // Fallback: whitespace-collapsed match
+  if (matchStart < 0) {
+    const collapseWs = (s: string) => s.replace(/\s+/g, " ");
+    const collapsedFlat = collapseWs(lowerFlat);
+    const collapsedQuote = collapseWs(lowerQuote);
+    const collapsedIdx = collapsedFlat.indexOf(collapsedQuote);
+    if (collapsedIdx >= 0) {
+      // Map collapsed position back to normalizedFlat by walking and collapsing whitespace
+      let ci = 0; // position in collapsed string
+      let ni = 0; // position in normalizedFlat
+      let inSpace = false;
+      while (ni < normalizedFlat.length && ci < collapsedIdx) {
+        const ch = lowerFlat[ni]!;
+        if (/\s/.test(ch)) {
+          if (!inSpace) { ci++; inSpace = true; }
+        } else {
+          ci++;
+          inSpace = false;
+        }
+        ni++;
+      }
+      matchStart = ni;
+      // Find end by walking collapsedQuote.length collapsed characters
+      let endCi = 0;
+      let endNi = matchStart;
+      let endInSpace = false;
+      while (endNi < normalizedFlat.length && endCi < collapsedQuote.length) {
+        const ch = lowerFlat[endNi]!;
+        if (/\s/.test(ch)) {
+          if (!endInSpace) { endCi++; endInSpace = true; }
+        } else {
+          endCi++;
+          endInSpace = false;
+        }
+        endNi++;
+      }
+      matchEndNorm = endNi;
+      matchLevel = "ws-collapsed";
+    }
+  }
+
+  // Fallback: spaceless match
+  if (matchStart < 0) {
+    const stripFlat = lowerFlat.replace(/\s+/g, "");
+    const stripQuote = lowerQuote.replace(/\s+/g, "");
+    const stripIdx = stripFlat.indexOf(stripQuote);
+    if (stripIdx >= 0) {
+      const isNonSpace = (ch: string) => !/\s/.test(ch);
+      matchStart = mapTransformedIdxToNormalized(stripIdx, isNonSpace);
+      matchEndNorm = findMatchEnd(matchStart, stripQuote.length, isNonSpace);
+      matchLevel = "spaceless";
+    }
+  }
+
+  // Fallback: alpha-only match (full match only — no partial)
+  if (matchStart < 0) {
+    const isAlphaNum = (ch: string) => /[a-z0-9]/i.test(ch);
+    const alphaOnly = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const alphaFlat = alphaOnly(normalizedFlat);
+    const alphaQuote = alphaOnly(normalizedQuote);
+    const alphaIdx = alphaFlat.indexOf(alphaQuote);
+
+    if (alphaIdx >= 0) {
+      matchStart = mapTransformedIdxToNormalized(alphaIdx, isAlphaNum);
+      matchEndNorm = findMatchEnd(matchStart, alphaQuote.length, isAlphaNum);
+      matchLevel = "alpha";
+    }
+  }
+
+  if (matchStart < 0 || matchEndNorm < 0) return null;
+
+  // Map normalized match range back to original flat text positions
+  const origStart = normToOrigMap[matchStart] ?? 0;
+  const origEnd = (normToOrigMap[Math.min(matchEndNorm - 1, normToOrigMap.length - 1)] ?? origStart) + 1;
+
+  // Log what we actually matched
+  const matchedText = flatText.slice(origStart, origEnd);
+  console.log("[EPUB_NAV] Match level:", matchLevel, "matched:", JSON.stringify(matchedText.slice(0, 100)), "origStart:", origStart, "origEnd:", origEnd, "flatLen:", flatText.length);
+
+  // Create <mark> elements across text nodes
+  const marks: HTMLElement[] = [];
+  for (const { node: textNode, start, end } of textNodes) {
+    if (end <= origStart || start >= origEnd) continue;
+    const text = textNode.textContent ?? "";
+    const localStart = Math.max(0, origStart - start);
+    const localEnd = Math.min(text.length, origEnd - start);
+
+    const frag = doc.createDocumentFragment();
+    if (localStart > 0) {
+      frag.appendChild(doc.createTextNode(text.slice(0, localStart)));
+    }
+    const mark = doc.createElement("mark");
+    mark.className = "epub-ref-highlight";
+    mark.style.cssText = "background-color: rgba(255, 200, 0, 0.5) !important; border-radius: 2px !important; color: inherit !important;";
+    mark.textContent = text.slice(localStart, localEnd);
+    marks.push(mark);
+    frag.appendChild(mark);
+    if (localEnd < text.length) {
+      frag.appendChild(doc.createTextNode(text.slice(localEnd)));
+    }
+    textNode.parentNode?.replaceChild(frag, textNode);
+  }
+
+  // Navigate to the page/position containing the first mark.
+  // We defer this slightly to let the DOM settle after mark insertion.
+  if (marks[0]) {
+    const markEl = marks[0];
+    requestAnimationFrame(() => {
+      const wnd = doc.defaultView;
+      if (!wnd) return;
+
+      const rootStyle = wnd.getComputedStyle(doc.documentElement);
+      const bodyStyle = wnd.getComputedStyle(doc.body);
+      const colCountStr = rootStyle.getPropertyValue("column-count");
+      const colCount = parseInt(colCountStr, 10);
+      const bodyColCount = parseInt(bodyStyle.getPropertyValue("column-count"), 10);
+      const effectiveColCount = (!Number.isNaN(colCount) && colCount >= 1) ? colCount
+        : (!Number.isNaN(bodyColCount) && bodyColCount >= 1) ? bodyColCount : 0;
+
+      const rect = markEl.getBoundingClientRect();
+      const scrollEl = doc.scrollingElement ?? doc.documentElement;
+
+      console.log("[EPUB_NAV] Positioning: colCount=", colCountStr,
+        "scrollHeight=", scrollEl.scrollHeight, "clientHeight=", scrollEl.clientHeight,
+        "scrollTop=", scrollEl.scrollTop,
+        "mark rect:", JSON.stringify({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
+
+      if (effectiveColCount >= 1) {
+        // Paginated (CSS columns): snap scrollLeft to the column containing the mark.
+        const docOffsetX = rect.left + wnd.scrollX;
+        const pageWidth = wnd.innerWidth;
+        const snappedScroll = docOffsetX - (docOffsetX % pageWidth);
+        scrollEl.scrollLeft = snappedScroll;
+        console.log("[EPUB_NAV] Paginated snap: scrollLeft=", snappedScroll);
+      } else if (scrollEl.scrollHeight > scrollEl.clientHeight) {
+        // Vertically scrollable: scroll the documentElement to the mark
+        const markDocTop = rect.top + scrollEl.scrollTop;
+        const targetScroll = markDocTop - scrollEl.clientHeight / 3; // put mark in upper third
+        scrollEl.scrollTop = Math.max(0, targetScroll);
+        console.log("[EPUB_NAV] Scroll to mark: markDocTop=", markDocTop, "scrollTop=", scrollEl.scrollTop);
+      } else {
+        // Fallback
+        console.log("[EPUB_NAV] Fallback scrollIntoView");
+        markEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  }
+
+  // Auto-clear after 5 seconds
+  const cleanup = () => {
+    for (const mark of marks) {
+      const parent = mark.parentNode;
+      if (!parent) continue;
+      const textNode = doc.createTextNode(mark.textContent ?? "");
+      parent.replaceChild(textNode, mark);
+      // Normalize adjacent text nodes
+      parent.normalize();
+    }
+  };
+
+  const timer = setTimeout(cleanup, 5000);
+  return {
+    cleanup: () => {
+      clearTimeout(timer);
+      cleanup();
+    },
+  };
 }
 
 /** Syncs EPUB reading position from localStorage (written by Thorium) to our API. Skips API when not logged in (curated books). */
