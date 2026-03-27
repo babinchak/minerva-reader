@@ -46,9 +46,10 @@ export function AIBottomDrawer({
   initialMode,
   minMode = "quick",
   anchor = "bottom",
+  hidden,
   onNavigateToRef,
   ...panelProps
-}: AIBottomDrawerProps) {
+}: AIBottomDrawerProps & { hidden?: boolean }) {
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
 
   const [mode, setMode] = useState<MobileDrawerMode>(() => {
@@ -260,7 +261,7 @@ export function AIBottomDrawer({
   })();
 
   return (
-    <>
+    <div style={hidden ? { visibility: "hidden", pointerEvents: "none" } : undefined}>
       {showBackdrop && (
         <button
           type="button"
@@ -345,7 +346,7 @@ export function AIBottomDrawer({
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

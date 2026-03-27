@@ -2372,21 +2372,20 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
         className="relative h-full flex-none"
         style={isMobile ? { touchAction: "pan-x pan-y" } : undefined}
       >
-        {/* Mobile: AI drawer follows the same chrome/menu toggle as the top bar. */}
-        {(!isMobile || chromeVisible) && (
-          <AIAssistant
-            selectedText={selectedText}
-            bookId={bookId}
-            bookType="pdf"
-            currentPage={currentPage}
-            pdfDocument={pdfDoc}
-            mobileDrawerMinMode="quick"
-            requestRun={aiRequest}
-            requestOpen={openAiRequest}
-            onOpenChange={(open) => setIsAiPaneOpen(open)}
-            onNavigateToRef={handleNavigateToRef}
-          />
-        )}
+        {/* Mobile: AI drawer stays mounted but hidden when chrome is off (preserves chat state). */}
+        <AIAssistant
+          selectedText={selectedText}
+          bookId={bookId}
+          bookType="pdf"
+          currentPage={currentPage}
+          pdfDocument={pdfDoc}
+          mobileDrawerMinMode="quick"
+          hidden={isMobile && !chromeVisible}
+          requestRun={aiRequest}
+          requestOpen={openAiRequest}
+          onOpenChange={(open) => setIsAiPaneOpen(open)}
+          onNavigateToRef={handleNavigateToRef}
+        />
       </div>
 
       {/* Left TOC drawer (desktop only; mobile uses full-screen takeover above) */}

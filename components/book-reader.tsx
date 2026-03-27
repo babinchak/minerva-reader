@@ -366,20 +366,19 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                   <div className="flex-1 min-w-0 h-full relative bg-background">
                     <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
                   </div>
-                  {chromeVisible && (
-                    <AIAssistant
-                      selectedText={selectedText}
-                      bookId={bookId}
-                      rawManifest={rawManifest}
-                      bookType="epub"
-                      mobileDrawerMinMode="quick"
-                      mobileDrawerAnchor={mobileDrawerAnchor}
-                      requestRun={aiRequest}
-                      requestOpen={openAiRequest}
-                      onOpenChange={setIsAiPaneOpen}
-                      onNavigateToRef={handleNavigateToRef}
-                    />
-                  )}
+                  <AIAssistant
+                    selectedText={selectedText}
+                    bookId={bookId}
+                    rawManifest={rawManifest}
+                    bookType="epub"
+                    mobileDrawerMinMode="quick"
+                    mobileDrawerAnchor={mobileDrawerAnchor}
+                    hidden={!chromeVisible}
+                    requestRun={aiRequest}
+                    requestOpen={openAiRequest}
+                    onOpenChange={setIsAiPaneOpen}
+                    onNavigateToRef={handleNavigateToRef}
+                  />
                 </div>
               </div>
             ) : (

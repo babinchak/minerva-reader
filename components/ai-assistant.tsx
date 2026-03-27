@@ -18,6 +18,11 @@ export interface AIAssistantProps {
   mobileDrawerMinMode?: "closed" | "quick";
   mobileDrawerAnchor?: "top" | "bottom";
   /**
+   * When true the mobile drawer stays mounted but is visually hidden
+   * (pointer-events disabled, opacity 0). Prevents state loss on chrome toggle.
+   */
+  hidden?: boolean;
+  /**
    * Optional external trigger to open the desktop AI pane and run an action.
    * Used by reader toolbars (e.g. PDF) to drive "Explain selection/section".
    */
@@ -54,6 +59,7 @@ export function AIAssistant(props: AIAssistantProps) {
       pdfDocument={props.pdfDocument}
       minMode={props.mobileDrawerMinMode}
       anchor={props.mobileDrawerAnchor}
+      hidden={props.hidden}
       onNavigateToRef={props.onNavigateToRef}
     />
   );
