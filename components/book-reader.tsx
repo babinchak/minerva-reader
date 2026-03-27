@@ -996,7 +996,23 @@ function highlightQuoteInDocument(
   if (!flatText) return null;
 
   const normalizedFlat = normalizeTypography(flatText);
-  const normalizedQuote = normalizeTypography(quotedText);
+
+  // If the quote contains ellipsis (AI abbreviated the original text),
+  // try the full quote first, then fall back to the first substantial segment.
+  const quoteCandidates = [quotedText];
+  const ellipsisSegments = quotedText.split(/\u2026|\.{3,}/);
+  if (ellipsisSegments.length > 1) {
+    // Add the first segment that's long enough to be meaningful
+    const firstSeg = ellipsisSegments[0]?.trim();
+    if (firstSeg && firstSeg.length >= 15) {
+      quoteCandidates.push(firstSeg);
+    }
+    // Also try the longest segment
+    const longest = ellipsisSegments.reduce((a, b) => (a.length >= b.length ? a : b), "").trim();
+    if (longest && longest.length >= 15 && longest !== firstSeg) {
+      quoteCandidates.push(longest);
+    }
+  }
 
   // Build normToOrigMap for character expansion (ligatures, ellipsis)
   const charExpansions: Record<string, number> = {
@@ -1053,80 +1069,99 @@ function highlightQuoteInDocument(
   }
 
   const lowerFlat = normalizedFlat.toLowerCase();
-  const lowerQuote = normalizedQuote.toLowerCase();
 
-  // Try case-insensitive exact match (most reliable)
-  let matchStart = lowerFlat.indexOf(lowerQuote);
-  let matchEndNorm = matchStart >= 0 ? matchStart + normalizedQuote.length : -1;
-  let matchLevel = matchStart >= 0 ? "exact" : "";
+  // Try matching with each quote candidate (full quote first, then ellipsis segments)
+  let matchStart = -1;
+  let matchEndNorm = -1;
+  let matchLevel = "";
+  let normalizedQuote = "";
 
-  // Fallback: whitespace-collapsed match
-  if (matchStart < 0) {
-    const collapseWs = (s: string) => s.replace(/\s+/g, " ");
-    const collapsedFlat = collapseWs(lowerFlat);
-    const collapsedQuote = collapseWs(lowerQuote);
-    const collapsedIdx = collapsedFlat.indexOf(collapsedQuote);
-    if (collapsedIdx >= 0) {
-      // Map collapsed position back to normalizedFlat by walking and collapsing whitespace
-      let ci = 0; // position in collapsed string
-      let ni = 0; // position in normalizedFlat
-      let inSpace = false;
-      while (ni < normalizedFlat.length && ci < collapsedIdx) {
-        const ch = lowerFlat[ni]!;
-        if (/\s/.test(ch)) {
-          if (!inSpace) { ci++; inSpace = true; }
-        } else {
-          ci++;
-          inSpace = false;
+  for (const candidate of quoteCandidates) {
+    normalizedQuote = normalizeTypography(candidate);
+    const lowerQuote = normalizedQuote.toLowerCase();
+
+    // Try case-insensitive exact match (most reliable)
+    matchStart = lowerFlat.indexOf(lowerQuote);
+    if (matchStart >= 0) {
+      matchEndNorm = matchStart + normalizedQuote.length;
+      matchLevel = "exact";
+      break;
+    }
+
+    // Fallback: whitespace-collapsed match
+    {
+      const collapseWs = (s: string) => s.replace(/\s+/g, " ");
+      const collapsedFlat = collapseWs(lowerFlat);
+      const collapsedQuote = collapseWs(lowerQuote);
+      const collapsedIdx = collapsedFlat.indexOf(collapsedQuote);
+      if (collapsedIdx >= 0) {
+        // Map collapsed position back to normalizedFlat by walking and collapsing whitespace
+        let ci = 0;
+        let ni = 0;
+        let inSpace = false;
+        while (ni < normalizedFlat.length && ci < collapsedIdx) {
+          const ch = lowerFlat[ni]!;
+          if (/\s/.test(ch)) {
+            if (!inSpace) { ci++; inSpace = true; }
+          } else {
+            ci++;
+            inSpace = false;
+          }
+          ni++;
         }
-        ni++;
-      }
-      matchStart = ni;
-      // Find end by walking collapsedQuote.length collapsed characters
-      let endCi = 0;
-      let endNi = matchStart;
-      let endInSpace = false;
-      while (endNi < normalizedFlat.length && endCi < collapsedQuote.length) {
-        const ch = lowerFlat[endNi]!;
-        if (/\s/.test(ch)) {
-          if (!endInSpace) { endCi++; endInSpace = true; }
-        } else {
-          endCi++;
-          endInSpace = false;
+        matchStart = ni;
+        let endCi = 0;
+        let endNi = matchStart;
+        let endInSpace = false;
+        while (endNi < normalizedFlat.length && endCi < collapsedQuote.length) {
+          const ch = lowerFlat[endNi]!;
+          if (/\s/.test(ch)) {
+            if (!endInSpace) { endCi++; endInSpace = true; }
+          } else {
+            endCi++;
+            endInSpace = false;
+          }
+          endNi++;
         }
-        endNi++;
+        matchEndNorm = endNi;
+        matchLevel = "ws-collapsed";
+        break;
       }
-      matchEndNorm = endNi;
-      matchLevel = "ws-collapsed";
     }
-  }
 
-  // Fallback: spaceless match
-  if (matchStart < 0) {
-    const stripFlat = lowerFlat.replace(/\s+/g, "");
-    const stripQuote = lowerQuote.replace(/\s+/g, "");
-    const stripIdx = stripFlat.indexOf(stripQuote);
-    if (stripIdx >= 0) {
-      const isNonSpace = (ch: string) => !/\s/.test(ch);
-      matchStart = mapTransformedIdxToNormalized(stripIdx, isNonSpace);
-      matchEndNorm = findMatchEnd(matchStart, stripQuote.length, isNonSpace);
-      matchLevel = "spaceless";
+    // Fallback: spaceless match
+    {
+      const stripFlat = lowerFlat.replace(/\s+/g, "");
+      const stripQuote = lowerQuote.replace(/\s+/g, "");
+      const stripIdx = stripFlat.indexOf(stripQuote);
+      if (stripIdx >= 0) {
+        const isNonSpace = (ch: string) => !/\s/.test(ch);
+        matchStart = mapTransformedIdxToNormalized(stripIdx, isNonSpace);
+        matchEndNorm = findMatchEnd(matchStart, stripQuote.length, isNonSpace);
+        matchLevel = "spaceless";
+        break;
+      }
     }
-  }
 
-  // Fallback: alpha-only match (full match only — no partial)
-  if (matchStart < 0) {
-    const isAlphaNum = (ch: string) => /[a-z0-9]/i.test(ch);
-    const alphaOnly = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const alphaFlat = alphaOnly(normalizedFlat);
-    const alphaQuote = alphaOnly(normalizedQuote);
-    const alphaIdx = alphaFlat.indexOf(alphaQuote);
+    // Fallback: alpha-only match (full match only — no partial)
+    {
+      const isAlphaNum = (ch: string) => /[a-z0-9]/i.test(ch);
+      const alphaOnly = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const alphaFlat = alphaOnly(normalizedFlat);
+      const alphaQuote = alphaOnly(normalizedQuote);
+      const alphaIdx = alphaFlat.indexOf(alphaQuote);
 
-    if (alphaIdx >= 0) {
-      matchStart = mapTransformedIdxToNormalized(alphaIdx, isAlphaNum);
-      matchEndNorm = findMatchEnd(matchStart, alphaQuote.length, isAlphaNum);
-      matchLevel = "alpha";
+      if (alphaIdx >= 0) {
+        matchStart = mapTransformedIdxToNormalized(alphaIdx, isAlphaNum);
+        matchEndNorm = findMatchEnd(matchStart, alphaQuote.length, isAlphaNum);
+        matchLevel = "alpha";
+        break;
+      }
     }
+
+    // Reset for next candidate
+    matchStart = -1;
+    matchEndNorm = -1;
   }
 
   if (matchStart < 0 || matchEndNorm < 0) return null;
