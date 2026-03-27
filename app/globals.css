@@ -3,6 +3,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Radix popper wrappers use `transform` which creates a stacking context at
+   z-auto, placing dropdown/popover content behind fixed overlays like the
+   mobile AI drawer backdrop (z-40). Force them above. */
+[data-radix-popper-content-wrapper] {
+  z-index: 60 !important;
+}
+
 /* Top loader uses theme primary for all theme variants */
 #nprogress .bar,
 #nprogress .peg {

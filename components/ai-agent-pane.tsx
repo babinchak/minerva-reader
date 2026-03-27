@@ -1831,7 +1831,7 @@ export function AIAgentPanel({
                 <Plus className="h-4 w-4" />
               </Button>
               {userId && (
-                <DropdownMenu>
+                <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
@@ -1843,7 +1843,12 @@ export function AIAgentPanel({
                       <Clock className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+                  <DropdownMenuContent
+                    align="start"
+                    className="max-h-64 overflow-y-auto"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                    onPointerDownOutside={(e) => e.detail.originalEvent.stopPropagation()}
+                  >
                     {chats.length === 0 ? (
                       <div className="px-2 py-4 text-sm text-muted-foreground">
                         No recent chats
