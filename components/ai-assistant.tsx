@@ -40,6 +40,11 @@ export interface AIAssistantProps {
    * Called when the user clicks a navigable reference in an AI response.
    */
   onNavigateToRef?: (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => void;
+  /**
+   * Called on mobile when a navigable reference is clicked so the parent can
+   * toggle chrome (hide UI) instead of collapsing the drawer.
+   */
+  onMobileNavRefToggleChrome?: () => void;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -61,6 +66,7 @@ export function AIAssistant(props: AIAssistantProps) {
       anchor={props.mobileDrawerAnchor}
       hidden={props.hidden}
       onNavigateToRef={props.onNavigateToRef}
+      onToggleChrome={props.onMobileNavRefToggleChrome}
     />
   );
   }

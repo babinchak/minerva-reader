@@ -48,8 +48,9 @@ export function AIBottomDrawer({
   anchor = "bottom",
   hidden,
   onNavigateToRef,
+  onToggleChrome,
   ...panelProps
-}: AIBottomDrawerProps & { hidden?: boolean }) {
+}: AIBottomDrawerProps & { hidden?: boolean; onToggleChrome?: () => void }) {
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
 
   const [mode, setMode] = useState<MobileDrawerMode>(() => {
@@ -228,12 +229,25 @@ export function AIBottomDrawer({
 
   const handleNavigateToRef = useCallback(
     (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => {
-      // Collapse the drawer so the user can see the highlighted reference
-      setMode(minMode === "quick" ? "quick" : "closed");
+      // Toggle chrome to hide the UI so the user can see the highlighted reference
+      onToggleChrome?.();
       onNavigateToRef?.(ref);
     },
-    [onNavigateToRef, minMode]
+    [onNavigateToRef, onToggleChrome]
   );
+
+  // When transitioning from hidden → visible, briefly block pointer events so
+  // the tap that toggled chrome on doesn't also trigger clicks inside the drawer.
+  const [pointerBlocked, setPointerBlocked] = useState(false);
+  const wasHiddenRef = useRef(hidden);
+  useEffect(() => {
+    if (wasHiddenRef.current && !hidden) {
+      setPointerBlocked(true);
+      const t = setTimeout(() => setPointerBlocked(false), 300);
+      return () => clearTimeout(t);
+    }
+    wasHiddenRef.current = hidden;
+  }, [hidden]);
 
   const showBackdrop = mode === "half" || mode === "full" || (isDragging && heightPx > quickHeight);
 
@@ -261,7 +275,7 @@ export function AIBottomDrawer({
   })();
 
   return (
-    <div style={hidden ? { visibility: "hidden", pointerEvents: "none" } : undefined}>
+    <div style={hidden ? { visibility: "hidden", pointerEvents: "none" } : pointerBlocked ? { pointerEvents: "none" } : undefined}>
       {showBackdrop && (
         <button
           type="button"

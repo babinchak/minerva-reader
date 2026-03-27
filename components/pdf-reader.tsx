@@ -277,6 +277,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [chromeVisible, setChromeVisible] = useState(true);
+  const toggleChrome = useCallback(() => { hapticLight(); setChromeVisible((v) => !v); }, []);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -2385,6 +2386,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
           requestOpen={openAiRequest}
           onOpenChange={(open) => setIsAiPaneOpen(open)}
           onNavigateToRef={handleNavigateToRef}
+          onMobileNavRefToggleChrome={toggleChrome}
         />
       </div>
 

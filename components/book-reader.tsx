@@ -378,6 +378,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     requestOpen={openAiRequest}
                     onOpenChange={setIsAiPaneOpen}
                     onNavigateToRef={handleNavigateToRef}
+                    onMobileNavRefToggleChrome={toggleChrome}
                   />
                 </div>
               </div>
