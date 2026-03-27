@@ -3,7 +3,7 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { BookOpen } from "lucide-react";
+import { BookOpen, ExternalLink } from "lucide-react";
 
 /** Recursively extract plain text from React children. */
 function extractText(node: React.ReactNode): string {
@@ -38,10 +38,11 @@ export function parsePassageRef(href: string | undefined): PassageRef | null {
 type MarkdownProps = {
   content: string;
   className?: string;
+  bookId?: string;
   onRefClick?: (ref: PassageRef) => void;
 };
 
-export function Markdown({ content, className, onRefClick }: MarkdownProps) {
+export function Markdown({ content, className, bookId, onRefClick }: MarkdownProps) {
   return (
     <div
       className={[
@@ -71,16 +72,33 @@ export function Markdown({ content, className, onRefClick }: MarkdownProps) {
               // Strip surrounding quotation marks from the displayed text
               const raw = extractText(children);
               const display = raw.replace(/^[""\u201C\u201D]+/, "").replace(/[""\u201C\u201D]+$/, "").trim();
+              const newTabUrl = bookId
+                ? `/read/${bookId}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(raw)}`
+                : null;
               return (
-                <button
-                  type="button"
-                  onClick={() => onRefClick({ ...ref, quotedText: raw })}
-                  className="my-1.5 flex items-start gap-2 w-full text-left rounded-md border border-border bg-muted/50 px-3 py-2 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors cursor-pointer break-words"
-                  title="Jump to this passage in the book"
-                >
-                  <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                  <span className="italic">{display}</span>
-                </button>
+                <span className="my-1.5 flex items-start gap-2 w-full rounded-md border border-border bg-muted/50 px-3 py-2 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words">
+                  <button
+                    type="button"
+                    onClick={() => onRefClick({ ...ref, quotedText: raw })}
+                    className="flex items-start gap-2 flex-1 min-w-0 text-left cursor-pointer"
+                    title="Jump to this passage in the book"
+                  >
+                    <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span className="italic">{display}</span>
+                  </button>
+                  {newTabUrl && (
+                    <a
+                      href={newTabUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="shrink-0 p-0.5 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Open in new tab"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </span>
               );
             }
             return (

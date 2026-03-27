@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AIAssistant } from "@/components/ai-assistant";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
@@ -274,6 +274,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   const selectedText = useSelectedText();
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [chromeVisible, setChromeVisible] = useState(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -968,6 +969,104 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
     },
     []
   );
+
+  // Handle ?refSection=...&refQuote=... URL params (e.g. from "open in new tab")
+  const refParamsHandledRef = useRef(false);
+  useEffect(() => {
+    if (refParamsHandledRef.current || !pdfDoc) return;
+    const refSection = searchParams.get("refSection");
+    const refQuote = searchParams.get("refQuote");
+    if (!refSection) return;
+    refParamsHandledRef.current = true;
+
+    // Resolve section → page, then navigate
+    (async () => {
+      try {
+        const res = await fetch(`/api/books/${bookId}/sections?sectionId=${encodeURIComponent(refSection)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const startPage = parseInt(data.startPosition, 10);
+        if (Number.isNaN(startPage)) return;
+
+        let page = startPage;
+        const quotedText = refQuote
+          ?.replace(/^[""\u201C\u201D]+/, "")
+          .replace(/[""\u201C\u201D]+$/, "")
+          .trim();
+
+        // Same page resolution logic as handleRefClick
+        if (quotedText && data.contentText && data.pageBreaks?.length) {
+          const normalizeTypo = (s: string) =>
+            s.replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+              .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+              .replace(/\uFB01/g, "fi").replace(/\uFB02/g, "fl")
+              .replace(/\uFB00/g, "ff").replace(/\uFB03/g, "ffi").replace(/\uFB04/g, "ffl")
+              .replace(/[\u2013\u2014]/g, "-")
+              .replace(/\u2026/g, "...");
+
+          const rawContent = data.contentText as string;
+          const normContent = normalizeTypo(rawContent.toLowerCase()).replace(/\s+/g, " ");
+          const normQuote = normalizeTypo(quotedText.toLowerCase()).replace(/\s+/g, " ");
+          const alphaOnly = (s: string) => s.replace(/[^a-z0-9]/g, "");
+
+          let idx = normContent.indexOf(normQuote);
+          if (idx < 0) idx = normContent.replace(/\s+/g, "").indexOf(normQuote.replace(/\s+/g, "")) >= 0 ? -1 : -1; // skip, handled below
+
+          // Alpha fallback
+          if (idx < 0) {
+            const alphaContent = alphaOnly(normContent);
+            const alphaQuote = alphaOnly(normQuote);
+            let alphaIdx = alphaContent.indexOf(alphaQuote);
+            if (alphaIdx < 0 && alphaQuote.length >= 15) {
+              alphaIdx = alphaContent.indexOf(alphaQuote.slice(0, 40));
+            }
+            if (alphaIdx >= 0) {
+              let ai = 0;
+              idx = 0;
+              while (idx < normContent.length && ai < alphaIdx) {
+                if (/[a-z0-9]/.test(normContent[idx]!)) ai++;
+                idx++;
+              }
+              while (idx < normContent.length && !/[a-z0-9]/.test(normContent[idx]!)) idx++;
+            }
+          }
+
+          if (idx >= 0) {
+            // Build normToRaw map to get raw offset for pageBreaks
+            const ligatures: Record<string, number> = {
+              "\uFB00": 2, "\uFB01": 2, "\uFB02": 2, "\uFB03": 3, "\uFB04": 3, "\u2026": 3,
+            };
+            const normToRawMap: number[] = [];
+            let prevWasSpace = false;
+            for (let ri = 0; ri < rawContent.length; ri++) {
+              const ch = rawContent[ri]!;
+              const expLen = ligatures[ch];
+              if (/\s/.test(ch)) {
+                if (!prevWasSpace) { normToRawMap.push(ri); prevWasSpace = true; }
+              } else if (expLen) {
+                for (let k = 0; k < expLen; k++) normToRawMap.push(ri);
+                prevWasSpace = false;
+              } else {
+                normToRawMap.push(ri);
+                prevWasSpace = false;
+              }
+            }
+            const rawIdx = normToRawMap[idx] ?? 0;
+            let currentPage = startPage;
+            for (const breakOffset of data.pageBreaks) {
+              if (rawIdx >= breakOffset) currentPage++;
+              else break;
+            }
+            page = currentPage;
+          }
+        }
+
+        handleNavigateToRef({ page, quotedText: refQuote ?? undefined });
+      } catch {
+        // Section lookup failed — ignore
+      }
+    })();
+  }, [pdfDoc, searchParams, bookId, handleNavigateToRef]);
 
   const dispatchPdfFind = (opts: { type?: string; findPrevious?: boolean }) => {
     const api = pdfFindApiRef.current;

@@ -2054,7 +2054,7 @@ export function AIAgentPanel({
                       )}
                       <div className="w-full text-foreground select-text">
                         {assistantMsg.content.trim() ? (
-                          <Markdown content={assistantMsg.content} onRefClick={handleRefClick} />
+                          <Markdown content={assistantMsg.content} bookId={bookId} onRefClick={handleRefClick} />
                         ) : isStreaming ? (
                           <div className="flex gap-1">
                             <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
