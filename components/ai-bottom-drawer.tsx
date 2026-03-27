@@ -46,6 +46,7 @@ export function AIBottomDrawer({
   initialMode,
   minMode = "quick",
   anchor = "bottom",
+  onNavigateToRef,
   ...panelProps
 }: AIBottomDrawerProps) {
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
@@ -224,6 +225,15 @@ export function AIBottomDrawer({
     setMode(selectionExists || minMode === "quick" ? "quick" : "closed");
   };
 
+  const handleNavigateToRef = useCallback(
+    (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => {
+      // Collapse the drawer so the user can see the highlighted reference
+      setMode(minMode === "quick" ? "quick" : "closed");
+      onNavigateToRef?.(ref);
+    },
+    [onNavigateToRef, minMode]
+  );
+
   const showBackdrop = mode === "half" || mode === "full" || (isDragging && heightPx > quickHeight);
 
   // Backdrop opacity: interpolate during drag, full when snapped to half/full
@@ -304,6 +314,7 @@ export function AIBottomDrawer({
               showSelectedTextBanner={false}
               showSelectionChip={panelVisibility.showChip}
               onClose={close}
+              onNavigateToRef={handleNavigateToRef}
               onActionStart={() => {
                 // When user sends a message (Explain selection, typed question, etc.), expand to full so they can see the response.
                 if (mode === "quick" || mode === "half") setMode("full");
