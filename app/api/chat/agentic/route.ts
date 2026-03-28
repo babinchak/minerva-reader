@@ -35,6 +35,37 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- If a passage has no section_id, just use a regular blockquote instead.\n" +
   "- Keep quotes concise — truncate to ~150 chars with … if needed.";
 
+const LIBRARY_SYSTEM_PROMPT =
+  "You are a helpful reading assistant with access to the user's book library. Respond using GitHub-flavored Markdown (GFM).\n" +
+  "- Use headings, bullet lists, and tables when helpful.\n" +
+  "- Use short section headings (e.g. ###) to break up the answer.\n" +
+  "- Bold the key terms and the most meaningful phrases.\n" +
+  "- Use fenced code blocks with a language tag for code.\n" +
+  "- Do NOT wrap the entire response in a single code block.\n" +
+  "- Avoid raw HTML; prefer Markdown.\n" +
+  "\nYou have access to tools that search across ALL books in the user's library:\n" +
+  "- vector_search: semantic search across all books\n" +
+  "- get_passage_content: fetch full text for passages by section_id\n" +
+  "- text_search: keyword search across all books\n" +
+  "- web_search: search the web\n" +
+  "Use them when they would improve your answer. Call get_passage_content with section_ids when you need full text to quote or cite.\n" +
+  "\n## Important: Attribute results to their source book\n" +
+  "Tool results include `book` (title and author) and `book_id` for each result. " +
+  "ALWAYS mention which book a quote or finding comes from. " +
+  "When presenting results from multiple books, organize by book or clearly label each finding.\n" +
+  "\n## Navigable References\n" +
+  "When you directly quote text from a book, make the quote a navigable reference so the reader can jump to it.\n" +
+  "Tool results include `section_id` — use it to link quotes back to their source passage.\n" +
+  "Format: `[\"quoted text\"](ref:<section_id>)`\n" +
+  "Example: `[\"Call me Ishmael.\"](ref:a1b2c3d4-e5f6-7890-abcd-ef1234567890)`\n" +
+  "\nRules:\n" +
+  "- ONLY use this for direct quotes that come from tool results with a section_id.\n" +
+  "- The quoted text inside the link MUST be copied verbatim from the passage content_text. Do not paraphrase or alter it.\n" +
+  "- Use the section_id exactly as it appears in the tool result.\n" +
+  "- If a passage has no section_id, just use a regular blockquote instead.\n" +
+  "- Keep quotes concise — truncate to ~150 chars with … if needed.\n" +
+  "- Always state which book the quote is from before or after the reference.";
+
 type IncomingMessage = { role: "system" | "user" | "assistant"; content: string };
 
 export async function POST(req: NextRequest) {
@@ -50,14 +81,20 @@ export async function POST(req: NextRequest) {
     const serviceSupabase = createServiceClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const body = (await req.json()) as { messages?: unknown; bookId?: string; chatId?: string };
-    const { messages: rawMessages, bookId, chatId } = body;
+    const body = (await req.json()) as { messages?: unknown; bookId?: string; bookIds?: string[]; chatId?: string };
+    const { messages: rawMessages, bookId, bookIds, chatId } = body;
+    const isLibraryMode = Array.isArray(bookIds) && bookIds.length > 0;
 
     if (!rawMessages || !Array.isArray(rawMessages)) {
       return NextResponse.json(
         { error: "messages array is required" },
         { status: 400 }
       );
+    }
+
+    // Library mode requires authentication (no anonymous multi-book search)
+    if (isLibraryMode && !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Anonymous: allow for curated books, or when FREE_BETA_MODE
@@ -112,7 +149,37 @@ export async function POST(req: NextRequest) {
     }
 
     let vectorsReady = false;
-    if (bookId) {
+    let validatedBookIds: string[] | undefined;
+
+    if (isLibraryMode && user) {
+      // Library mode: validate user has access to all requested books and check if any have vectors
+      const { data: userBookRows } = await supabase
+        .from("user_books")
+        .select("book_id")
+        .eq("user_id", user.id);
+      const userBookIdSet = new Set((userBookRows ?? []).map((r) => r.book_id));
+
+      // Also allow curated books
+      const { data: curatedBooks } = await serviceSupabase
+        .from("books")
+        .select("id")
+        .eq("is_curated", true);
+      const curatedIdSet = new Set((curatedBooks ?? []).map((b) => b.id));
+
+      validatedBookIds = bookIds!.filter((id) => userBookIdSet.has(id) || curatedIdSet.has(id));
+      if (validatedBookIds.length === 0) {
+        return NextResponse.json({ error: "No accessible books in the provided list" }, { status: 403 });
+      }
+
+      // Check if at least one book has vectors ready
+      const { data: booksWithVectors } = await serviceSupabase
+        .from("books")
+        .select("id")
+        .in("id", validatedBookIds)
+        .not("vectors_processed_at", "is", null)
+        .limit(1);
+      vectorsReady = (booksWithVectors?.length ?? 0) > 0;
+    } else if (bookId) {
       if (user) {
         const { data: userBook } = await supabase
           .from("user_books")
@@ -155,9 +222,11 @@ export async function POST(req: NextRequest) {
     const graph = createAgentGraph(bookId ?? null, user?.id ?? null, {
       vectorsReady,
       model,
+      bookIds: validatedBookIds,
     });
+    const systemPrompt = isLibraryMode ? LIBRARY_SYSTEM_PROMPT : MARKDOWN_SYSTEM_PROMPT;
     const initialState = {
-      messages: [new SystemMessage(MARKDOWN_SYSTEM_PROMPT), ...langchainMessages],
+      messages: [new SystemMessage(systemPrompt), ...langchainMessages],
     };
 
     const encoder = new TextEncoder();

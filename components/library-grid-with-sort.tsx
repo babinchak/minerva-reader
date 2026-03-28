@@ -8,6 +8,7 @@ import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { BookCard } from "@/components/book-card";
 import { LibrarySortControls } from "@/components/library-sort-controls";
 import { UploadBookDialog } from "@/components/upload-book-dialog";
+import { LibraryAIAssistant } from "@/components/library-ai-assistant";
 import type {
   LibraryBookFilter,
   LibrarySortDir,
@@ -128,6 +129,7 @@ export function LibraryWithBooks({
           >
             Browse curated
           </Link>
+          <LibraryAIAssistant bookIds={books.map((b) => b.id)} />
         </div>
       </div>
 

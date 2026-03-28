@@ -4,7 +4,7 @@ import { StateGraph } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { ChatOpenAI } from "@langchain/openai";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { createAgentTools } from "./tools";
+import { createAgentTools, createLibraryAgentTools } from "./tools";
 
 export interface AgentState {
   messages: BaseMessage[];
@@ -24,6 +24,8 @@ function shouldContinue(state: AgentState): "tools" | "__end__" {
 export interface AgentGraphOptions {
   vectorsReady?: boolean;
   model?: string;
+  /** When set, uses library-wide multi-book tools instead of single-book tools. */
+  bookIds?: string[];
 }
 
 export function createAgentGraph(
@@ -33,7 +35,9 @@ export function createAgentGraph(
 ) {
   const vectorsReady = options?.vectorsReady ?? false;
   const modelId = options?.model ?? process.env.OPENAI_MODEL ?? "gpt-5-mini";
-  const tools = createAgentTools(bookId, userId, { vectorsReady }) as StructuredToolInterface[];
+  const tools = options?.bookIds?.length
+    ? createLibraryAgentTools(options.bookIds, userId, { vectorsReady }) as StructuredToolInterface[]
+    : createAgentTools(bookId, userId, { vectorsReady }) as StructuredToolInterface[];
   const toolNode = new ToolNode<AgentState>(tools);
 
   const model = new ChatOpenAI({

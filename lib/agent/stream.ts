@@ -76,19 +76,24 @@ export async function* streamAgentToSSE(
           if (!content) continue;
           try {
             const parsed = JSON.parse(content) as {
-              results?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; content_text?: string }>;
-              passages?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; content_text?: string }>;
+              results?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_type?: string }>;
+              passages?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_type?: string }>;
             };
             const items = parsed.results ?? parsed.passages ?? [];
             for (const item of items) {
               if (item.section_id && item.start_position) {
-                yield `data: ${JSON.stringify({
+                const sectionEvent: Record<string, unknown> = {
                   type: "section_map",
                   sectionId: item.section_id,
                   startPosition: item.start_position,
                   pageBreaks: item.page_breaks ?? null,
                   contentText: item.content_text ?? null,
-                })}\n\n`;
+                };
+                // Include book metadata when available (library multi-book mode)
+                if (item.book_id) sectionEvent.bookId = item.book_id;
+                if (item.book) sectionEvent.bookLabel = item.book;
+                if (item.book_type) sectionEvent.bookType = item.book_type;
+                yield `data: ${JSON.stringify(sectionEvent)}\n\n`;
               }
             }
           } catch {

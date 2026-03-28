@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle } from "lucide-react";
-import { Markdown } from "@/components/markdown";
+import { Markdown, type SectionBookInfo } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
   DropdownMenu,
@@ -112,6 +112,8 @@ interface AIMessage {
 export interface AIAgentPanelProps {
   selectedText?: string;
   bookId?: string;
+  /** When set, enables library mode: searches across multiple books instead of a single book. */
+  bookIds?: string[];
   rawManifest?: { readingOrder?: Array<{ href?: string }> };
   bookType?: "epub" | "pdf";
   autoRun?: { nonce: number; action: "page" | "selection" } | null;
@@ -230,6 +232,7 @@ function formatSelectionPositionLabel(
 export function AIAgentPanel({
   selectedText,
   bookId,
+  bookIds,
   rawManifest,
   bookType = "epub",
   autoRun = null,
@@ -261,12 +264,15 @@ export function AIAgentPanel({
     { id: string; book_id: string | null; created_at: string; title: string | null }[]
   >([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [chatMode, setChatMode] = useState<"fast" | "agentic">("fast");
+  const isLibraryMode = !bookId && Array.isArray(bookIds) && bookIds.length > 0;
+  const [chatMode, setChatMode] = useState<"fast" | "agentic">(isLibraryMode ? "agentic" : "fast");
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const sendingRef = useRef(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   /** Map of section_id → section data for resolving navigable references to pages. */
   const sectionCacheRef = useRef<Map<string, { startPosition: string; pageBreaks: number[] | null; contentText: string | null }>>(new Map());
+  /** Map of section_id → book info for library mode (which book each section belongs to). */
+  const [sectionBookMap, setSectionBookMap] = useState<Map<string, SectionBookInfo>>(new Map());
   const supabase = createClient();
 
   const getSelectionSnapshot = useCallback((): SelectionSnapshot | null => {
@@ -431,6 +437,18 @@ export function AIAgentPanel({
                     pageBreaks: parsed.pageBreaks ?? null,
                     contentText: parsed.contentText ?? null,
                   });
+                  // In library mode, track which book each section belongs to
+                  if (parsed.bookId && typeof parsed.bookId === "string") {
+                    setSectionBookMap((prev) => {
+                      const next = new Map(prev);
+                      next.set(parsed.sectionId, {
+                        bookId: parsed.bookId,
+                        bookLabel: parsed.bookLabel ?? "Unknown book",
+                        bookType: parsed.bookType ?? null,
+                      });
+                      return next;
+                    });
+                  }
                 }
               } else if (parsed.type === "status" && typeof parsed.message === "string") {
                 onStatus?.(parsed.message);
@@ -475,9 +493,12 @@ export function AIAgentPanel({
       const cached = sectionCacheRef.current.get(sectionId);
       if (cached) return cached;
 
-      if (!bookId) return null;
       try {
-        const res = await fetch(`/api/books/${bookId}/sections?sectionId=${encodeURIComponent(sectionId)}`);
+        // In library mode, use the bookId-free sections endpoint; otherwise use the per-book endpoint
+        const url = bookId
+          ? `/api/books/${bookId}/sections?sectionId=${encodeURIComponent(sectionId)}`
+          : `/api/sections?sectionId=${encodeURIComponent(sectionId)}`;
+        const res = await fetch(url);
         if (!res.ok) return null;
         const data = await res.json();
         const section = {
@@ -486,6 +507,18 @@ export function AIAgentPanel({
           contentText: (data.contentText as string | null) ?? null,
         };
         sectionCacheRef.current.set(sectionId, section);
+        // If response includes book info (library mode), update sectionBookMap
+        if (data.bookId && typeof data.bookId === "string") {
+          setSectionBookMap((prev) => {
+            const next = new Map(prev);
+            next.set(sectionId, {
+              bookId: data.bookId,
+              bookLabel: data.bookTitle ? `${data.bookTitle}${data.bookAuthor ? ` by ${data.bookAuthor}` : ""}` : "Unknown book",
+              bookType: data.bookType ?? null,
+            });
+            return next;
+          });
+        }
         return section;
       } catch {
         return null;
@@ -496,6 +529,9 @@ export function AIAgentPanel({
 
   const handleRefClick = useCallback(
     (ref: { sectionId: string; quotedText?: string }) => {
+      // In library mode, refs open in new tab via the Markdown component's <a> tag,
+      // so this handler is only used for single-book mode navigation.
+      if (isLibraryMode) return;
       if (!onNavigateToRef) return;
 
       // Fire async lookup, then navigate
@@ -674,7 +710,7 @@ export function AIAgentPanel({
     init();
   }, [supabase]);
 
-  const anonChatKey = `minerva-anon-chat-${bookId ?? "general"}`;
+  const anonChatKey = `minerva-anon-chat-${bookId ?? (isLibraryMode ? "library" : "general")}`;
 
   // Anonymous: load ephemeral chat from sessionStorage (once we know we're anonymous)
   useEffect(() => {
@@ -1392,11 +1428,16 @@ export function AIAgentPanel({
         { role: "user" as const, content: userContent },
       ];
 
-      const chatUrl = chatMode === "agentic" ? "/api/chat/agentic" : "/api/chat";
-      const chatBody =
-        chatMode === "agentic"
-          ? JSON.stringify({ messages: messagesForAPI, bookId: bookId ?? undefined, chatId: chatId ?? undefined })
-          : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
+      const useAgentic = chatMode === "agentic" || isLibraryMode;
+      const chatUrl = useAgentic ? "/api/chat/agentic" : "/api/chat";
+      const chatBody = useAgentic
+        ? JSON.stringify({
+            messages: messagesForAPI,
+            bookId: bookId ?? undefined,
+            bookIds: isLibraryMode ? bookIds : undefined,
+            chatId: chatId ?? undefined,
+          })
+        : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 
       const response = await fetch(chatUrl, {
         method: "POST",
@@ -1735,11 +1776,16 @@ export function AIAgentPanel({
         { role: "user" as const, content: prompt },
       ];
 
-      const chatUrl = chatMode === "agentic" ? "/api/chat/agentic" : "/api/chat";
-      const chatBody =
-        chatMode === "agentic"
-          ? JSON.stringify({ messages: messagesForAPI, bookId: bookId ?? undefined, chatId: chatId ?? undefined })
-          : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
+      const useAgentic = chatMode === "agentic" || isLibraryMode;
+      const chatUrl = useAgentic ? "/api/chat/agentic" : "/api/chat";
+      const chatBody = useAgentic
+        ? JSON.stringify({
+            messages: messagesForAPI,
+            bookId: bookId ?? undefined,
+            bookIds: isLibraryMode ? bookIds : undefined,
+            chatId: chatId ?? undefined,
+          })
+        : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 
       const response = await fetch(chatUrl, {
         method: "POST",
@@ -1871,7 +1917,12 @@ export function AIAgentPanel({
                 </DropdownMenu>
               )}
               <div className="flex items-center gap-1.5">
-                {!userId && creditsInfo && !creditsInfo.freeBetaMode ? (
+                {isLibraryMode ? (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Sparkles className="h-3 w-3 text-blue-500" />
+                    Library search
+                  </span>
+                ) : !userId && creditsInfo && !creditsInfo.freeBetaMode ? (
                   <span className="text-xs text-muted-foreground" title="Sign in for Deep mode">
                     Sign in for Deep mode
                   </span>
@@ -1985,7 +2036,7 @@ export function AIAgentPanel({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+                  placeholder={isLibraryMode ? "Ask a question across your library..." : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                   disabled={isLoading}
                   className="flex-1 bg-muted/50 shadow-md border-border dark:bg-muted dark:border-muted-foreground/30 dark:shadow-none"
                 />
@@ -2074,7 +2125,7 @@ export function AIAgentPanel({
                       )}
                       <div className="w-full text-foreground select-text">
                         {assistantMsg.content.trim() ? (
-                          <Markdown content={assistantMsg.content} bookId={bookId} onRefClick={handleRefClick} />
+                          <Markdown content={assistantMsg.content} bookId={bookId} sectionBookMap={isLibraryMode ? sectionBookMap : undefined} onRefClick={handleRefClick} />
                         ) : isStreaming ? (
                           <div className="flex gap-1">
                             <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
@@ -2137,7 +2188,7 @@ export function AIAgentPanel({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+                placeholder={isLibraryMode ? "Ask a question across your library..." : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                 disabled={isLoading}
                 className="flex-1"
               />

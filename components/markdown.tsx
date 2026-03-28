@@ -35,14 +35,22 @@ export function parsePassageRef(href: string | undefined): PassageRef | null {
   return null;
 }
 
+export interface SectionBookInfo {
+  bookId: string;
+  bookLabel: string;
+  bookType: string | null;
+}
+
 type MarkdownProps = {
   content: string;
   className?: string;
   bookId?: string;
+  /** Map of sectionId → book info, used in library mode to show book titles and build URLs. */
+  sectionBookMap?: Map<string, SectionBookInfo>;
   onRefClick?: (ref: PassageRef) => void;
 };
 
-export function Markdown({ content, className, bookId, onRefClick }: MarkdownProps) {
+export function Markdown({ content, className, bookId, sectionBookMap, onRefClick }: MarkdownProps) {
   return (
     <div
       className={[
@@ -72,32 +80,54 @@ export function Markdown({ content, className, bookId, onRefClick }: MarkdownPro
               // Strip surrounding quotation marks from the displayed text
               const raw = extractText(children);
               const display = raw.replace(/^[""\u201C\u201D]+/, "").replace(/[""\u201C\u201D]+$/, "").trim();
-              const newTabUrl = bookId
-                ? `/read/${bookId}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(raw)}`
+              // In library mode, resolve the bookId from the section map
+              const sectionBook = sectionBookMap?.get(ref.sectionId);
+              const resolvedBookId = bookId || sectionBook?.bookId;
+              const newTabUrl = resolvedBookId
+                ? `/read/${resolvedBookId}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(raw)}`
                 : null;
+              const isLibraryMode = !bookId && !!sectionBook;
               return (
-                <span className="my-1.5 flex items-start gap-2 w-full rounded-md border border-border bg-muted/50 px-3 py-2 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words">
-                  <button
-                    type="button"
-                    onClick={() => onRefClick({ ...ref, quotedText: raw })}
-                    className="flex items-start gap-2 flex-1 min-w-0 text-left cursor-pointer"
-                    title="Jump to this passage in the book"
-                  >
-                    <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                    <span className="italic">{display}</span>
-                  </button>
-                  {newTabUrl && (
-                    <a
-                      href={newTabUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="shrink-0 p-0.5 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
-                      title="Open in new tab"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
+                <span className="my-1.5 flex flex-col gap-1 w-full rounded-md border border-border bg-muted/50 px-3 py-2 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words">
+                  {isLibraryMode && sectionBook?.bookLabel && (
+                    <span className="text-xs font-medium text-muted-foreground">{sectionBook.bookLabel}</span>
                   )}
+                  <span className="flex items-start gap-2">
+                    {isLibraryMode && newTabUrl ? (
+                      <a
+                        href={newTabUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-start gap-2 flex-1 min-w-0 text-left cursor-pointer"
+                        title="Open in book"
+                      >
+                        <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span className="italic">{display}</span>
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onRefClick({ ...ref, quotedText: raw })}
+                        className="flex items-start gap-2 flex-1 min-w-0 text-left cursor-pointer"
+                        title="Jump to this passage in the book"
+                      >
+                        <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span className="italic">{display}</span>
+                      </button>
+                    )}
+                    {newTabUrl && !isLibraryMode && (
+                      <a
+                        href={newTabUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="shrink-0 p-0.5 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                        title="Open in new tab"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </span>
                 </span>
               );
             }
