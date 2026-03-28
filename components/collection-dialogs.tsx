@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,11 +22,13 @@ import type { CollectionSummary } from "@/components/collections-view";
 interface CreateCollectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated: (collection: CollectionSummary) => void;
 }
 
-export function CreateCollectionDialog({ open, onOpenChange }: CreateCollectionDialogProps) {
+export function CreateCollectionDialog({ open, onOpenChange, onCreated }: CreateCollectionDialogProps) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const router = useRouter();
 
   const handleCreate = async () => {
     const trimmed = name.trim();
@@ -38,9 +41,19 @@ export function CreateCollectionDialog({ open, onOpenChange }: CreateCollectionD
         body: JSON.stringify({ name: trimmed }),
       });
       if (res.ok) {
+        const data = await res.json();
+        const now = new Date().toISOString();
+        onCreated({
+          id: data.collection.id,
+          name: data.collection.name,
+          createdAt: now,
+          updatedAt: now,
+          bookCount: 0,
+          bookIds: [],
+        });
         setName("");
         onOpenChange(false);
-        window.dispatchEvent(new CustomEvent("collections-refresh"));
+        router.refresh();
       }
     } finally {
       setSaving(false);
@@ -90,11 +103,13 @@ interface EditCollectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   collection: CollectionSummary | null;
+  onRenamed: (id: string, newName: string) => void;
 }
 
-export function EditCollectionDialog({ open, onOpenChange, collection }: EditCollectionDialogProps) {
+export function EditCollectionDialog({ open, onOpenChange, collection, onRenamed }: EditCollectionDialogProps) {
   const [name, setName] = useState(collection?.name ?? "");
   const [saving, setSaving] = useState(false);
+  const router = useRouter();
 
   // Sync name when collection changes
   const collectionId = collection?.id;
@@ -115,8 +130,9 @@ export function EditCollectionDialog({ open, onOpenChange, collection }: EditCol
         body: JSON.stringify({ name: trimmed }),
       });
       if (res.ok) {
+        onRenamed(collection.id, trimmed);
         onOpenChange(false);
-        window.dispatchEvent(new CustomEvent("collections-refresh"));
+        router.refresh();
       }
     } finally {
       setSaving(false);
@@ -163,6 +179,7 @@ interface AddBooksToCollectionDialogProps {
   onOpenChange: (open: boolean) => void;
   collection: CollectionSummary | null;
   books: LibraryBook[];
+  onBooksAdded: (collectionId: string, addedBookIds: string[]) => void;
 }
 
 export function AddBooksToCollectionDialog({
@@ -170,28 +187,13 @@ export function AddBooksToCollectionDialog({
   onOpenChange,
   collection,
   books,
+  onBooksAdded,
 }: AddBooksToCollectionDialogProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [existingBookIds, setExistingBookIds] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const router = useRouter();
 
-  // Load existing books when dialog opens
-  const collectionId = collection?.id;
-  const [lastFetchedId, setLastFetchedId] = useState<string | undefined>();
-  if (open && collectionId && collectionId !== lastFetchedId) {
-    setLastFetchedId(collectionId);
-    setSelected(new Set());
-    setLoaded(false);
-    fetch(`/api/collections/${collectionId}/books`)
-      .then((r) => r.json())
-      .then((data) => {
-        const ids = new Set<string>(data.bookIds ?? []);
-        setExistingBookIds(ids);
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
-  }
+  const existingBookIds = new Set(collection?.bookIds ?? []);
 
   const toggleBook = (bookId: string) => {
     setSelected((prev) => {
@@ -206,16 +208,17 @@ export function AddBooksToCollectionDialog({
     if (!collection || selected.size === 0 || saving) return;
     setSaving(true);
     try {
+      const addedIds = Array.from(selected);
       const res = await fetch(`/api/collections/${collection.id}/books`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookIds: Array.from(selected) }),
+        body: JSON.stringify({ bookIds: addedIds }),
       });
       if (res.ok) {
-        onOpenChange(false);
+        onBooksAdded(collection.id, addedIds);
         setSelected(new Set());
-        setLastFetchedId(undefined);
-        window.dispatchEvent(new CustomEvent("collections-refresh"));
+        onOpenChange(false);
+        router.refresh();
       }
     } finally {
       setSaving(false);
@@ -226,10 +229,7 @@ export function AddBooksToCollectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => {
-      if (!v) {
-        setSelected(new Set());
-        setLastFetchedId(undefined);
-      }
+      if (!v) setSelected(new Set());
       onOpenChange(v);
     }}>
       <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
@@ -240,11 +240,7 @@ export function AddBooksToCollectionDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-y-auto space-y-1 py-2">
-          {!loaded ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : availableBooks.length === 0 ? (
+          {availableBooks.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               All your books are already in this collection.
             </p>

@@ -145,11 +145,49 @@ export async function LibraryView() {
     });
   }
 
+  // Fetch collections + their book IDs in parallel
+  let initialCollections: { id: string; name: string; createdAt: string; updatedAt: string; bookCount: number; bookIds: string[] }[] = [];
+  {
+    const { data: colRows } = await supabase
+      .from("collections")
+      .select("id, name, created_at, updated_at")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+
+    if (colRows && colRows.length > 0) {
+      const colIds = colRows.map((c) => c.id);
+      const { data: cbRows } = await supabase
+        .from("collection_books")
+        .select("collection_id, book_id")
+        .in("collection_id", colIds);
+
+      const bookIdsByCol = new Map<string, string[]>();
+      for (const row of cbRows ?? []) {
+        const arr = bookIdsByCol.get(row.collection_id) ?? [];
+        arr.push(row.book_id);
+        bookIdsByCol.set(row.collection_id, arr);
+      }
+
+      initialCollections = colRows.map((c) => {
+        const bids = bookIdsByCol.get(c.id) ?? [];
+        return {
+          id: c.id,
+          name: c.name,
+          createdAt: c.created_at,
+          updatedAt: c.updated_at,
+          bookCount: bids.length,
+          bookIds: bids,
+        };
+      });
+    }
+  }
+
   return (
     <div className="w-full max-w-7xl space-y-6">
       {hasBooks ? (
         <LibraryWithBooks
           books={books}
+          initialCollections={initialCollections}
           initialSort={initialSortState.sort}
           initialDir={initialSortState.dir}
           initialFilter={initialSortState.filter}

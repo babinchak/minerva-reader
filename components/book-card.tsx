@@ -196,7 +196,7 @@ export function BookCard({
                           });
                           if (res.ok) {
                             setAddedTo(col.id);
-                            window.dispatchEvent(new CustomEvent("collections-refresh"));
+                            router.refresh();
                             setTimeout(() => setAddedTo(null), 2000);
                           }
                         }}

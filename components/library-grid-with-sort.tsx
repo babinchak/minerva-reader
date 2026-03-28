@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { MinervaLogo } from "@/components/minerva-logo";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { BookCard } from "@/components/book-card";
@@ -44,11 +44,13 @@ function formatAuthorDisplay(author: string | null): string {
 
 export function LibraryWithBooks({
   books,
+  initialCollections = [],
   initialSort = "lastOpened",
   initialDir = "desc",
   initialFilter = "all",
 }: {
   books: LibraryBook[];
+  initialCollections?: CollectionSummary[];
   initialSort?: LibrarySortType;
   initialDir?: LibrarySortDir;
   initialFilter?: LibraryBookFilter;
@@ -64,28 +66,17 @@ export function LibraryWithBooks({
   const [editCollection, setEditCollection] = useState<CollectionSummary | null>(null);
   const [addBooksCollection, setAddBooksCollection] = useState<CollectionSummary | null>(null);
 
+  // Collections state — initialized from server, synced when server re-renders (e.g. after router.refresh())
+  const [collections, setCollections] = useState<CollectionSummary[]>(initialCollections);
+  const initialCollectionsRef = useRef(initialCollections);
+  if (initialCollections !== initialCollectionsRef.current) {
+    initialCollectionsRef.current = initialCollections;
+    setCollections(initialCollections);
+  }
+
   // AI scope: which collection (or "library" for all books) to search
   const [aiScope, setAiScope] = useState<{ type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] }>({ type: "library" });
   const [aiOpenFromCollection, setAiOpenFromCollection] = useState(false);
-
-  // Collections data for the AI scope dropdown
-  const [collections, setCollections] = useState<(CollectionSummary & { bookIds?: string[] })[]>([]);
-  const fetchCollectionsForAI = useCallback(async () => {
-    try {
-      const res = await fetch("/api/collections");
-      if (res.ok) {
-        const data = await res.json();
-        setCollections(data.collections ?? []);
-      }
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    fetchCollectionsForAI();
-    const handler = () => fetchCollectionsForAI();
-    window.addEventListener("collections-refresh", handler);
-    return () => window.removeEventListener("collections-refresh", handler);
-  }, [fetchCollectionsForAI]);
 
   useEffect(() => {
     document.cookie =
@@ -257,6 +248,8 @@ export function LibraryWithBooks({
       ) : (
         <CollectionsView
           books={books}
+          collections={collections}
+          onCollectionsChange={setCollections}
           onCreateCollection={() => setCreateCollectionOpen(true)}
           onEditCollection={setEditCollection}
           onOpenCollectionAI={handleOpenCollectionAI}
@@ -268,17 +261,30 @@ export function LibraryWithBooks({
       <CreateCollectionDialog
         open={createCollectionOpen}
         onOpenChange={setCreateCollectionOpen}
+        onCreated={(col) => setCollections((prev) => [col, ...prev])}
       />
       <EditCollectionDialog
         open={!!editCollection}
         onOpenChange={(open) => { if (!open) setEditCollection(null); }}
         collection={editCollection}
+        onRenamed={(id, newName) =>
+          setCollections((prev) => prev.map((c) => c.id === id ? { ...c, name: newName } : c))
+        }
       />
       <AddBooksToCollectionDialog
         open={!!addBooksCollection}
         onOpenChange={(open) => { if (!open) setAddBooksCollection(null); }}
         collection={addBooksCollection}
         books={books}
+        onBooksAdded={(colId, addedIds) =>
+          setCollections((prev) =>
+            prev.map((c) =>
+              c.id === colId
+                ? { ...c, bookIds: [...c.bookIds, ...addedIds], bookCount: c.bookCount + addedIds.length }
+                : c
+            )
+          )
+        }
       />
     </div>
   );

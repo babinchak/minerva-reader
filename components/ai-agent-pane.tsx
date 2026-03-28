@@ -159,7 +159,7 @@ export interface AIAgentPanelProps {
    */
   onNavigateToRef?: (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => void;
   /** Available collections for the scope dropdown in library mode. */
-  collections?: { id: string; name: string; bookCount: number }[];
+  collections?: { id: string; name: string; bookCount: number; bookIds: string[] }[];
   /** Current AI search scope. */
   aiScope?: { type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] };
   /** Called when user changes scope in the dropdown. */
@@ -1952,20 +1952,13 @@ export function AIAgentPanel({
                         {collectionsProp.map((col) => (
                           <DropdownMenuItem
                             key={col.id}
-                            onClick={async () => {
-                              // Fetch collection's book IDs
-                              try {
-                                const res = await fetch(`/api/collections/${col.id}/books`);
-                                if (res.ok) {
-                                  const data = await res.json();
-                                  onAiScopeChange({
-                                    type: "collection",
-                                    id: col.id,
-                                    name: col.name,
-                                    bookIds: data.bookIds ?? [],
-                                  });
-                                }
-                              } catch { /* ignore */ }
+                            onClick={() => {
+                              onAiScopeChange({
+                                type: "collection",
+                                id: col.id,
+                                name: col.name,
+                                bookIds: col.bookIds,
+                              });
                             }}
                             className={aiScope?.type === "collection" && aiScope.id === col.id ? "bg-accent" : ""}
                           >

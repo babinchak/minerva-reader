@@ -1,10 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BookCard } from "@/components/book-card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft,
   FolderOpen,
@@ -14,6 +12,7 @@ import {
   Sparkles,
   Trash2,
   BookOpen,
+  ChevronRight,
   X,
 } from "lucide-react";
 import {
@@ -31,15 +30,21 @@ export interface CollectionSummary {
   createdAt: string;
   updatedAt: string;
   bookCount: number;
+  bookIds: string[];
 }
 
 interface CollectionsViewProps {
   books: LibraryBook[];
+  collections: CollectionSummary[];
+  onCollectionsChange: (collections: CollectionSummary[]) => void;
   onCreateCollection: () => void;
   onEditCollection: (collection: CollectionSummary) => void;
   onOpenCollectionAI: (collectionId: string, bookIds: string[]) => void;
   onAddBooksToCollection: (collection: CollectionSummary) => void;
 }
+
+/** How many BookCards to show per collection in the overview. */
+const PREVIEW_COUNT = 5;
 
 function formatAuthorDisplay(author: string | null): string {
   if (!author) return "";
@@ -48,93 +53,52 @@ function formatAuthorDisplay(author: string | null): string {
 
 export function CollectionsView({
   books,
+  collections,
+  onCollectionsChange,
   onCreateCollection,
   onEditCollection,
   onOpenCollectionAI,
   onAddBooksToCollection,
 }: CollectionsViewProps) {
-  const router = useRouter();
-  const [collections, setCollections] = useState<CollectionSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [openCollectionId, setOpenCollectionId] = useState<string | null>(null);
-  const [collectionBookIds, setCollectionBookIds] = useState<string[]>([]);
-  const [loadingBooks, setLoadingBooks] = useState(false);
+  const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const fetchCollections = useCallback(async () => {
-    try {
-      const res = await fetch("/api/collections");
-      if (res.ok) {
-        const data = await res.json();
-        setCollections(data.collections ?? []);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCollections();
-  }, [fetchCollections]);
-
-  // Listen for refetch events (e.g. after creating/editing a collection)
-  useEffect(() => {
-    const handler = () => fetchCollections();
-    window.addEventListener("collections-refresh", handler);
-    return () => window.removeEventListener("collections-refresh", handler);
-  }, [fetchCollections]);
-
-  const openCollection = async (id: string) => {
-    setOpenCollectionId(id);
-    setLoadingBooks(true);
-    try {
-      const res = await fetch(`/api/collections/${id}/books`);
-      if (res.ok) {
-        const data = await res.json();
-        setCollectionBookIds(data.bookIds ?? []);
-      }
-    } finally {
-      setLoadingBooks(false);
-    }
-  };
 
   const handleDelete = async (id: string) => {
     setDeletingId(id);
     try {
       const res = await fetch(`/api/collections/${id}`, { method: "DELETE" });
       if (res.ok) {
-        setCollections((prev) => prev.filter((c) => c.id !== id));
-        if (openCollectionId === id) {
-          setOpenCollectionId(null);
-          setCollectionBookIds([]);
-        }
+        onCollectionsChange(collections.filter((c) => c.id !== id));
+        if (expandedCollectionId === id) setExpandedCollectionId(null);
       }
     } finally {
       setDeletingId(null);
     }
   };
 
-  const handleRemoveBook = async (bookId: string) => {
-    if (!openCollectionId) return;
-    const res = await fetch(`/api/collections/${openCollectionId}/books`, {
+  const handleRemoveBook = async (collectionId: string, bookId: string) => {
+    const res = await fetch(`/api/collections/${collectionId}/books`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ bookId }),
     });
     if (res.ok) {
-      setCollectionBookIds((prev) => prev.filter((id) => id !== bookId));
-      setCollections((prev) =>
-        prev.map((c) =>
-          c.id === openCollectionId ? { ...c, bookCount: Math.max(0, c.bookCount - 1) } : c
+      onCollectionsChange(
+        collections.map((c) =>
+          c.id === collectionId
+            ? { ...c, bookIds: c.bookIds.filter((id) => id !== bookId), bookCount: Math.max(0, c.bookCount - 1) }
+            : c
         )
       );
     }
   };
 
-  // Detail view for an open collection
-  if (openCollectionId) {
-    const collection = collections.find((c) => c.id === openCollectionId);
-    const collectionBooks = books.filter((b) => collectionBookIds.includes(b.id));
+  // Expanded view for a single collection — full grid with remove buttons
+  if (expandedCollectionId) {
+    const collection = collections.find((c) => c.id === expandedCollectionId);
+    const collectionBooks = collection
+      ? books.filter((b) => collection.bookIds.includes(b.id))
+      : [];
 
     return (
       <div className="space-y-4">
@@ -143,24 +107,21 @@ export function CollectionsView({
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => {
-              setOpenCollectionId(null);
-              setCollectionBookIds([]);
-            }}
+            onClick={() => setExpandedCollectionId(null)}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <h2 className="text-lg font-semibold">{collection?.name ?? "Collection"}</h2>
           <span className="text-sm text-muted-foreground">
-            {collectionBookIds.length} book{collectionBookIds.length !== 1 ? "s" : ""}
+            {collectionBooks.length} book{collectionBooks.length !== 1 ? "s" : ""}
           </span>
           <div className="ml-auto flex items-center gap-2">
-            {collectionBookIds.length > 0 && (
+            {collection && collection.bookIds.length > 0 && (
               <Button
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => onOpenCollectionAI(openCollectionId, collectionBookIds)}
+                onClick={() => onOpenCollectionAI(expandedCollectionId, collection.bookIds)}
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 AI search
@@ -180,13 +141,7 @@ export function CollectionsView({
           </div>
         </div>
 
-        {loadingBooks ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="aspect-[2/3] rounded-lg" />
-            ))}
-          </div>
-        ) : collectionBooks.length > 0 ? (
+        {collectionBooks.length > 0 ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {collectionBooks.map((book) => (
               <div key={book.id} className="group/col relative">
@@ -200,7 +155,7 @@ export function CollectionsView({
                 />
                 <button
                   type="button"
-                  onClick={() => handleRemoveBook(book.id)}
+                  onClick={() => handleRemoveBook(expandedCollectionId, book.id)}
                   className="absolute top-1 right-1 z-10 rounded-full bg-background/80 p-1 opacity-0 transition-opacity group-hover/col:opacity-100 hover:bg-destructive/10"
                   title="Remove from collection"
                 >
@@ -229,17 +184,7 @@ export function CollectionsView({
     );
   }
 
-  // Collections grid
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-32 rounded-lg" />
-        ))}
-      </div>
-    );
-  }
-
+  // Overview: each collection shows header + preview BookCards
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -264,83 +209,105 @@ export function CollectionsView({
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+        <div className="space-y-8">
           {collections.map((collection) => {
-            // Show up to 4 cover thumbnails
-            const previewBooks = books.slice(0, 4); // We don't know which books are in each collection without fetching, so we skip previews in the grid
+            const allBooks = books.filter((b) => collection.bookIds.includes(b.id));
+            const previewBooks = allBooks.slice(0, PREVIEW_COUNT);
+            const hasMore = allBooks.length > PREVIEW_COUNT;
+            const isDeleting = deletingId === collection.id;
+
             return (
               <div
                 key={collection.id}
-                className={`group relative flex flex-col rounded-lg border bg-card p-4 transition-colors hover:bg-accent/50 cursor-pointer ${
-                  deletingId === collection.id ? "opacity-50 pointer-events-none" : ""
-                }`}
-                onClick={() => openCollection(collection.id)}
+                className={`space-y-3 ${isDeleting ? "opacity-50 pointer-events-none" : ""}`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-foreground truncate">{collection.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {collection.bookCount} book{collection.bookCount !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                {/* Collection header */}
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-foreground">{collection.name}</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {collection.bookCount} book{collection.bookCount !== 1 ? "s" : ""}
+                  </span>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {collection.bookCount > 0 && (
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => e.stopPropagation()}
+                        size="sm"
+                        className="gap-1 text-xs h-7"
+                        onClick={() => onOpenCollectionAI(collection.id, collection.bookIds)}
                       >
-                        <MoreVertical className="h-4 w-4" />
+                        <Sparkles className="h-3 w-3" />
+                        AI search
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditCollection(collection);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Rename
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAddBooksToCollection(collection);
-                        }}
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add books
-                      </DropdownMenuItem>
-                      {collection.bookCount > 0 && (
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openCollection(collection.id);
-                            // The AI button is inside the detail view
-                          }}
-                        >
-                          <Sparkles className="h-4 w-4" />
-                          AI search
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onEditCollection(collection)}>
+                          <Pencil className="h-4 w-4" />
+                          Rename
                         </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(collection.id);
-                        }}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <DropdownMenuItem onClick={() => onAddBooksToCollection(collection)}>
+                          <Plus className="h-4 w-4" />
+                          Add books
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(collection.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
-                <div className="mt-3 flex items-center gap-1">
-                  <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                </div>
+
+                {/* Preview BookCards */}
+                {previewBooks.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    {previewBooks.map((book) => (
+                      <BookCard
+                        key={book.id}
+                        id={book.id}
+                        title={book.title ?? ""}
+                        authorDisplay={formatAuthorDisplay(book.author)}
+                        coverUrl={book.coverUrl}
+                        bookType={book.bookType}
+                        showRemove={false}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <BookOpen className="h-4 w-4" />
+                    No books yet
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-2 h-7 text-xs"
+                      onClick={() => onAddBooksToCollection(collection)}
+                    >
+                      Add books
+                    </Button>
+                  </div>
+                )}
+
+                {/* View all button */}
+                {hasMore && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setExpandedCollectionId(collection.id)}
+                  >
+                    View all {allBooks.length} books
+                    <ChevronRight className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
             );
           })}
