@@ -77,23 +77,50 @@ export async function* streamAgentToSSE(
           try {
             const parsed = JSON.parse(content) as {
               results?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_type?: string }>;
-              passages?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_type?: string }>;
+              passages?: Array<{
+                start_position?: string; page_breaks?: number[] | null; content_text?: string;
+                book_id?: string; book?: string; book_type?: string;
+                chunks?: Array<{ section_id: string; section_index: number; char_offset: number }>;
+              }>;
             };
-            const items = parsed.results ?? parsed.passages ?? [];
-            for (const item of items) {
-              if (item.section_id && item.start_position) {
-                const sectionEvent: Record<string, unknown> = {
-                  type: "section_map",
-                  sectionId: item.section_id,
-                  startPosition: item.start_position,
-                  pageBreaks: item.page_breaks ?? null,
-                  contentText: item.content_text ?? null,
-                };
-                // Include book metadata when available (library multi-book mode)
-                if (item.book_id) sectionEvent.bookId = item.book_id;
-                if (item.book) sectionEvent.bookLabel = item.book;
-                if (item.book_type) sectionEvent.bookType = item.book_type;
-                yield `data: ${JSON.stringify(sectionEvent)}\n\n`;
+            // Handle vector_search results (each item has its own section_id)
+            if (parsed.results) {
+              for (const item of parsed.results) {
+                if (item.section_id && item.start_position) {
+                  const sectionEvent: Record<string, unknown> = {
+                    type: "section_map",
+                    sectionId: item.section_id,
+                    startPosition: item.start_position,
+                    pageBreaks: item.page_breaks ?? null,
+                    contentText: item.content_text ?? null,
+                  };
+                  if (item.book_id) sectionEvent.bookId = item.book_id;
+                  if (item.book) sectionEvent.bookLabel = item.book;
+                  if (item.book_type) sectionEvent.bookType = item.book_type;
+                  yield `data: ${JSON.stringify(sectionEvent)}\n\n`;
+                }
+              }
+            }
+            // Handle get_passages results (merged passages with chunks array)
+            if (parsed.passages) {
+              for (const passage of parsed.passages) {
+                if (!passage.chunks?.length || !passage.start_position) continue;
+                // Emit a section_map for each chunk in the passage, with the
+                // merged passage content/page_breaks so the frontend can resolve
+                // any quote to the correct page regardless of which chunk it's in.
+                for (const chunk of passage.chunks) {
+                  const sectionEvent: Record<string, unknown> = {
+                    type: "section_map",
+                    sectionId: chunk.section_id,
+                    startPosition: passage.start_position,
+                    pageBreaks: passage.page_breaks ?? null,
+                    contentText: passage.content_text ?? null,
+                  };
+                  if (passage.book_id) sectionEvent.bookId = passage.book_id;
+                  if (passage.book) sectionEvent.bookLabel = passage.book;
+                  if (passage.book_type) sectionEvent.bookType = passage.book_type;
+                  yield `data: ${JSON.stringify(sectionEvent)}\n\n`;
+                }
               }
             }
           } catch {

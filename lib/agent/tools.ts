@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { vectorSearch, getPassageContent, SNIPPET_LENGTH, vectorSearchMulti, getPassageContentMulti } from "@/lib/vector-search";
+import { vectorSearch, getPassagesByRange, vectorSearchMulti, getPassagesByRangeMulti } from "@/lib/vector-search";
 import { textSearch, textSearchMulti } from "@/lib/text-search";
 import { webSearch } from "@/lib/tools/web-search";
 
@@ -20,9 +20,7 @@ export function createAgentTools(
       if (!bookId) {
         return JSON.stringify({ results: [], error: "No book context. Vector search requires an open book." });
       }
-      const { results, error } = await vectorSearch(bookId, query, limit ?? 10, {
-        snippetLength: SNIPPET_LENGTH,
-      });
+      const { results, error } = await vectorSearch(bookId, query, limit ?? 10);
       if (error) {
         return JSON.stringify({ results: [], error });
       }
@@ -36,7 +34,7 @@ export function createAgentTools(
           if (textResults.length > 0) {
             return JSON.stringify({
               results: textResults.map((r) => ({
-                snippet: r.content_text,
+                content_text: r.content_text,
                 start_position: r.start_position,
                 end_position: r.end_position,
                 page_breaks: r.page_breaks,
@@ -44,29 +42,30 @@ export function createAgentTools(
                 similarity: null,
               })),
               _fallback: "keyword",
-              _hint: "Use get_passage_content with section_ids to fetch full text when you need to quote or cite.",
+              _hint: "Use get_passages with chunk index ranges to fetch adjacent context if needed.",
             });
           }
         }
       }
       return JSON.stringify({
         results: results.map((r) => ({
-          snippet: r.content_text,
+          content_text: r.content_text,
+          section_index: r.section_index,
           start_position: r.start_position,
           end_position: r.end_position,
           page_breaks: r.page_breaks,
           section_id: r.section_id,
           similarity: r.similarity,
         })),
-        _hint: "Use get_passage_content with section_ids to fetch full text when you need to quote or cite.",
+        _hint: "Each result is a full chunk (~1200 chars). Use get_passages with index ranges to fetch surrounding context if text is cut off at boundaries or you need more context. For example, if chunk 5 ends mid-sentence, request range {start: 4, end: 6}.",
       });
     },
     {
       name: "vector_search",
       description:
-        "Semantic search within the current book. Use when you need to find passages by meaning or topic. " +
-        "Craft a query that describes what you're looking for (e.g. 'discussion of free will', 'character introduction'). " +
-        "Returns short snippets with section_id and positions. Call get_passage_content with section_ids when you need full text to quote or cite. Only works when a book is open.",
+        "Semantic search within the current book. Returns full text chunks (~1200 chars each) with section_index. " +
+        "Each chunk may be sufficient on its own for quoting. If text is cut off at chunk boundaries or you need more context, " +
+        "use get_passages with index ranges (e.g. if you got chunk 5, request start:4 end:6 to see surrounding text).",
       schema: z.object({
         query: z.string().describe("The semantic query to search for in the book."),
         limit: z.number().optional().describe("Max results to return (default 10, max 50)."),
@@ -74,37 +73,44 @@ export function createAgentTools(
     }
   );
 
-  const getPassageContentTool = tool(
-    async ({ section_ids }: { section_ids: string[] }) => {
+  const getPassagesTool = tool(
+    async ({ ranges }: { ranges: Array<{ start: number; end: number }> }) => {
       if (!bookId) {
-        return JSON.stringify({ passages: [], error: "No book context. get_passage_content requires an open book." });
+        return JSON.stringify({ passages: [], error: "No book context." });
       }
-      if (!section_ids?.length || !Array.isArray(section_ids)) {
-        return JSON.stringify({ passages: [], error: "section_ids array is required (from vector_search results)." });
+      if (!ranges?.length || !Array.isArray(ranges)) {
+        return JSON.stringify({ passages: [], error: "ranges array is required." });
       }
-      const { passages, error } = await getPassageContent(bookId, section_ids, userId);
+      const { passages, error } = await getPassagesByRange(bookId, ranges, userId);
       if (error) {
         return JSON.stringify({ passages: [], error });
       }
       return JSON.stringify({
         passages: passages.map((p) => ({
-          section_id: p.section_id,
           content_text: p.content_text,
           start_position: p.start_position,
           end_position: p.end_position,
           page_breaks: p.page_breaks,
+          chunks: p.chunks,
         })),
       });
     },
     {
-      name: "get_passage_content",
+      name: "get_passages",
       description:
-        "Fetch full text for specific passages. Use after vector_search when you need the complete passage to quote, cite, or include in a transcript. " +
-        "Pass the section_ids from the vector_search results you want to expand.",
+        "Fetch merged text for chunk index ranges. Use after vector_search to get surrounding context. " +
+        "Each range {start, end} returns all chunks from start to end merged into one continuous passage. " +
+        "The response includes a chunks array with section_id and char_offset for each chunk so you can reference the correct section when quoting. " +
+        "Max 10 chunks per range.",
       schema: z.object({
-        section_ids: z
-          .array(z.string())
-          .describe("Array of section_id values from vector_search results (e.g. ['uuid1', 'uuid2'])."),
+        ranges: z
+          .array(
+            z.object({
+              start: z.number().describe("Start section_index (inclusive)."),
+              end: z.number().describe("End section_index (inclusive)."),
+            })
+          )
+          .describe("Array of index ranges to fetch (e.g. [{start: 4, end: 6}, {start: 12, end: 14}])."),
       }),
     }
   );
@@ -129,7 +135,7 @@ export function createAgentTools(
           section_id: r.section_id,
         })),
         _hint: vectorsReady
-          ? "Use get_passage_content with section_ids to fetch full text when you need to quote or cite."
+          ? "Use get_passages with chunk index ranges to fetch surrounding context if needed."
           : undefined,
       });
     },
@@ -170,9 +176,9 @@ export function createAgentTools(
 
   const tools =
     vectorsReady && bookId
-      ? [vectorSearchTool, getPassageContentTool, textSearchTool, webSearchTool]
+      ? [vectorSearchTool, getPassagesTool, textSearchTool, webSearchTool]
       : bookId
-        ? [getPassageContentTool, textSearchTool, webSearchTool]
+        ? [getPassagesTool, textSearchTool, webSearchTool]
         : [textSearchTool, webSearchTool];
   return tools as ReturnType<typeof tool>[];
 }
@@ -195,9 +201,7 @@ export function createLibraryAgentTools(
 
   const vectorSearchTool = tool(
     async ({ query, limit }: { query: string; limit?: number }) => {
-      const { results, error } = await vectorSearchMulti(bookIds, query, limit ?? 10, {
-        snippetLength: SNIPPET_LENGTH,
-      });
+      const { results, error } = await vectorSearchMulti(bookIds, query, limit ?? 10);
       if (error) {
         return JSON.stringify({ results: [], error });
       }
@@ -211,7 +215,7 @@ export function createLibraryAgentTools(
           if (textResults.length > 0) {
             return JSON.stringify({
               results: textResults.map((r) => ({
-                snippet: r.content_text,
+                content_text: r.content_text,
                 start_position: r.start_position,
                 end_position: r.end_position,
                 page_breaks: r.page_breaks,
@@ -222,14 +226,15 @@ export function createLibraryAgentTools(
                 book_type: r.book_type,
               })),
               _fallback: "keyword",
-              _hint: "Use get_passage_content with section_ids to fetch full text when you need to quote or cite.",
+              _hint: "Use get_passages with chunk index ranges and book_id to fetch adjacent context if needed.",
             });
           }
         }
       }
       return JSON.stringify({
         results: results.map((r) => ({
-          snippet: r.content_text,
+          content_text: r.content_text,
+          section_index: r.section_index,
           start_position: r.start_position,
           end_position: r.end_position,
           page_breaks: r.page_breaks,
@@ -239,16 +244,15 @@ export function createLibraryAgentTools(
           book: formatBookLabel(r.book_title, r.book_author),
           book_type: r.book_type,
         })),
-        _hint: "Use get_passage_content with section_ids to fetch full text when you need to quote or cite.",
+        _hint: "Each result is a full chunk (~1200 chars). Use get_passages with index ranges and book_id to fetch surrounding context if needed.",
       });
     },
     {
       name: "vector_search",
       description:
-        "Semantic search across all books in the user's library. Use when you need to find passages by meaning or topic. " +
-        "Craft a query that describes what you're looking for (e.g. 'discussion of free will', 'character introduction'). " +
-        "Returns short snippets with section_id, positions, and which book each result is from. " +
-        "Call get_passage_content with section_ids when you need full text to quote or cite.",
+        "Semantic search across all books in the user's library. Returns full text chunks (~1200 chars each) with section_index. " +
+        "If text is cut off at chunk boundaries or you need more context, " +
+        "use get_passages with index ranges and book_id.",
       schema: z.object({
         query: z.string().describe("The semantic query to search for across the library."),
         limit: z.number().optional().describe("Max results to return (default 10, max 50)."),
@@ -256,22 +260,22 @@ export function createLibraryAgentTools(
     }
   );
 
-  const getPassageContentTool = tool(
-    async ({ section_ids }: { section_ids: string[] }) => {
-      if (!section_ids?.length || !Array.isArray(section_ids)) {
-        return JSON.stringify({ passages: [], error: "section_ids array is required (from vector_search results)." });
+  const getPassagesTool = tool(
+    async ({ ranges }: { ranges: Array<{ book_id: string; start: number; end: number }> }) => {
+      if (!ranges?.length || !Array.isArray(ranges)) {
+        return JSON.stringify({ passages: [], error: "ranges array is required." });
       }
-      const { passages, error } = await getPassageContentMulti(section_ids, userId, bookIds);
+      const { passages, error } = await getPassagesByRangeMulti(ranges, userId, bookIds);
       if (error) {
         return JSON.stringify({ passages: [], error });
       }
       return JSON.stringify({
         passages: passages.map((p) => ({
-          section_id: p.section_id,
           content_text: p.content_text,
           start_position: p.start_position,
           end_position: p.end_position,
           page_breaks: p.page_breaks,
+          chunks: p.chunks,
           book_id: p.book_id,
           book: formatBookLabel(p.book_title, p.book_author),
           book_type: p.book_type,
@@ -279,14 +283,22 @@ export function createLibraryAgentTools(
       });
     },
     {
-      name: "get_passage_content",
+      name: "get_passages",
       description:
-        "Fetch full text for specific passages. Use after vector_search when you need the complete passage to quote, cite, or include in a transcript. " +
-        "Pass the section_ids from the vector_search results you want to expand. Returns results with book information.",
+        "Fetch merged text for chunk index ranges across books. Use after vector_search to get surrounding context. " +
+        "Each range {book_id, start, end} returns all chunks merged into one continuous passage. " +
+        "The response includes a chunks array with section_id and char_offset for referencing. " +
+        "Max 10 chunks per range.",
       schema: z.object({
-        section_ids: z
-          .array(z.string())
-          .describe("Array of section_id values from vector_search results (e.g. ['uuid1', 'uuid2'])."),
+        ranges: z
+          .array(
+            z.object({
+              book_id: z.string().describe("Book ID from vector_search results."),
+              start: z.number().describe("Start section_index (inclusive)."),
+              end: z.number().describe("End section_index (inclusive)."),
+            })
+          )
+          .describe("Array of index ranges with book_id to fetch."),
       }),
     }
   );
@@ -311,7 +323,7 @@ export function createLibraryAgentTools(
           book_type: r.book_type,
         })),
         _hint: vectorsReady
-          ? "Use get_passage_content with section_ids to fetch full text when you need to quote or cite."
+          ? "Use get_passages with chunk index ranges and book_id to fetch surrounding context if needed."
           : undefined,
       });
     },
@@ -351,7 +363,7 @@ export function createLibraryAgentTools(
   );
 
   const tools = vectorsReady
-    ? [vectorSearchTool, getPassageContentTool, textSearchTool, webSearchTool]
-    : [getPassageContentTool, textSearchTool, webSearchTool];
+    ? [vectorSearchTool, getPassagesTool, textSearchTool, webSearchTool]
+    : [getPassagesTool, textSearchTool, webSearchTool];
   return tools as ReturnType<typeof tool>[];
 }

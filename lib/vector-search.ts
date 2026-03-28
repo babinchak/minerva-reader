@@ -4,8 +4,8 @@ import OpenAI from "openai";
 
 const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-large";
 
-/** Max chars per result when returning snippets (reduces token cost). */
-export const SNIPPET_LENGTH = 250;
+/** Max chunks per range request to prevent accidental huge fetches. */
+const MAX_RANGE_WIDTH = 10;
 
 export interface VectorSearchResult {
   content_text: string;
@@ -14,6 +14,7 @@ export interface VectorSearchResult {
   page_breaks: number[] | null;
   similarity: number | null;
   section_id?: string;
+  section_index?: number;
 }
 
 export interface VectorSearchOptions {
@@ -72,6 +73,7 @@ export async function vectorSearch(
         page_breaks: Array.isArray(row.page_breaks) ? row.page_breaks : null,
         similarity: typeof row.similarity === "number" ? row.similarity : null,
         section_id: row.id ?? undefined,
+        section_index: typeof row.section_index === "number" ? row.section_index : undefined,
       };
     });
 
@@ -83,15 +85,6 @@ export async function vectorSearch(
   }
 }
 
-export interface PassageContentResult {
-  section_id: string;
-  content_text: string;
-  start_position: string | null;
-  end_position: string | null;
-  page_breaks: number[] | null;
-}
-
-/** Fetch full content for specific sections. Use after vector_search when you need full text to quote or cite. */
 export interface MultiBookVectorSearchResult extends VectorSearchResult {
   book_id: string;
   book_title: string | null;
@@ -153,6 +146,7 @@ export async function vectorSearchMulti(
         page_breaks: Array.isArray(row.page_breaks) ? row.page_breaks : null,
         similarity: typeof row.similarity === "number" ? row.similarity : null,
         section_id: row.id ?? undefined,
+        section_index: typeof row.section_index === "number" ? row.section_index : undefined,
         book_id: row.book_id,
         book_title: row.book_title ?? null,
         book_author: row.book_author ?? null,
@@ -168,80 +162,92 @@ export async function vectorSearchMulti(
   }
 }
 
-export interface MultiBookPassageContentResult extends PassageContentResult {
+// --- Range-based passage fetching ---
+
+export interface ChunkInfo {
+  section_id: string;
+  section_index: number;
+  char_offset: number;
+}
+
+export interface PassageResult {
+  content_text: string;
+  start_position: string | null;
+  end_position: string | null;
+  page_breaks: number[] | null;
+  chunks: ChunkInfo[];
+}
+
+export interface MultiBookPassageResult extends PassageResult {
   book_id: string;
   book_title: string | null;
   book_author: string | null;
   book_type: string | null;
 }
 
-/** Fetch full content for specific sections across multiple books. Validates access via allowedBookIds. */
-export async function getPassageContentMulti(
-  sectionIds: string[],
-  userId: string | null,
-  allowedBookIds: string[]
-): Promise<{ passages: MultiBookPassageContentResult[]; error?: string }> {
-  if (sectionIds.length === 0) {
-    return { passages: [] };
-  }
-  const uniqueIds = [...new Set(sectionIds)].slice(0, 20);
-
-  try {
-    const supabase = createServiceClient();
-    const { data: sections, error } = await supabase
-      .from("embedding_sections")
-      .select("id, book_id, content_text, start_position, end_position, page_breaks")
-      .in("id", uniqueIds);
-
-    if (error) {
-      console.error("[getPassageContentMulti] Query error:", error);
-      return { passages: [], error: error.message };
-    }
-
-    const allowedSet = new Set(allowedBookIds);
-    const filteredSections = (sections ?? []).filter((row: any) => allowedSet.has(row.book_id));
-
-    const bookIdsInResults = [...new Set(filteredSections.map((row: any) => row.book_id))];
-    const { data: booksData } = await supabase
-      .from("books")
-      .select("id, title, author, book_type")
-      .in("id", bookIdsInResults);
-    const bookMap = new Map((booksData ?? []).map((b: any) => [b.id, b]));
-
-    const passages: MultiBookPassageContentResult[] = filteredSections.map((row: any) => {
-      const book = bookMap.get(row.book_id);
-      return {
-        section_id: row.id,
-        content_text: row.content_text ?? "",
-        start_position: row.start_position ?? null,
-        end_position: row.end_position ?? null,
-        page_breaks: Array.isArray(row.page_breaks) ? row.page_breaks : null,
-        book_id: row.book_id,
-        book_title: book?.title ?? null,
-        book_author: book?.author ?? null,
-        book_type: book?.book_type ?? null,
-      };
-    });
-
-    return { passages };
-  } catch (err) {
-    console.error("[getPassageContentMulti] Unexpected error:", err);
-    const msg = err instanceof Error ? err.message : "Failed to fetch passage content";
-    return { passages: [], error: msg };
-  }
+export interface IndexRange {
+  start: number;
+  end: number;
 }
 
-export async function getPassageContent(
+export interface MultiBookIndexRange extends IndexRange {
+  book_id: string;
+}
+
+/**
+ * Merge chunks into a single passage with merged page_breaks and chunk metadata.
+ */
+function mergeChunks(
+  chunks: Array<{ id: string; section_index: number; content_text: string; start_position: string | null; end_position: string | null; page_breaks: number[] | null }>
+): PassageResult {
+  const sorted = [...chunks].sort((a, b) => a.section_index - b.section_index);
+
+  const mergedPageBreaks: number[] = [];
+  const chunkInfos: ChunkInfo[] = [];
+  let charOffset = 0;
+  const textParts: string[] = [];
+
+  for (const chunk of sorted) {
+    const text = chunk.content_text ?? "";
+    chunkInfos.push({
+      section_id: chunk.id,
+      section_index: chunk.section_index,
+      char_offset: charOffset,
+    });
+    if (chunk.page_breaks && chunk.page_breaks.length > 0) {
+      for (const pb of chunk.page_breaks) {
+        mergedPageBreaks.push(pb + charOffset);
+      }
+    }
+    textParts.push(text);
+    charOffset += text.length + 1; // +1 for space separator
+  }
+
+  return {
+    content_text: textParts.join(" "),
+    start_position: sorted[0]!.start_position ?? null,
+    end_position: sorted[sorted.length - 1]!.end_position ?? null,
+    page_breaks: mergedPageBreaks.length > 0 ? mergedPageBreaks : null,
+    chunks: chunkInfos,
+  };
+}
+
+/**
+ * Fetch passages by section_index ranges for a single book.
+ * Each range { start, end } fetches all chunks from start to end inclusive,
+ * merges them into one continuous passage with combined page_breaks.
+ */
+export async function getPassagesByRange(
   bookId: string,
-  sectionIds: string[],
+  ranges: IndexRange[],
   userId: string | null
-): Promise<{ passages: PassageContentResult[]; error?: string }> {
-  if (sectionIds.length === 0) {
+): Promise<{ passages: PassageResult[]; error?: string }> {
+  if (ranges.length === 0) {
     return { passages: [] };
   }
-  const uniqueIds = [...new Set(sectionIds)].slice(0, 20);
 
   try {
+    // Access check
     if (userId) {
       const userClient = await createClient();
       const { data: userBook } = await userClient
@@ -265,30 +271,168 @@ export async function getPassageContent(
       }
     }
 
+    // Clamp and collect all needed indices
+    const allIndices = new Set<number>();
+    const clampedRanges: IndexRange[] = [];
+    for (const r of ranges) {
+      const start = Math.max(0, r.start);
+      const end = Math.max(start, Math.min(r.end, start + MAX_RANGE_WIDTH - 1));
+      clampedRanges.push({ start, end });
+      for (let i = start; i <= end; i++) {
+        allIndices.add(i);
+      }
+    }
+
     const supabase = createServiceClient();
-    const { data: sections, error } = await supabase
+    const { data: chunks, error } = await supabase
       .from("embedding_sections")
-      .select("id, content_text, start_position, end_position, page_breaks")
+      .select("id, section_index, content_text, start_position, end_position, page_breaks")
       .eq("book_id", bookId)
-      .in("id", uniqueIds);
+      .in("section_index", [...allIndices]);
 
     if (error) {
-      console.error("[getPassageContent] Query error:", error);
+      console.error("[getPassagesByRange] Query error:", error);
       return { passages: [], error: error.message };
     }
 
-    const passages: PassageContentResult[] = (sections ?? []).map((row: any) => ({
-      section_id: row.id,
-      content_text: row.content_text ?? "",
-      start_position: row.start_position ?? null,
-      end_position: row.end_position ?? null,
-      page_breaks: Array.isArray(row.page_breaks) ? row.page_breaks : null,
-    }));
+    const chunkByIndex = new Map<number, (typeof chunks)[number]>();
+    for (const chunk of chunks ?? []) {
+      chunkByIndex.set(chunk.section_index as number, chunk);
+    }
+
+    const passages: PassageResult[] = [];
+    for (const r of clampedRanges) {
+      const rangeChunks: Array<{ id: string; section_index: number; content_text: string; start_position: string | null; end_position: string | null; page_breaks: number[] | null }> = [];
+      for (let i = r.start; i <= r.end; i++) {
+        const chunk = chunkByIndex.get(i);
+        if (chunk) {
+          rangeChunks.push({
+            id: chunk.id,
+            section_index: chunk.section_index as number,
+            content_text: chunk.content_text ?? "",
+            start_position: chunk.start_position ?? null,
+            end_position: chunk.end_position ?? null,
+            page_breaks: Array.isArray(chunk.page_breaks) ? chunk.page_breaks : null,
+          });
+        }
+      }
+      if (rangeChunks.length > 0) {
+        passages.push(mergeChunks(rangeChunks));
+      }
+    }
 
     return { passages };
   } catch (err) {
-    console.error("[getPassageContent] Unexpected error:", err);
-    const msg = err instanceof Error ? err.message : "Failed to fetch passage content";
+    console.error("[getPassagesByRange] Unexpected error:", err);
+    const msg = err instanceof Error ? err.message : "Failed to fetch passages";
+    return { passages: [], error: msg };
+  }
+}
+
+/**
+ * Fetch passages by section_index ranges across multiple books.
+ * Each range { book_id, start, end } fetches chunks for that book.
+ */
+export async function getPassagesByRangeMulti(
+  ranges: MultiBookIndexRange[],
+  userId: string | null,
+  allowedBookIds: string[]
+): Promise<{ passages: MultiBookPassageResult[]; error?: string }> {
+  if (ranges.length === 0) {
+    return { passages: [] };
+  }
+
+  try {
+    const allowedSet = new Set(allowedBookIds);
+
+    // Group ranges by book_id
+    const rangesByBook = new Map<string, IndexRange[]>();
+    for (const r of ranges) {
+      if (!allowedSet.has(r.book_id)) continue;
+      const start = Math.max(0, r.start);
+      const end = Math.max(start, Math.min(r.end, start + MAX_RANGE_WIDTH - 1));
+      if (!rangesByBook.has(r.book_id)) rangesByBook.set(r.book_id, []);
+      rangesByBook.get(r.book_id)!.push({ start, end });
+    }
+
+    const supabase = createServiceClient();
+
+    // Fetch chunks per book
+    const allPassages: MultiBookPassageResult[] = [];
+
+    for (const [bookId, bookRanges] of rangesByBook) {
+      const allIndices = new Set<number>();
+      for (const r of bookRanges) {
+        for (let i = r.start; i <= r.end; i++) {
+          allIndices.add(i);
+        }
+      }
+
+      const { data: chunks, error } = await supabase
+        .from("embedding_sections")
+        .select("id, section_index, content_text, start_position, end_position, page_breaks")
+        .eq("book_id", bookId)
+        .in("section_index", [...allIndices]);
+
+      if (error) {
+        console.error("[getPassagesByRangeMulti] Query error:", error);
+        continue;
+      }
+
+      const chunkByIndex = new Map<number, (typeof chunks)[number]>();
+      for (const chunk of chunks ?? []) {
+        chunkByIndex.set(chunk.section_index as number, chunk);
+      }
+
+      for (const r of bookRanges) {
+        const rangeChunks: Array<{ id: string; section_index: number; content_text: string; start_position: string | null; end_position: string | null; page_breaks: number[] | null }> = [];
+        for (let i = r.start; i <= r.end; i++) {
+          const chunk = chunkByIndex.get(i);
+          if (chunk) {
+            rangeChunks.push({
+              id: chunk.id,
+              section_index: chunk.section_index as number,
+              content_text: chunk.content_text ?? "",
+              start_position: chunk.start_position ?? null,
+              end_position: chunk.end_position ?? null,
+              page_breaks: Array.isArray(chunk.page_breaks) ? chunk.page_breaks : null,
+            });
+          }
+        }
+        if (rangeChunks.length > 0) {
+          allPassages.push({
+            ...mergeChunks(rangeChunks),
+            book_id: bookId,
+            book_title: null,
+            book_author: null,
+            book_type: null,
+          });
+        }
+      }
+    }
+
+    // Fetch book metadata
+    const bookIdsInResults = [...new Set(allPassages.map((p) => p.book_id))];
+    if (bookIdsInResults.length > 0) {
+      const { data: booksData } = await supabase
+        .from("books")
+        .select("id, title, author, book_type")
+        .in("id", bookIdsInResults);
+      const bookMap = new Map((booksData ?? []).map((b: any) => [b.id, b]));
+      for (const p of allPassages) {
+        const book = bookMap.get(p.book_id);
+        if (book) {
+          p.book_title = book.title ?? null;
+          p.book_author = book.author ?? null;
+          p.book_type = book.book_type ?? null;
+        }
+      }
+    }
+
+    return { passages: allPassages };
+  } catch (err) {
+    console.error("[getPassagesByRangeMulti] Unexpected error:", err);
+    const msg = err instanceof Error ? err.message : "Failed to fetch passages";
     return { passages: [], error: msg };
   }
 }

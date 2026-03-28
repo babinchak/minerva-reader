@@ -21,11 +21,13 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- Use fenced code blocks with a language tag for code.\n" +
   "- Do NOT wrap the entire response in a single code block.\n" +
   "- Avoid raw HTML; prefer Markdown.\n" +
-  "\nYou have access to tools: vector_search (semantic search in the book), get_passage_content (fetch full text for passages by section_id), text_search (keyword search in the book), and web_search (search the web). " +
-  "Use them when they would improve your answer. Call get_passage_content with section_ids when you need full text to quote or cite. You can also answer directly from the context provided if it's sufficient.\n" +
+  "\nYou have access to tools: vector_search (semantic search — returns full text chunks with section_index), get_passages (fetch merged text for chunk index ranges), text_search (keyword search in the book), and web_search (search the web). " +
+  "Use them when they would improve your answer. vector_search returns full chunks (~1200 chars) which may be sufficient to quote from directly. " +
+  "If text is cut off at a chunk boundary or you need more context, call get_passages with index ranges (e.g. if chunk 5 ends mid-sentence, request {start: 4, end: 6}). " +
+  "You can also answer directly from the context provided if it's sufficient.\n" +
   "\n## Navigable References\n" +
   "When you directly quote text from the book, make the quote a navigable reference so the reader can jump to it.\n" +
-  "Tool results include `section_id` — use it to link quotes back to their source passage.\n" +
+  "Tool results include `section_id` (from vector_search) or `chunks` array with `section_id` per chunk (from get_passages) — use these to link quotes back to their source.\n" +
   "Format: `[\"quoted text\"](ref:<section_id>)`\n" +
   "Example: `[\"Call me Ishmael.\"](ref:a1b2c3d4-e5f6-7890-abcd-ef1234567890)`\n" +
   "\nRules:\n" +
@@ -44,18 +46,19 @@ const LIBRARY_SYSTEM_PROMPT =
   "- Do NOT wrap the entire response in a single code block.\n" +
   "- Avoid raw HTML; prefer Markdown.\n" +
   "\nYou have access to tools that search across ALL books in the user's library:\n" +
-  "- vector_search: semantic search across all books\n" +
-  "- get_passage_content: fetch full text for passages by section_id\n" +
+  "- vector_search: semantic search — returns full text chunks (~1200 chars) with section_index\n" +
+  "- get_passages: fetch merged text for chunk index ranges (include book_id)\n" +
   "- text_search: keyword search across all books\n" +
   "- web_search: search the web\n" +
-  "Use them when they would improve your answer. Call get_passage_content with section_ids when you need full text to quote or cite.\n" +
+  "vector_search returns full chunks which may be sufficient to quote from directly. " +
+  "If text is cut off at a chunk boundary or you need more context, call get_passages with index ranges and book_id.\n" +
   "\n## Important: Attribute results to their source book\n" +
   "Tool results include `book` (title and author) and `book_id` for each result. " +
   "ALWAYS mention which book a quote or finding comes from. " +
   "When presenting results from multiple books, organize by book or clearly label each finding.\n" +
   "\n## Navigable References\n" +
   "When you directly quote text from a book, make the quote a navigable reference so the reader can jump to it.\n" +
-  "Tool results include `section_id` — use it to link quotes back to their source passage.\n" +
+  "Tool results include `section_id` (from vector_search) or `chunks` array with `section_id` per chunk (from get_passages) — use these to link quotes back to their source.\n" +
   "Format: `[\"quoted text\"](ref:<section_id>)`\n" +
   "Example: `[\"Call me Ishmael.\"](ref:a1b2c3d4-e5f6-7890-abcd-ef1234567890)`\n" +
   "\nRules:\n" +

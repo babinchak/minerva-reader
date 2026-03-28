@@ -58,7 +58,7 @@ const TOOL_LABELS: Record<string, string> = {
   vector_search: "Vector search",
   text_search: "Text Search",
   web_search: "Web search",
-  get_passage_content: "Fetching passage",
+  get_passages: "Fetching passages",
 };
 
 function formatToolLabel(toolName: string): string {
@@ -70,10 +70,10 @@ function getQueryPreview(tc: MessageToolCall, maxLen = 80): string {
   if (typeof query === "string" && query.length > 0) {
     return query.length > maxLen ? `${query.slice(0, maxLen)}...` : query;
   }
-  if (tc.toolName === "get_passage_content") {
-    const ids = tc.args?.section_ids;
-    const count = Array.isArray(ids) ? ids.length : 0;
-    return count > 0 ? `${count} section${count === 1 ? "" : "s"}` : "";
+  if (tc.toolName === "get_passages") {
+    const ranges = tc.args?.ranges;
+    const count = Array.isArray(ranges) ? ranges.length : 0;
+    return count > 0 ? `${count} range${count === 1 ? "" : "s"}` : "";
   }
   return "";
 }
