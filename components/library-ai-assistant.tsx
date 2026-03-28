@@ -1,18 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sparkles, X } from "lucide-react";
 import { AIAgentPanel } from "@/components/ai-agent-pane";
 import { useIsMobile } from "@/lib/use-media-query";
+import type { CollectionSummary } from "@/components/collections-view";
+
+export type AIScope =
+  | { type: "library" }
+  | { type: "collection"; id: string; name: string; bookIds: string[] };
 
 interface LibraryAIAssistantProps {
   bookIds: string[];
+  collections?: CollectionSummary[];
+  aiScope?: AIScope;
+  onAiScopeChange?: (scope: AIScope) => void;
+  /** When true, force open the AI pane (e.g. from a collection AI button). */
+  forceOpen?: boolean;
+  onForceOpenConsumed?: () => void;
 }
 
-export function LibraryAIAssistant({ bookIds }: LibraryAIAssistantProps) {
+export function LibraryAIAssistant({
+  bookIds,
+  collections,
+  aiScope,
+  onAiScopeChange,
+  forceOpen,
+  onForceOpenConsumed,
+}: LibraryAIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isMobile = useIsMobile();
+
+  // Handle force open from collection AI button
+  useEffect(() => {
+    if (forceOpen && !isOpen) {
+      setIsOpen(true);
+      onForceOpenConsumed?.();
+    }
+  }, [forceOpen, isOpen, onForceOpenConsumed]);
 
   if (bookIds.length === 0) return null;
 
@@ -48,6 +74,9 @@ export function LibraryAIAssistant({ bookIds }: LibraryAIAssistantProps) {
             </div>
             <AIAgentPanel
               bookIds={bookIds}
+              collections={collections}
+              aiScope={aiScope}
+              onAiScopeChange={onAiScopeChange}
               className="flex-1 flex flex-col min-h-0"
               showHeader={false}
             />
@@ -73,6 +102,9 @@ export function LibraryAIAssistant({ bookIds }: LibraryAIAssistantProps) {
         <div className="fixed top-0 right-0 z-50 h-full w-[400px] border-l border-border bg-background shadow-lg flex flex-col">
           <AIAgentPanel
             bookIds={bookIds}
+            collections={collections}
+            aiScope={aiScope}
+            onAiScopeChange={onAiScopeChange}
             className="h-full w-full flex flex-col min-w-0"
             onClose={() => setIsOpen(false)}
           />

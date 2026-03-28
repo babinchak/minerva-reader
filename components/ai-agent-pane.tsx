@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle } from "lucide-react";
+import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen } from "lucide-react";
 import { Markdown, type SectionBookInfo } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -158,6 +158,12 @@ export interface AIAgentPanelProps {
    * The parent reader should navigate to the position and highlight the text.
    */
   onNavigateToRef?: (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => void;
+  /** Available collections for the scope dropdown in library mode. */
+  collections?: { id: string; name: string; bookCount: number }[];
+  /** Current AI search scope. */
+  aiScope?: { type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] };
+  /** Called when user changes scope in the dropdown. */
+  onAiScopeChange?: (scope: { type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] }) => void;
 }
 
 interface SummaryContext {
@@ -248,6 +254,9 @@ export function AIAgentPanel({
   className,
   onClose,
   onNavigateToRef,
+  collections: collectionsProp,
+  aiScope,
+  onAiScopeChange,
 }: AIAgentPanelProps) {
   const lastAutoRunNonceRef = useRef<number | null>(null);
 
@@ -1918,10 +1927,61 @@ export function AIAgentPanel({
               )}
               <div className="flex items-center gap-1.5">
                 {isLibraryMode ? (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Sparkles className="h-3 w-3 text-blue-500" />
-                    Library search
-                  </span>
+                  collectionsProp && collectionsProp.length > 0 && onAiScopeChange ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <Sparkles className="h-3 w-3 text-blue-500" />
+                          <span className="max-w-[120px] truncate">
+                            {aiScope?.type === "collection" ? aiScope.name : "Library"}
+                          </span>
+                          <ChevronRight className="h-3 w-3 rotate-90" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-[160px]">
+                        <DropdownMenuItem
+                          onClick={() => onAiScopeChange({ type: "library" })}
+                          className={aiScope?.type === "library" ? "bg-accent" : ""}
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          All library
+                        </DropdownMenuItem>
+                        {collectionsProp.map((col) => (
+                          <DropdownMenuItem
+                            key={col.id}
+                            onClick={async () => {
+                              // Fetch collection's book IDs
+                              try {
+                                const res = await fetch(`/api/collections/${col.id}/books`);
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  onAiScopeChange({
+                                    type: "collection",
+                                    id: col.id,
+                                    name: col.name,
+                                    bookIds: data.bookIds ?? [],
+                                  });
+                                }
+                              } catch { /* ignore */ }
+                            }}
+                            className={aiScope?.type === "collection" && aiScope.id === col.id ? "bg-accent" : ""}
+                          >
+                            <FolderOpen className="h-3.5 w-3.5" />
+                            <span className="truncate">{col.name}</span>
+                            <span className="ml-auto text-[10px] text-muted-foreground">{col.bookCount}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Sparkles className="h-3 w-3 text-blue-500" />
+                      Library search
+                    </span>
+                  )
                 ) : !userId && creditsInfo && !creditsInfo.freeBetaMode ? (
                   <span className="text-xs text-muted-foreground" title="Sign in for Deep mode">
                     Sign in for Deep mode
@@ -2036,7 +2096,7 @@ export function AIAgentPanel({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={isLibraryMode ? "Ask a question across your library..." : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+                  placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask about ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                   disabled={isLoading}
                   className="flex-1 bg-muted/50 shadow-md border-border dark:bg-muted dark:border-muted-foreground/30 dark:shadow-none"
                 />
@@ -2188,7 +2248,7 @@ export function AIAgentPanel({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={isLibraryMode ? "Ask a question across your library..." : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+                placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask about ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                 disabled={isLoading}
                 className="flex-1"
               />

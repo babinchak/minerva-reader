@@ -2,16 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AlertCircle, BookOpen, Loader2, MoreVertical, Pencil, Trash2, User } from "lucide-react";
+import { AlertCircle, BookOpen, Check, FolderOpen, Loader2, MoreVertical, Pencil, Trash2, User } from "lucide-react";
 import { hapticLight } from "@/lib/haptic";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EditBookMetadataDialog } from "@/components/edit-book-metadata-dialog";
+import type { CollectionSummary } from "@/components/collections-view";
 
 interface BookCardProps {
   id: string;
@@ -27,6 +31,8 @@ interface BookCardProps {
   epubNotReady?: "processing" | "error" | null;
   /** Stage 2: Summaries/vectors still generating — book is readable but AI features pending. */
   aiProcessing?: "processing" | "error" | null;
+  /** Available collections for "Add to Collection" submenu. */
+  collections?: CollectionSummary[];
 }
 
 export function BookCard({
@@ -39,10 +45,12 @@ export function BookCard({
   showRemove = true,
   epubNotReady,
   aiProcessing,
+  collections,
 }: BookCardProps) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [addedTo, setAddedTo] = useState<string | null>(null);
 
   const handleRemove = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -170,6 +178,40 @@ export function BookCard({
                 <Pencil className="h-4 w-4" />
                 Edit title & author
               </DropdownMenuItem>
+              {collections && collections.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <FolderOpen className="h-4 w-4" />
+                    Add to collection
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {collections.map((col) => (
+                      <DropdownMenuItem
+                        key={col.id}
+                        onClick={async () => {
+                          const res = await fetch(`/api/collections/${col.id}/books`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ bookId: id }),
+                          });
+                          if (res.ok) {
+                            setAddedTo(col.id);
+                            window.dispatchEvent(new CustomEvent("collections-refresh"));
+                            setTimeout(() => setAddedTo(null), 2000);
+                          }
+                        }}
+                      >
+                        {addedTo === col.id ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <FolderOpen className="h-4 w-4" />
+                        )}
+                        {col.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
               <DropdownMenuItem
                 onClick={handleRemove}
                 disabled={isRemoving}
