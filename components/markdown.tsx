@@ -71,9 +71,11 @@ type MarkdownProps = {
   /** Map of sectionId → book info, used in library mode to show book titles and build URLs. */
   sectionBookMap?: Map<string, SectionBookInfo>;
   onRefClick?: (ref: PassageRef) => void;
+  /** Current chat ID, appended to "open in new tab" URLs so the new tab can restore the conversation. */
+  chatId?: string | null;
 };
 
-export function Markdown({ content, className, bookId, sectionBookMap, onRefClick }: MarkdownProps) {
+export function Markdown({ content, className, bookId, sectionBookMap, onRefClick, chatId }: MarkdownProps) {
   return (
     <div
       className={[
@@ -107,7 +109,7 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
               const sectionBook = sectionBookMap?.get(ref.sectionId);
               const resolvedBookId = bookId || sectionBook?.bookId || ref.bookId;
               const newTabUrl = resolvedBookId
-                ? `/read/${resolvedBookId}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(raw)}`
+                ? `/read/${resolvedBookId}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(raw)}${chatId ? `&refChatId=${encodeURIComponent(chatId)}` : ""}`
                 : null;
               const isLibraryMode = !bookId && (!!sectionBook || !!ref.bookId);
               const pageNumber = ref.page ?? null;

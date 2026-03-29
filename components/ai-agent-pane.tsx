@@ -159,6 +159,10 @@ export interface AIAgentPanelProps {
    * The parent reader should navigate to the position and highlight the text.
    */
   onNavigateToRef?: (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => void;
+  /** Initial chat ID to load on mount (e.g. from "open in new tab" URL param). */
+  initialChatId?: string | null;
+  /** Quoted text from the navigable reference that triggered the new tab. Used to scroll to the reference after loading. */
+  initialRefQuote?: string | null;
   /** Available collections for the scope dropdown in library mode. */
   collections?: { id: string; name: string; bookCount: number; bookIds: string[] }[];
   /** Current AI search scope. */
@@ -255,6 +259,8 @@ export function AIAgentPanel({
   className,
   onClose,
   onNavigateToRef,
+  initialChatId,
+  initialRefQuote,
   collections: collectionsProp,
   aiScope,
   onAiScopeChange,
@@ -269,7 +275,7 @@ export function AIAgentPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [bookTitle, setBookTitle] = useState<string>("");
   const [bookAuthor, setBookAuthor] = useState<string>("");
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>(initialChatId ?? null);
   const [chats, setChats] = useState<
     { id: string; book_id: string | null; created_at: string; title: string | null }[]
   >([]);
@@ -279,6 +285,7 @@ export function AIAgentPanel({
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const sendingRef = useRef(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
+  const initialRefScrolledRef = useRef(false);
   /** Map of section_id → section data for resolving navigable references to pages. */
   const sectionCacheRef = useRef<Map<string, { startPosition: string; pageBreaks: number[] | null; contentText: string | null }>>(new Map());
   /** Map of section_id → book info for library mode (which book each section belongs to). */
@@ -743,8 +750,10 @@ export function AIAgentPanel({
 
   // Scroll so the last user message is pinned to the top of the viewport (ChatGPT-style).
   // The bottom spacer in the messages container ensures there's enough room to scroll past.
+  const suppressScrollRef = useRef(false);
   const scrollToLastUserMessage = useCallback(() => {
     requestAnimationFrame(() => {
+      if (suppressScrollRef.current) return;
       const container = messagesScrollRef.current;
       if (!container) return;
       const userMsgs = container.querySelectorAll("[data-user-message]");
@@ -799,10 +808,56 @@ export function AIAgentPanel({
       } else {
         setMessages([]);
       }
-      scrollToLastUserMessage();
+
+      // If this is the initial load from a "open in new tab" ref link, scroll to the reference card
+      if (initialRefQuote && activeChatId === initialChatId && !initialRefScrolledRef.current) {
+        initialRefScrolledRef.current = true;
+        // Suppress competing scrollToLastUserMessage calls while we scroll to the ref
+        suppressScrollRef.current = true;
+        // Wait for React to render the messages, then find and scroll to the reference
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            const container = messagesScrollRef.current;
+            if (!container) {
+              suppressScrollRef.current = false;
+              return;
+            }
+            const normalizeForMatch = (s: string) =>
+              s.replace(/[\u201C\u201D\u2018\u2019""'']/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+            const targetText = normalizeForMatch(initialRefQuote);
+            // Find the reference card's italic span that contains the quoted text
+            const italicSpans = container.querySelectorAll("span.italic");
+            for (const span of italicSpans) {
+              if (normalizeForMatch(span.textContent ?? "").includes(targetText.slice(0, 60)) ||
+                  targetText.includes(normalizeForMatch(span.textContent ?? "").slice(0, 60))) {
+                // Scroll the reference card (parent span with border) to center
+                const card = span.closest("span.rounded-md") ?? span;
+                card.scrollIntoView({ block: "center", behavior: "instant" });
+                // Brief highlight flash
+                const el = card as HTMLElement;
+                el.style.outline = "2px solid hsl(var(--primary))";
+                el.style.outlineOffset = "2px";
+                el.style.borderRadius = "0.375rem";
+                setTimeout(() => {
+                  el.style.outline = "";
+                  el.style.outlineOffset = "";
+                }, 2000);
+                // Release scroll suppression after all competing effects have settled
+                setTimeout(() => { suppressScrollRef.current = false; }, 500);
+                return;
+              }
+            }
+            // Fallback: scroll to last user message
+            suppressScrollRef.current = false;
+            scrollToLastUserMessage();
+          }, 50);
+        });
+      } else {
+        scrollToLastUserMessage();
+      }
     };
     loadMessages();
-  }, [activeChatId, isLoading, supabase, scrollToLastUserMessage]);
+  }, [activeChatId, isLoading, supabase, scrollToLastUserMessage, initialChatId, initialRefQuote]);
 
   // Scroll to bottom when messages become visible (e.g. mobile drawer expanding).
   useEffect(() => {
@@ -2046,7 +2101,7 @@ export function AIAgentPanel({
                       )}
                       <div className="w-full text-foreground select-text">
                         {assistantMsg.content.trim() ? (
-                          <Markdown content={assistantMsg.content} bookId={bookId} sectionBookMap={isLibraryMode ? sectionBookMap : undefined} onRefClick={handleRefClick} />
+                          <Markdown content={assistantMsg.content} bookId={bookId} sectionBookMap={isLibraryMode ? sectionBookMap : undefined} onRefClick={handleRefClick} chatId={activeChatId} />
                         ) : isStreaming ? (
                           <div className="flex gap-1">
                             <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />

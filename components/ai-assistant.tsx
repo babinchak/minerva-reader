@@ -45,6 +45,10 @@ export interface AIAssistantProps {
    * toggle chrome (hide UI) instead of collapsing the drawer.
    */
   onMobileNavRefToggleChrome?: () => void;
+  /** Initial chat ID to load (e.g. from "open in new tab" URL param). */
+  initialChatId?: string | null;
+  /** Quoted text from the navigable reference, used to scroll to the specific reference in the chat. */
+  initialRefQuote?: string | null;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -67,6 +71,8 @@ export function AIAssistant(props: AIAssistantProps) {
       hidden={props.hidden}
       onNavigateToRef={props.onNavigateToRef}
       onToggleChrome={props.onMobileNavRefToggleChrome}
+      initialChatId={props.initialChatId}
+      initialRefQuote={props.initialRefQuote}
     />
   );
   }
@@ -84,8 +90,10 @@ function DesktopAIAssistant({
   requestOpen = null,
   onOpenChange,
   onNavigateToRef,
+  initialChatId,
+  initialRefQuote,
 }: AIAssistantProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(!!initialChatId);
   const openedViaRequestRunRef = useRef(false);
   const [autoRun, setAutoRun] = useState<{ nonce: number; action: "page" | "selection" } | null>(
     null
@@ -175,8 +183,10 @@ function DesktopAIAssistant({
       onClose: () => setIsOpen(false),
       onActionComplete: handleActionComplete,
       onNavigateToRef,
+      initialChatId,
+      initialRefQuote,
     }),
-    [autoRun, bookId, bookType, currentPage, pdfDocument, rawManifest, selectedText, handleActionComplete, onNavigateToRef]
+    [autoRun, bookId, bookType, currentPage, pdfDocument, rawManifest, selectedText, handleActionComplete, onNavigateToRef, initialChatId, initialRefQuote]
   );
 
   return (

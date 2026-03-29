@@ -275,6 +275,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const refChatId = searchParams.get("refChatId") || null;
+  const refQuote = searchParams.get("refQuote") || null;
   const isMobile = useIsMobile();
   const [chromeVisible, setChromeVisible] = useState(true);
   const toggleChrome = useCallback(() => { hapticLight(); setChromeVisible((v) => !v); }, []);
@@ -2424,6 +2426,8 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
           onOpenChange={(open) => setIsAiPaneOpen(open)}
           onNavigateToRef={handleNavigateToRef}
           onMobileNavRefToggleChrome={toggleChrome}
+          initialChatId={refChatId}
+          initialRefQuote={refQuote}
         />
       </div>
 

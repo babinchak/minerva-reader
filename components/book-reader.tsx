@@ -150,6 +150,8 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   const params = useParams();
   const searchParams = useSearchParams();
   const bookId = params?.bookId as string;
+  const refChatId = searchParams.get("refChatId") || null;
+  const refQuote = searchParams.get("refQuote") || null;
   const thoriumPreferences = useMemo(() => createThoriumPreferences(isMobile), [isMobile]);
 
   const aiNonceRef = useRef(0);
@@ -432,6 +434,8 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     onOpenChange={setIsAiPaneOpen}
                     onNavigateToRef={handleNavigateToRef}
                     onMobileNavRefToggleChrome={toggleChrome}
+                    initialChatId={refChatId}
+                    initialRefQuote={refQuote}
                   />
                 </div>
               </div>
@@ -461,6 +465,8 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     requestOpen={openAiRequest}
                     onOpenChange={setIsAiPaneOpen}
                     onNavigateToRef={handleNavigateToRef}
+                    initialChatId={refChatId}
+                    initialRefQuote={refQuote}
                   />
                 </div>
               </>
