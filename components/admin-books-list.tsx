@@ -138,6 +138,8 @@ export function AdminBooksList() {
   const [detailBook, setDetailBook] = useState<Book | null>(null);
   const [detail, setDetail] = useState<BookDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [regenerating, setRegenerating] = useState<string | null>(null); // "summaries" | "vectors" | "all" | null
+  const [regenerateResult, setRegenerateResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const [sort, setSort] = useState<SortType>("lastOpened");
   const [dir, setDir] = useState<SortDir>("desc");
@@ -207,6 +209,7 @@ export function AdminBooksList() {
     setDetailBook(book);
     setDetail(null);
     setDetailLoading(true);
+    setRegenerateResult(null);
     try {
       const res = await fetch(`/api/admin/books/${book.id}/detail`);
       if (!res.ok) throw new Error("Failed to load details");
@@ -240,6 +243,32 @@ export function AdminBooksList() {
     } finally {
       setDeletingId(null);
       setConfirmDelete(null);
+    }
+  };
+
+  const handleRegenerate = async (bookId: string, action: "summaries" | "vectors" | "all") => {
+    setRegenerating(action);
+    setRegenerateResult(null);
+    try {
+      const res = await fetch(`/api/admin/books/${bookId}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, force: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setRegenerateResult({ type: "success", message: `${action === "all" ? "Summaries & vectors" : action === "summaries" ? "Summaries" : "Vectors"} regenerated successfully.` });
+      // Re-fetch detail to show updated counts
+      if (detailBook) {
+        const detailRes = await fetch(`/api/admin/books/${bookId}/detail`);
+        if (detailRes.ok) setDetail(await detailRes.json());
+      }
+    } catch (err) {
+      setRegenerateResult({ type: "error", message: err instanceof Error ? err.message : "Regeneration failed" });
+    } finally {
+      setRegenerating(null);
     }
   };
 
@@ -471,6 +500,45 @@ export function AdminBooksList() {
                   </div>
                 </div>
               )}
+
+              {/* Regenerate actions */}
+              <div>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Actions</h4>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={regenerating !== null}
+                    onClick={() => handleRegenerate(detail.book.id, "summaries")}
+                  >
+                    {regenerating === "summaries" && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                    Regenerate Summaries
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={regenerating !== null}
+                    onClick={() => handleRegenerate(detail.book.id, "vectors")}
+                  >
+                    {regenerating === "vectors" && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                    Regenerate Vectors
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={regenerating !== null}
+                    onClick={() => handleRegenerate(detail.book.id, "all")}
+                  >
+                    {regenerating === "all" && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                    Regenerate All
+                  </Button>
+                </div>
+                {regenerateResult && (
+                  <p className={`text-xs mt-2 ${regenerateResult.type === "success" ? "text-green-600" : "text-destructive"}`}>
+                    {regenerateResult.message}
+                  </p>
+                )}
+              </div>
 
               {/* Book metadata */}
               <div>
