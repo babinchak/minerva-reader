@@ -85,7 +85,7 @@ export function EpubReaderToolbar({
           className="-ml-2 shrink-0"
           onClick={() => {
             hapticLight();
-            router.back();
+            router.push("/");
           }}
           aria-label="Back"
         >

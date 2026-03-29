@@ -1851,7 +1851,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                     className="-ml-2 shrink-0"
                     onClick={() => {
                       hapticLight();
-                      router.back();
+                      router.push("/");
                     }}
                     aria-label="Back"
                   >
@@ -2038,7 +2038,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                     className="-ml-2 shrink-0 text-foreground hover:bg-accent/80 hover:text-accent-foreground"
                     onClick={() => {
                       hapticLight();
-                      router.back();
+                      router.push("/");
                     }}
                     aria-label="Back"
                   >
