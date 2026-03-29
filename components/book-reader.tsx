@@ -24,7 +24,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { EpubReaderToolbar } from "@/components/epub-reader-toolbar";
 import { useTheme } from "next-themes";
 import { AIAssistant } from "@/components/ai-assistant";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
 import { hapticLight } from "@/lib/haptic";
@@ -148,6 +148,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   const isMobile = useIsMobile();
   const selectedText = useSelectedText();
   const params = useParams();
+  const searchParams = useSearchParams();
   const bookId = params?.bookId as string;
   const thoriumPreferences = useMemo(() => createThoriumPreferences(isMobile), [isMobile]);
 
@@ -167,6 +168,58 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
       setEpubNavRef({ readingOrderIndex: ref.readingOrderIndex, quotedText: ref.quotedText });
     }
   }, []);
+
+  // Handle ?refSection=...&refQuote=... URL params (e.g. from "open in new tab")
+  const refParamsHandledRef = useRef(false);
+  useEffect(() => {
+    if (refParamsHandledRef.current) return;
+    const refSection = searchParams.get("refSection");
+    const refQuote = searchParams.get("refQuote");
+    if (!refSection) return;
+    refParamsHandledRef.current = true;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/books/${bookId}/sections?sectionId=${encodeURIComponent(refSection)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const startPosition = data.startPosition as string;
+        if (!startPosition) return;
+
+        const parts = startPosition.split("/");
+        const readingOrderIndex = parseInt(parts[0], 10);
+        if (Number.isNaN(readingOrderIndex)) return;
+
+        const quotedText = refQuote
+          ?.replace(/^[""\u201C\u201D]+/, "")
+          .replace(/[""\u201C\u201D]+$/, "")
+          .trim();
+
+        // Wait for the epub to actually render before navigating.
+        // Poll for the Thorium iframe to exist, then trigger navigation.
+        let attempt = 0;
+        const maxAttempts = 40; // ~6 seconds total
+        const waitForEpub = () => {
+          attempt++;
+          const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+          if (iframes.length > 0) {
+            setEpubNavRef({ readingOrderIndex, quotedText: quotedText || undefined });
+            return;
+          }
+          if (attempt < maxAttempts) {
+            setTimeout(waitForEpub, 150);
+          } else {
+            // Last resort: navigate anyway, EpubRefNavigator will handle its own polling
+            setEpubNavRef({ readingOrderIndex, quotedText: quotedText || undefined });
+          }
+        };
+        waitForEpub();
+      } catch {
+        // Section lookup failed — ignore
+      }
+    })();
+  }, [searchParams, bookId, setEpubNavRef]);
+
   const toggleChrome = useCallback(() => {
     hapticLight();
     setChromeVisible((v) => !v);
