@@ -141,6 +141,8 @@ export function AdminBooksList() {
   const [regenerating, setRegenerating] = useState<string | null>(null); // "summaries" | "vectors" | "all" | null
   const [regenerateResult, setRegenerateResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
+  const [togglingCurated, setTogglingCurated] = useState(false);
+
   const [sort, setSort] = useState<SortType>("lastOpened");
   const [dir, setDir] = useState<SortDir>("desc");
   const [bookFilter, setBookFilter] = useState<BookFilter>("all");
@@ -269,6 +271,28 @@ export function AdminBooksList() {
       setRegenerateResult({ type: "error", message: err instanceof Error ? err.message : "Regeneration failed" });
     } finally {
       setRegenerating(null);
+    }
+  };
+
+  const handleToggleCurated = async () => {
+    if (!detail || !detailBook) return;
+    const newValue = !detail.book.isCurated;
+    setTogglingCurated(true);
+    try {
+      const res = await fetch(`/api/admin/books/${detail.book.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isCurated: newValue }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      setDetail({ ...detail, book: { ...detail.book, isCurated: newValue } });
+      setBooks((prev) =>
+        prev.map((b) => (b.id === detail.book.id ? { ...b, isCurated: newValue } : b))
+      );
+    } catch {
+      // silent — the toggle just won't flip
+    } finally {
+      setTogglingCurated(false);
     }
   };
 
@@ -548,9 +572,24 @@ export function AdminBooksList() {
                     <span className="text-muted-foreground">Type</span>
                     <span className="uppercase text-xs font-medium">{detail.book.bookType ?? "Unknown"}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Curated</span>
-                    <span>{detail.book.isCurated ? "Yes" : "No"}</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={detail.book.isCurated}
+                      disabled={togglingCurated}
+                      onClick={handleToggleCurated}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${
+                        detail.book.isCurated ? "bg-primary" : "bg-input"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                          detail.book.isCurated ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Added</span>
