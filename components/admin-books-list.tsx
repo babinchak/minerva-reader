@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Clock,
   Database,
+  ExternalLink,
   FileText,
   Info,
   Loader2,
@@ -45,6 +46,20 @@ type Book = {
   userCount: number;
 };
 
+type ProcessingEvent = {
+  id: string;
+  action: string;
+  status: "started" | "completed" | "failed";
+  errorMessage: string | null;
+  lambdaName: string | null;
+  logGroup: string | null;
+  logStream: string | null;
+  awsRegion: string | null;
+  durationMs: number | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
 type BookDetail = {
   book: {
     id: string;
@@ -61,6 +76,7 @@ type BookDetail = {
   chatCount: number;
   embeddingCount: number;
   summaryCounts: Record<string, number>;
+  processingEvents: ProcessingEvent[];
 };
 
 type SortType = "lastOpened" | "dateAdded" | "title" | "userCount";
@@ -469,7 +485,7 @@ export function AdminBooksList() {
 
       {/* Book detail drill-down */}
       <Dialog open={!!detailBook} onOpenChange={(open) => !open && setDetailBook(null)}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-[60vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="line-clamp-2">{detailBook?.title}</DialogTitle>
             {detailBook?.author && (
@@ -563,6 +579,90 @@ export function AdminBooksList() {
                   </p>
                 )}
               </div>
+
+              {/* Processing events */}
+              {detail.processingEvents && detail.processingEvents.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                    Processing History
+                  </h4>
+                  <div className="rounded-md border border-border overflow-hidden">
+                    {detail.processingEvents
+                      .filter((e) => e.status !== "started")
+                      .slice(0, 10)
+                      .map((event) => {
+                        const cloudwatchUrl =
+                          event.logGroup && event.logStream && event.awsRegion
+                            ? `https://${event.awsRegion}.console.aws.amazon.com/cloudwatch/home?region=${event.awsRegion}#logsV2:log-groups/log-group/${encodeURIComponent(event.logGroup).replace(/%/g, "$25")}/log-events/${encodeURIComponent(event.logStream).replace(/%/g, "$25")}`
+                            : null;
+                        return (
+                          <div
+                            key={event.id}
+                            className="flex items-center gap-2 px-3 py-2 text-sm border-t border-border first:border-t-0 overflow-hidden"
+                          >
+                            <span
+                              className={`h-2 w-2 rounded-full shrink-0 ${
+                                event.status === "completed"
+                                  ? "bg-green-500"
+                                  : event.status === "failed"
+                                    ? "bg-red-500"
+                                    : "bg-yellow-500"
+                              }`}
+                            />
+                            <div className="flex-1 min-w-0 overflow-hidden">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium capitalize">{event.action}</span>
+                                <span className={`text-xs ${
+                                  event.status === "completed"
+                                    ? "text-green-600 dark:text-green-400"
+                                    : event.status === "failed"
+                                      ? "text-red-600 dark:text-red-400"
+                                      : "text-yellow-600 dark:text-yellow-400"
+                                }`}>
+                                  {event.status}
+                                </span>
+                                {event.durationMs != null && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {event.durationMs >= 1000
+                                      ? `${(event.durationMs / 1000).toFixed(1)}s`
+                                      : `${event.durationMs}ms`}
+                                  </span>
+                                )}
+                              </div>
+                              {event.errorMessage && (
+                                <p className="text-xs text-red-600 dark:text-red-400 line-clamp-2 break-all mt-0.5" title={event.errorMessage}>
+                                  {event.errorMessage}
+                                </p>
+                              )}
+                            </div>
+                            <div className="shrink-0 flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(event.createdAt).toLocaleString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              {cloudwatchUrl && (
+                                <a
+                                  href={cloudwatchUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="p-1 rounded hover:bg-muted transition-colors"
+                                  title="View in CloudWatch"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
 
               {/* Book metadata */}
               <div>

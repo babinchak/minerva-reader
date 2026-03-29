@@ -75,6 +75,14 @@ export async function GET(
       summaryCounts[s.summary_type] = (summaryCounts[s.summary_type] ?? 0) + 1;
     }
 
+    // Processing events (most recent 20)
+    const { data: processingEvents } = await serviceSupabase
+      .from("processing_events")
+      .select("id, action, status, error_message, lambda_name, log_group, log_stream, aws_region, duration_ms, metadata, created_at")
+      .eq("book_id", bookId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
     return NextResponse.json({
       book: {
         id: book.id,
@@ -91,6 +99,19 @@ export async function GET(
       chatCount: chatCount ?? 0,
       embeddingCount: embeddingCount ?? 0,
       summaryCounts,
+      processingEvents: (processingEvents ?? []).map((e) => ({
+        id: e.id,
+        action: e.action,
+        status: e.status,
+        errorMessage: e.error_message,
+        lambdaName: e.lambda_name,
+        logGroup: e.log_group,
+        logStream: e.log_stream,
+        awsRegion: e.aws_region,
+        durationMs: e.duration_ms,
+        metadata: e.metadata,
+        createdAt: e.created_at,
+      })),
     });
   } catch (err) {
     console.error("[ADMIN] Book detail error:", err);
