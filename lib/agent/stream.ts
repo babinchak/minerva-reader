@@ -1,7 +1,7 @@
 import type { BaseMessage } from "@langchain/core/messages";
 import type { AIMessage } from "@langchain/core/messages";
 import type { AgentState } from "./graph";
-import { resolveQuotePage, type SectionData } from "@/lib/resolve-quote-page";
+import { resolveQuotePage, resolveQuotePosition, type SectionData } from "@/lib/resolve-quote-page";
 
 type AgentGraph = ReturnType<typeof import("./graph").createAgentGraph>;
 
@@ -129,6 +129,9 @@ class RefEnricher {
       // EPUB: extract reading order index from "readingOrderIndex/path"
       const ro = parseInt(section.startPosition.split("/")[0], 10);
       if (!Number.isNaN(ro)) params.push(`ro=${ro}`);
+      // EPUB: resolve Readium position number from page_breaks
+      const pos = resolveQuotePosition(section, quotedText);
+      if (pos != null) params.push(`pos=${pos}`);
     }
 
     if (section.bookId) params.push(`bid=${section.bookId}`);

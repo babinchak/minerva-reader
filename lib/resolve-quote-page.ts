@@ -133,6 +133,7 @@ export interface SectionData {
   startPosition: string;
   pageBreaks: number[] | null;
   contentText: string | null;
+  bookType?: string | null;
 }
 
 /**
@@ -175,4 +176,49 @@ export function resolveQuotePage(
   }
 
   return page;
+}
+
+/**
+ * Resolve which Readium position a quoted passage falls on within an EPUB section.
+ *
+ * For EPUB sections, page_breaks is encoded as [startPositionNumber, breakOffset1, breakOffset2, ...].
+ * The first element is the Readium position number at the start of the section;
+ * subsequent elements are character offsets within content_text where the position increments.
+ *
+ * @returns The Readium position number, or null if resolution fails
+ */
+export function resolveQuotePosition(
+  section: SectionData,
+  quotedText: string | undefined
+): number | null {
+  if (!section.pageBreaks?.length) return null;
+
+  const startPos = section.pageBreaks[0]!;
+  const breakOffsets = section.pageBreaks.slice(1);
+
+  const cleaned = quotedText
+    ?.replace(/^[""\u201C\u201D]+/, "")
+    .replace(/[""\u201C\u201D]+$/, "")
+    .trim();
+
+  if (!cleaned || !section.contentText || breakOffsets.length === 0) {
+    return startPos;
+  }
+
+  const rawContent = section.contentText;
+  const normContent = normalizeTypo(rawContent.toLowerCase()).replace(/\s+/g, " ");
+  const normQuote = normalizeTypo(cleaned.toLowerCase()).replace(/\s+/g, " ");
+  const normToRawMap = buildNormToRawMap(rawContent);
+
+  const idx = findQuoteIndex(normContent, normQuote);
+  if (idx < 0) return startPos;
+
+  const rawIdx = normToRawMap[idx] ?? 0;
+  let pos = startPos;
+  for (const breakOffset of breakOffsets) {
+    if (rawIdx >= breakOffset) pos++;
+    else break;
+  }
+
+  return pos;
 }

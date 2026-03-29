@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useSelectedText } from "@/lib/use-selected-text";
-import { useAppSelector, useAppDispatch, setActionOpen } from "@edrlab/thorium-web/epub";
+import { useAppSelector, useAppDispatch, setActionOpen, useEpubNavigator } from "@edrlab/thorium-web/epub";
 import { hapticLight } from "@/lib/haptic";
 import { useIsMobile } from "@/lib/use-media-query";
 
@@ -22,40 +22,6 @@ interface EpubReaderToolbarProps {
   onRequestAiRun: (action: "page" | "selection") => void;
   onRequestAiOpen: () => void;
   isAiPaneOpen: boolean;
-}
-
-/** Formats EPUB position from Thorium timeline for display in the toolbar */
-function useEpubPositionLabel(): string {
-  const timeline = useAppSelector((state) => state.publication.unstableTimeline);
-  const progression = timeline?.progression;
-
-  if (!progression) return "";
-
-  const {
-    currentChapter,
-    currentIndex,
-    totalItems,
-    relativeProgression,
-    totalProgression,
-  } = progression;
-
-  // Show chapter title only (no position)
-  if (currentChapter) return currentChapter;
-
-  // Fallback: index + total
-  if (typeof currentIndex === "number" && typeof totalItems === "number" && totalItems > 0) {
-    return `${currentIndex + 1} / ${totalItems}`;
-  }
-
-  // Percentage
-  if (typeof totalProgression === "number") {
-    return `${Math.round(totalProgression * 100)}%`;
-  }
-  if (typeof relativeProgression === "number") {
-    return `${Math.round(relativeProgression * 100)}%`;
-  }
-
-  return "";
 }
 
 export function EpubReaderToolbar({
@@ -68,7 +34,36 @@ export function EpubReaderToolbar({
   const selectedText = useSelectedText();
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
   const dispatch = useAppDispatch();
-  const positionLabel = useEpubPositionLabel();
+
+  const timeline = useAppSelector((state) => state.publication.unstableTimeline);
+  const positionsList = useAppSelector((state) => state.publication.positionsList);
+  const progression = timeline?.progression;
+  const totalPositions = progression?.totalPositions ?? positionsList?.length ?? 0;
+  const currentPositions = progression?.currentPositions;
+  const currentPosition = currentPositions?.[0] ?? null;
+
+  const { go } = useEpubNavigator();
+
+  const [positionInput, setPositionInput] = useState(currentPosition != null ? String(currentPosition) : "");
+  const [isEditingPosition, setIsEditingPosition] = useState(false);
+
+  // Keep input in sync with current position when not editing
+  if (!isEditingPosition && currentPosition != null && positionInput !== String(currentPosition)) {
+    setPositionInput(String(currentPosition));
+  }
+
+  const commitPositionInput = useCallback(() => {
+    const parsed = Number.parseInt(positionInput, 10);
+    if (Number.isNaN(parsed) || parsed < 1 || parsed > totalPositions || !positionsList?.length) {
+      if (currentPosition != null) setPositionInput(String(currentPosition));
+      return;
+    }
+    // positionsList is 0-indexed, positions are 1-based
+    const locator = positionsList[parsed - 1];
+    if (locator) {
+      go(locator, true, () => {});
+    }
+  }, [positionInput, totalPositions, positionsList, currentPosition, go]);
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -99,17 +94,35 @@ export function EpubReaderToolbar({
       </div>
 
       <div className="flex items-center justify-center gap-2 min-w-0 justify-self-center">
-        {!isMobile &&
-          (positionLabel ? (
-            <span
-              className="text-sm text-muted-foreground select-none truncate max-w-[200px]"
-              title={positionLabel}
-            >
-              {positionLabel}
+        {!isMobile && totalPositions > 0 && (
+          <>
+            <Input
+              value={positionInput}
+              onChange={(e) => setPositionInput(e.target.value)}
+              onFocus={() => setIsEditingPosition(true)}
+              onBlur={() => {
+                setIsEditingPosition(false);
+                commitPositionInput();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  (e.currentTarget as HTMLInputElement).blur();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  if (currentPosition != null) setPositionInput(String(currentPosition));
+                  (e.currentTarget as HTMLInputElement).blur();
+                }
+              }}
+              inputMode="numeric"
+              aria-label="Current position"
+              className="h-8 w-16 text-center"
+            />
+            <span className="text-sm text-muted-foreground select-none">
+              / {totalPositions}
             </span>
-          ) : (
-            <span className="text-sm text-muted-foreground select-none">—</span>
-          ))}
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-2 shrink-0 justify-self-end">

@@ -26,6 +26,8 @@ export interface PassageRef {
   page?: number;
   /** Reading order index (EPUBs only, baked in by the server-side streaming proxy). */
   readingOrderIndex?: number;
+  /** Readium position number (EPUBs only, baked in by the server-side streaming proxy). */
+  position?: number;
   /** Book ID (populated in library mode). */
   bookId?: string;
 }
@@ -47,6 +49,8 @@ export function parsePassageRef(href: string | undefined): PassageRef | null {
     if (p) { const n = parseInt(p, 10); if (!Number.isNaN(n)) ref.page = n; }
     const ro = params.get("ro");
     if (ro) { const n = parseInt(ro, 10); if (!Number.isNaN(n)) ref.readingOrderIndex = n; }
+    const pos = params.get("pos");
+    if (pos) { const n = parseInt(pos, 10); if (!Number.isNaN(n)) ref.position = n; }
     const bid = params.get("bid");
     if (bid) ref.bookId = bid;
   }
@@ -107,6 +111,8 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                 : null;
               const isLibraryMode = !bookId && (!!sectionBook || !!ref.bookId);
               const pageNumber = ref.page ?? null;
+              const positionNumber = ref.position ?? null;
+              const locationLabel = pageNumber != null ? `Page ${pageNumber}` : positionNumber != null ? `Position ${positionNumber}` : null;
               const handleContainerClick = isLibraryMode && newTabUrl
                 ? undefined
                 : () => onRefClick({ ...ref, quotedText: raw });
@@ -122,10 +128,10 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                   {isLibraryMode && sectionBook?.bookLabel && (
                     <span className="px-3 pt-2 text-xs font-medium text-muted-foreground">{sectionBook.bookLabel}</span>
                   )}
-                  {(pageNumber != null || newTabUrl) && (
+                  {(locationLabel != null || newTabUrl) && (
                     <span className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground">
-                      {pageNumber != null && (
-                        <span>Page {pageNumber}</span>
+                      {locationLabel != null && (
+                        <span>{locationLabel}</span>
                       )}
                       {newTabUrl && (
                         <a
@@ -141,7 +147,7 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                       )}
                     </span>
                   )}
-                  <span className={pageNumber != null || newTabUrl ? "border-t border-border px-3 py-2" : "px-3 py-2"}>
+                  <span className={locationLabel != null || newTabUrl ? "border-t border-border px-3 py-2" : "px-3 py-2"}>
                     <span className="italic">{display}</span>
                   </span>
                 </span>
