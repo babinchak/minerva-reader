@@ -31,11 +31,11 @@ const MARKDOWN_SYSTEM_PROMPT =
   "Format: `[\"quoted text\"](ref:<section_id>)`\n" +
   "Example: `[\"Call me Ishmael.\"](ref:a1b2c3d4-e5f6-7890-abcd-ef1234567890)`\n" +
   "\nRules:\n" +
-  "- ONLY use this for direct quotes that come from tool results with a section_id.\n" +
+  "- ALWAYS use the `[\"quoted text\"](ref:<section_id>)` link format for quoting from the book. Never use bare blockquotes (> ...) for book quotes.\n" +
   "- The quoted text inside the link MUST be copied verbatim from the passage content_text. Do not paraphrase or alter it.\n" +
   "- Use the section_id exactly as it appears in the tool result.\n" +
   "- If a passage has no section_id, just use a regular blockquote instead.\n" +
-  "- Keep quotes concise — truncate to ~150 chars with … if needed.";
+  "- For long quotes, use … to skip less important sections in the middle. Keep the opening and closing verbatim.";
 
 const LIBRARY_SYSTEM_PROMPT =
   "You are a helpful reading assistant with access to the user's book library. Respond using GitHub-flavored Markdown (GFM).\n" +
@@ -62,11 +62,11 @@ const LIBRARY_SYSTEM_PROMPT =
   "Format: `[\"quoted text\"](ref:<section_id>)`\n" +
   "Example: `[\"Call me Ishmael.\"](ref:a1b2c3d4-e5f6-7890-abcd-ef1234567890)`\n" +
   "\nRules:\n" +
-  "- ONLY use this for direct quotes that come from tool results with a section_id.\n" +
+  "- ALWAYS use the `[\"quoted text\"](ref:<section_id>)` link format for quoting from books. Never use bare blockquotes (> ...) for book quotes.\n" +
   "- The quoted text inside the link MUST be copied verbatim from the passage content_text. Do not paraphrase or alter it.\n" +
   "- Use the section_id exactly as it appears in the tool result.\n" +
   "- If a passage has no section_id, just use a regular blockquote instead.\n" +
-  "- Keep quotes concise — truncate to ~150 chars with … if needed.\n" +
+  "- For long quotes, use … to skip less important sections in the middle. Keep the opening and closing verbatim.\n" +
   "- Always state which book the quote is from before or after the reference.";
 
 type IncomingMessage = { role: "system" | "user" | "assistant"; content: string };

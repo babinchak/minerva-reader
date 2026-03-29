@@ -842,6 +842,29 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
           const alphaOnly = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
           const alphaFlat = alphaOnly(normalizedFlat);
           const alphaQuote = alphaOnly(normalizedQuote);
+
+          // Helper: given an alpha-index match, map back to original offsets and highlight.
+          const highlightFromAlpha = (aIdx: number, aLen: number) => {
+            let ai = 0;
+            let normStartIdx = 0;
+            while (normStartIdx < normalizedFlat.length && ai < aIdx) {
+              if (/[a-z0-9]/i.test(normalizedFlat[normStartIdx]!)) ai++;
+              normStartIdx++;
+            }
+            while (normStartIdx < normalizedFlat.length && !/[a-z0-9]/i.test(normalizedFlat[normStartIdx]!)) {
+              normStartIdx++;
+            }
+            let normEndIdx = normStartIdx;
+            let ac = 0;
+            while (normEndIdx < normalizedFlat.length && ac < aLen) {
+              if (/[a-z0-9]/i.test(normalizedFlat[normEndIdx]!)) ac++;
+              normEndIdx++;
+            }
+            const oStart = normToOrigMap[normStartIdx] ?? 0;
+            const oEnd = (normToOrigMap[normEndIdx - 1] ?? oStart) + 1;
+            highlightRange(oStart, oEnd);
+          };
+
           let alphaIdx = alphaFlat.indexOf(alphaQuote);
           let usedAlphaLen = alphaQuote.length;
 
@@ -856,32 +879,46 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
           }
 
           if (alphaIdx >= 0) {
-            // Map alpha index back to normalizedFlat index:
-            // Skip past alphaIdx alpha chars, then land on the next alpha char (match start)
-            let ai = 0;
-            let normStartIdx = 0;
-            while (normStartIdx < normalizedFlat.length && ai < alphaIdx) {
-              if (/[a-z0-9]/i.test(normalizedFlat[normStartIdx]!)) ai++;
-              normStartIdx++;
-            }
-            // normStartIdx now points to (or past) the match start; find exact alpha char
-            while (normStartIdx < normalizedFlat.length && !/[a-z0-9]/i.test(normalizedFlat[normStartIdx]!)) {
-              normStartIdx++;
-            }
-
-            // Walk usedAlphaLen alpha chars from normStartIdx to find end
-            let normEndIdx = normStartIdx;
-            let ac = 0;
-            while (normEndIdx < normalizedFlat.length && ac < usedAlphaLen) {
-              if (/[a-z0-9]/i.test(normalizedFlat[normEndIdx]!)) ac++;
-              normEndIdx++;
-            }
-
-            const origStart = normToOrigMap[normStartIdx] ?? 0;
-            const origEnd = (normToOrigMap[normEndIdx - 1] ?? origStart) + 1;
-            console.log("[NAV_REF] alpha match → origStart:", origStart, "origEnd:", origEnd);
-            highlightRange(origStart, origEnd);
+            console.log("[NAV_REF] alpha match → alphaIdx:", alphaIdx, "len:", usedAlphaLen);
+            highlightFromAlpha(alphaIdx, usedAlphaLen);
             return;
+          }
+
+          // Ellipsis fragment fallback: quote may use …/... to skip text.
+          // Split into fragments, try each (longest first) via alpha-only matching.
+          const fragments = normalizedQuote
+            .split(/\.{3}|\u2026/)
+            .map((f) => f.trim())
+            .filter((f) => f.length >= 10);
+
+          if (fragments.length > 1) {
+            const sortedFrags = [...fragments].sort((a, b) => b.length - a.length);
+            for (const frag of sortedFrags) {
+              const alphaFrag = alphaOnly(frag);
+              const fragIdx = alphaFlat.indexOf(alphaFrag);
+              if (fragIdx >= 0) {
+                console.log("[NAV_REF] ellipsis fragment match:", frag.slice(0, 40));
+                highlightFromAlpha(fragIdx, alphaFrag.length);
+                return;
+              }
+            }
+          }
+
+          // End-of-page fallback: the quote may start near the end of this page
+          // and continue onto the next. Try matching a suffix of the page against
+          // a prefix of the quote using alpha-only matching.
+          if (alphaQuote.length >= 15) {
+            // Check if the end of the page text matches the start of the quote
+            const minOverlap = 10;
+            for (let len = Math.min(alphaQuote.length, alphaFlat.length); len >= minOverlap; len--) {
+              const quotePrefix = alphaQuote.slice(0, len);
+              if (alphaFlat.endsWith(quotePrefix)) {
+                const aIdx = alphaFlat.length - len;
+                console.log("[NAV_REF] end-of-page suffix match, overlap:", len);
+                highlightFromAlpha(aIdx, len);
+                return;
+              }
+            }
           }
 
           console.warn("[NAV_REF] Quote NOT found on page", ref.page, "— no highlight");

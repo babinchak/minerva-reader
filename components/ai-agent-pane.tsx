@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen } from "lucide-react";
-import { Markdown, type SectionBookInfo } from "@/components/markdown";
+import { Markdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
   DropdownMenu,
@@ -28,6 +28,7 @@ import { getPdfLocalContextAroundCurrentSelection } from "@/lib/pdf-position/loc
 import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context-from-document";
 import { getEpubVisibleContext, getEpubVisibleContextWithPosition } from "@/lib/epub-visible-context";
 import { getEpubLocalContextAroundCurrentSelection } from "@/lib/book-position/local-context";
+import { resolveQuotePage } from "@/lib/resolve-quote-page";
 import { UpgradeCta } from "@/components/upgrade-cta";
 import {
   Dialog,
@@ -537,174 +538,41 @@ export function AIAgentPanel({
   );
 
   const handleRefClick = useCallback(
-    (ref: { sectionId: string; quotedText?: string }) => {
+    (ref: PassageRef) => {
       // In library mode, refs open in new tab via the Markdown component's <a> tag,
       // so this handler is only used for single-book mode navigation.
       if (isLibraryMode) return;
       if (!onNavigateToRef) return;
 
-      // Fire async lookup, then navigate
+      // Use enriched ref data if available (baked in by server-side proxy)
+      if (ref.page != null) {
+        onNavigateToRef({ page: ref.page, quotedText: ref.quotedText });
+        return;
+      }
+      if (ref.readingOrderIndex != null) {
+        onNavigateToRef({ readingOrderIndex: ref.readingOrderIndex, quotedText: ref.quotedText });
+        return;
+      }
+
+      // Fallback for old messages without enriched refs — async section lookup
       (async () => {
-        console.group("[REF_CLICK] handleRefClick");
-        console.log("sectionId:", ref.sectionId, "quotedText:", ref.quotedText);
-
         const section = await fetchSection(ref.sectionId);
-        if (!section) {
-          console.warn("Section not found for id:", ref.sectionId);
-          console.groupEnd();
-          return;
-        }
+        if (!section) return;
 
-        console.log("Section:", {
-          startPosition: section.startPosition,
-          pageBreaks: section.pageBreaks,
-          contentTextLength: section.contentText?.length ?? 0,
-        });
-
-        // EPUB: parse reading order index from startPosition (format: "readingOrderIndex/elementPath")
         if (bookType === "epub") {
           const parts = section.startPosition.split("/");
           const readingOrderIndex = parseInt(parts[0], 10);
-          if (Number.isNaN(readingOrderIndex)) {
-            console.warn("EPUB startPosition has no valid reading order index:", section.startPosition);
-            console.groupEnd();
-            return;
-          }
-          console.log("EPUB: navigating to readingOrderIndex", readingOrderIndex);
-          console.groupEnd();
+          if (Number.isNaN(readingOrderIndex)) return;
           onNavigateToRef({ readingOrderIndex, quotedText: ref.quotedText });
           return;
         }
 
-        const startPage = parseInt(section.startPosition, 10);
-        if (Number.isNaN(startPage)) {
-          console.warn("startPosition is not a number:", section.startPosition);
-          console.groupEnd();
-          return;
-        }
-
-        let page = startPage;
-        const quotedText = ref.quotedText
-          ?.replace(/^[""\u201C\u201D]+/, "")
-          .replace(/[""\u201C\u201D]+$/, "")
-          .trim();
-
-        // Normalize typography: curly quotes, ligatures, dashes, ellipsis
-        const normalizeTypo = (s: string) =>
-          s
-            .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
-            .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
-            .replace(/\uFB01/g, "fi").replace(/\uFB02/g, "fl")
-            .replace(/\uFB00/g, "ff").replace(/\uFB03/g, "ffi").replace(/\uFB04/g, "ffl")
-            .replace(/[\u2013\u2014]/g, "-")
-            .replace(/\u2026/g, "...");
-
-        // If we have contentText and pageBreaks, find which page the quote is on.
-        // page_breaks offsets are into the RAW contentText, so we need to map back.
-        if (quotedText && section.contentText && section.pageBreaks?.length) {
-          const rawContent = section.contentText;
-          const normContent = normalizeTypo(rawContent.toLowerCase()).replace(/\s+/g, " ");
-          const normQuote = normalizeTypo(quotedText.toLowerCase()).replace(/\s+/g, " ");
-
-          // Build mapping: normContent index → rawContent index
-          // We need this because page_breaks are offsets into rawContent
-          const normToRawMap: number[] = [];
-          {
-            const ligatures: Record<string, string> = {
-              "\uFB00": "ff", "\uFB01": "fi", "\uFB02": "fl",
-              "\uFB03": "ffi", "\uFB04": "ffl",
-            };
-            const ellipsis = "\u2026";
-            let prevWasSpace = false;
-            for (let ri = 0; ri < rawContent.length; ri++) {
-              const ch = rawContent[ri]!;
-              if (/\s/.test(ch)) {
-                if (!prevWasSpace) { normToRawMap.push(ri); prevWasSpace = true; }
-              } else if (ligatures[ch]) {
-                for (let k = 0; k < ligatures[ch]!.length; k++) normToRawMap.push(ri);
-                prevWasSpace = false;
-              } else if (ch === ellipsis) {
-                normToRawMap.push(ri); normToRawMap.push(ri); normToRawMap.push(ri);
-                prevWasSpace = false;
-              } else {
-                normToRawMap.push(ri);
-                prevWasSpace = false;
-              }
-            }
-          }
-
-          console.log("normQuote:", normQuote);
-          console.log("normContent (first 500):", normContent.slice(0, 500));
-          console.log("normContent (last 500):", normContent.slice(-500));
-
-          let idx = normContent.indexOf(normQuote);
-          console.log("Normalized match idx:", idx);
-
-          // Spaceless fallback
-          if (idx < 0) {
-            const stripContent = normContent.replace(/\s+/g, "");
-            const stripQuote = normQuote.replace(/\s+/g, "");
-            const stripIdx = stripContent.indexOf(stripQuote);
-            console.log("Spaceless match idx:", stripIdx);
-            if (stripIdx >= 0) {
-              let si = 0;
-              idx = 0;
-              for (; idx < normContent.length && si < stripIdx; idx++) {
-                if (!/\s/.test(normContent[idx]!)) si++;
-              }
-              while (idx < normContent.length && /\s/.test(normContent[idx]!)) idx++;
-            }
-          }
-
-          // Alpha-only fallback: strip everything except letters/digits
-          if (idx < 0) {
-            const alphaOnly = (s: string) => s.replace(/[^a-z0-9]/g, "");
-            const alphaContent = alphaOnly(normContent);
-            const alphaQuote = alphaOnly(normQuote);
-            let alphaIdx = alphaContent.indexOf(alphaQuote);
-            console.log("Alpha-only match idx:", alphaIdx);
-
-            // Partial match fallback: try first ~40 alphanumeric chars
-            if (alphaIdx < 0 && alphaQuote.length >= 15) {
-              const partialQuote = alphaQuote.slice(0, 40);
-              alphaIdx = alphaContent.indexOf(partialQuote);
-              console.log("Partial alpha match idx:", alphaIdx, "(query:", partialQuote, ")");
-            }
-
-            if (alphaIdx >= 0) {
-              // Skip past alphaIdx alpha chars, then land on the next alpha char
-              let ai = 0;
-              idx = 0;
-              while (idx < normContent.length && ai < alphaIdx) {
-                if (/[a-z0-9]/.test(normContent[idx]!)) ai++;
-                idx++;
-              }
-              // Ensure we land on an alpha char (the match start)
-              while (idx < normContent.length && !/[a-z0-9]/.test(normContent[idx]!)) idx++;
-            }
-          }
-
-          if (idx >= 0) {
-            // Map normContent index → rawContent index, then walk pageBreaks
-            const rawIdx = normToRawMap[idx] ?? 0;
-            let currentPage = startPage;
-            for (const breakOffset of section.pageBreaks) {
-              if (rawIdx >= breakOffset) currentPage++;
-              else break;
-            }
-            page = currentPage;
-            console.log("Resolved page:", page, "(startPage:", startPage, "rawIdx:", rawIdx, ")");
-          } else {
-            console.warn("Quote not found in contentText — defaulting to startPage:", startPage);
-          }
-        }
-
-        console.log("Navigating to page", page);
-        console.groupEnd();
+        const page = resolveQuotePage(section, ref.quotedText);
+        if (page == null) return;
         onNavigateToRef({ page, quotedText: ref.quotedText });
       })();
     },
-    [onNavigateToRef, fetchSection, bookType]
+    [onNavigateToRef, fetchSection, bookType, isLibraryMode]
   );
 
   const [authChecked, setAuthChecked] = useState(false);

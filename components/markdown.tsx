@@ -22,17 +22,36 @@ export interface PassageRef {
   sectionId: string;
   /** The quoted text shown in the link — used for text-based search on the page. */
   quotedText?: string;
+  /** Resolved page number (PDFs only, baked in by the server-side streaming proxy). */
+  page?: number;
+  /** Reading order index (EPUBs only, baked in by the server-side streaming proxy). */
+  readingOrderIndex?: number;
+  /** Book ID (populated in library mode). */
+  bookId?: string;
 }
 
-/** Parse a `ref:<section_id>` href into a PassageRef, or null if it doesn't match. */
+/**
+ * Parse a `ref:<section_id>` or `ref:<section_id>?p=42&ro=5&bid=abc` href
+ * into a PassageRef, or null if it doesn't match.
+ */
 export function parsePassageRef(href: string | undefined): PassageRef | null {
   if (!href) return null;
-  // ref:<section_id> where section_id is a UUID or any non-empty string
-  const match = href.match(/^ref:(.+)$/);
-  if (match && match[1]) {
-    return { sectionId: match[1] };
+  const match = href.match(/^ref:([^?]+)(\?.*)?$/);
+  if (!match || !match[1]) return null;
+
+  const ref: PassageRef = { sectionId: match[1] };
+
+  if (match[2]) {
+    const params = new URLSearchParams(match[2]);
+    const p = params.get("p");
+    if (p) { const n = parseInt(p, 10); if (!Number.isNaN(n)) ref.page = n; }
+    const ro = params.get("ro");
+    if (ro) { const n = parseInt(ro, 10); if (!Number.isNaN(n)) ref.readingOrderIndex = n; }
+    const bid = params.get("bid");
+    if (bid) ref.bookId = bid;
   }
-  return null;
+
+  return ref;
 }
 
 export interface SectionBookInfo {
@@ -80,13 +99,14 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
               // Strip surrounding quotation marks from the displayed text
               const raw = extractText(children);
               const display = raw.replace(/^[""\u201C\u201D]+/, "").replace(/[""\u201C\u201D]+$/, "").trim();
-              // In library mode, resolve the bookId from the section map
+              // In library mode, resolve the bookId from the section map or enriched ref
               const sectionBook = sectionBookMap?.get(ref.sectionId);
-              const resolvedBookId = bookId || sectionBook?.bookId;
+              const resolvedBookId = bookId || sectionBook?.bookId || ref.bookId;
               const newTabUrl = resolvedBookId
                 ? `/read/${resolvedBookId}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(raw)}`
                 : null;
-              const isLibraryMode = !bookId && !!sectionBook;
+              const isLibraryMode = !bookId && (!!sectionBook || !!ref.bookId);
+              const pageNumber = ref.page ?? null;
               return (
                 <span className="my-1.5 flex flex-col gap-1 w-full rounded-md border border-border bg-muted/50 px-3 py-2 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words">
                   {isLibraryMode && sectionBook?.bookLabel && (
@@ -114,6 +134,9 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                         <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                         <span className="italic">{display}</span>
                       </button>
+                    )}
+                    {pageNumber != null && (
+                      <span className="shrink-0 text-xs text-muted-foreground mt-0.5">p.{pageNumber}</span>
                     )}
                     {newTabUrl && !isLibraryMode && (
                       <a

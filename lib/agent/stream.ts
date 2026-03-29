@@ -1,6 +1,7 @@
 import type { BaseMessage } from "@langchain/core/messages";
 import type { AIMessage } from "@langchain/core/messages";
 import type { AgentState } from "./graph";
+import { resolveQuotePage, type SectionData } from "@/lib/resolve-quote-page";
 
 type AgentGraph = ReturnType<typeof import("./graph").createAgentGraph>;
 
@@ -11,6 +12,152 @@ function getToolCallPayload(tc: ToolCallChunk): { type: "tool_call"; toolName: s
   if (!name) return null;
   const args = tc.args && typeof tc.args === "object" ? (tc.args as Record<string, unknown>) : {};
   return { type: "tool_call", toolName: name, args, id: typeof tc.id === "string" ? tc.id : undefined };
+}
+
+// ---------------------------------------------------------------------------
+// RefEnricher — intercepts ](ref:SECTION_ID) in the streaming AI content and
+// rewrites to ](ref:SECTION_ID?p=42) (PDF) or ](ref:SECTION_ID?ro=5) (EPUB),
+// with &bid=BOOK_ID in library mode. Page numbers are resolved server-side
+// and baked into the stored message content so history loads need no fetching.
+// ---------------------------------------------------------------------------
+
+interface SectionCacheEntry extends SectionData {
+  bookId?: string;
+}
+
+class RefEnricher {
+  private cache = new Map<string, SectionCacheEntry>();
+  private buffer = "";
+  /**
+   * Accumulated emitted content for backward quote extraction.
+   * Reset after each ref is processed so it doesn't grow unbounded.
+   */
+  private emitted = "";
+
+  addSection(id: string, data: SectionCacheEntry) {
+    this.cache.set(id, data);
+  }
+
+  /** Push a content token. Returns zero or more enriched chunks to emit. */
+  push(content: string): string[] {
+    this.buffer += content;
+    return this.drain();
+  }
+
+  /** Flush any remaining buffered content (call at end of stream). */
+  flush(): string | null {
+    if (!this.buffer) return null;
+    const out = this.buffer;
+    this.buffer = "";
+    return out;
+  }
+
+  private drain(): string[] {
+    const results: string[] = [];
+    const REF_PATTERN = /\]\(ref:([^)]+)\)/;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const match = this.buffer.match(REF_PATTERN);
+      if (match && match.index != null) {
+        const before = this.buffer.slice(0, match.index);
+        const after = this.buffer.slice(match.index + match[0].length);
+        const sectionId = match[1]!;
+
+        // Accumulate content before the ref for quote extraction
+        this.emitted += before;
+        const enriched = this.enrichRef(sectionId);
+
+        if (before) results.push(before);
+        results.push(enriched);
+        // Reset emitted after ref is processed — next quote starts fresh
+        this.emitted = "";
+        this.buffer = after;
+        continue;
+      }
+
+      // Check for potential partial ref at end — hold it back
+      const holdFrom = this.findHoldPoint();
+      if (holdFrom >= 0 && holdFrom < this.buffer.length) {
+        const safe = this.buffer.slice(0, holdFrom);
+        if (safe) {
+          results.push(safe);
+          this.emitted += safe;
+        }
+        this.buffer = this.buffer.slice(holdFrom);
+      } else if (this.buffer) {
+        results.push(this.buffer);
+        this.emitted += this.buffer;
+        this.buffer = "";
+      }
+      break;
+    }
+
+    return results;
+  }
+
+  /** Find the index in `buffer` where a potential partial `](ref:...)` begins. */
+  private findHoldPoint(): number {
+    const prefix = "](ref:";
+    // Complete prefix present but no closing paren yet
+    const fullIdx = this.buffer.lastIndexOf(prefix);
+    if (fullIdx >= 0 && !this.buffer.slice(fullIdx + prefix.length).includes(")")) {
+      return fullIdx;
+    }
+    // Partial prefix at end of buffer (], ](, ](r, ](re, ](ref, ](ref:)
+    for (let len = Math.min(prefix.length - 1, this.buffer.length); len >= 1; len--) {
+      if (this.buffer.endsWith(prefix.slice(0, len))) {
+        return this.buffer.length - len;
+      }
+    }
+    return -1;
+  }
+
+  /** Enrich a ref with resolved page/reading-order params. */
+  private enrichRef(sectionId: string): string {
+    const section = this.cache.get(sectionId);
+    if (!section) return `](ref:${sectionId})`;
+
+    const quotedText = this.extractQuotedText();
+    const isPage = /^\d+$/.test(section.startPosition);
+    const params: string[] = [];
+
+    if (isPage) {
+      const page = resolveQuotePage(section, quotedText);
+      if (page != null) params.push(`p=${page}`);
+    } else {
+      // EPUB: extract reading order index from "readingOrderIndex/path"
+      const ro = parseInt(section.startPosition.split("/")[0], 10);
+      if (!Number.isNaN(ro)) params.push(`ro=${ro}`);
+    }
+
+    if (section.bookId) params.push(`bid=${section.bookId}`);
+
+    const qs = params.length > 0 ? `?${params.join("&")}` : "";
+    return `](ref:${sectionId}${qs})`;
+  }
+
+  /**
+   * Extract the quoted text from the emitted content preceding the ref.
+   * Searches backward for `["` (the markdown link opening) with no window limit.
+   */
+  private extractQuotedText(): string | undefined {
+    // emitted contains everything since the last ref (or start of stream).
+    // The AI format is ["quoted text"](ref:ID). The `]` has been consumed by
+    // the ref pattern, so emitted ends with the quoted text + closing quote.
+    // Search backward for the `[` + quote-char opening.
+    for (let i = this.emitted.length - 1; i >= 0; i--) {
+      if (
+        this.emitted[i] === "[" &&
+        i + 1 < this.emitted.length &&
+        /[""\u201C\u201D]/.test(this.emitted[i + 1]!)
+      ) {
+        const raw = this.emitted.slice(i + 2); // skip `[` and opening quote
+        return raw.replace(/[""\u201C\u201D]+$/, "").trim() || undefined;
+      }
+    }
+    return undefined;
+  }
 }
 
 /**
@@ -29,6 +176,7 @@ export async function* streamAgentToSSE(
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  const refEnricher = new RefEnricher();
 
   for await (const payload of stream) {
     // LangGraph yields [namespace?, mode, chunk] - 3 elements with subgraphs, 2 without
@@ -87,6 +235,12 @@ export async function* streamAgentToSSE(
             if (parsed.results) {
               for (const item of parsed.results) {
                 if (item.section_id && item.start_position) {
+                  refEnricher.addSection(item.section_id, {
+                    startPosition: item.start_position,
+                    pageBreaks: item.page_breaks ?? null,
+                    contentText: item.content_text ?? null,
+                    bookId: item.book_id,
+                  });
                   const sectionEvent: Record<string, unknown> = {
                     type: "section_map",
                     sectionId: item.section_id,
@@ -109,6 +263,12 @@ export async function* streamAgentToSSE(
                 // merged passage content/page_breaks so the frontend can resolve
                 // any quote to the correct page regardless of which chunk it's in.
                 for (const chunk of passage.chunks) {
+                  refEnricher.addSection(chunk.section_id, {
+                    startPosition: passage.start_position,
+                    pageBreaks: passage.page_breaks ?? null,
+                    contentText: passage.content_text ?? null,
+                    bookId: passage.book_id,
+                  });
                   const sectionEvent: Record<string, unknown> = {
                     type: "section_map",
                     sectionId: chunk.section_id,
@@ -140,10 +300,18 @@ export async function* streamAgentToSSE(
         if (baseMsg?.type !== "ai") continue;
         const content = typeof baseMsg?.content === "string" ? baseMsg.content : "";
         if (content) {
-          yield `data: ${JSON.stringify({ content })}\n\n`;
+          for (const enriched of refEnricher.push(content)) {
+            yield `data: ${JSON.stringify({ content: enriched })}\n\n`;
+          }
         }
       }
     }
+  }
+
+  // Flush any remaining buffered content from the ref enricher
+  const remaining = refEnricher.flush();
+  if (remaining) {
+    yield `data: ${JSON.stringify({ content: remaining })}\n\n`;
   }
 
   if (totalInputTokens > 0 || totalOutputTokens > 0) {
