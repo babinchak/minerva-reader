@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 /**
  * POST /api/admin/books/[bookId]/regenerate
- * Body: { action: "summaries" | "vectors" | "all", force?: boolean }
+ * Body: { action: "summaries" | "vectors", force?: boolean }
  *
  * Triggers the readium-summaries-lambda via its API Gateway endpoint
  * to regenerate summaries and/or vectors for a specific book.
@@ -39,12 +39,12 @@ export async function POST(
     }
 
     const body = (await request.json()) as { action?: string; force?: boolean };
-    const action = body.action ?? "all";
+    const action = body.action;
     const force = body.force ?? false;
 
-    if (!["summaries", "vectors", "all"].includes(action)) {
+    if (!action || !["summaries", "vectors"].includes(action)) {
       return NextResponse.json(
-        { error: "Invalid action. Must be 'summaries', 'vectors', or 'all'." },
+        { error: "Invalid action. Must be 'summaries' or 'vectors'." },
         { status: 400 }
       );
     }

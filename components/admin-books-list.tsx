@@ -154,7 +154,7 @@ export function AdminBooksList() {
   const [detailBook, setDetailBook] = useState<Book | null>(null);
   const [detail, setDetail] = useState<BookDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [regenerating, setRegenerating] = useState<string | null>(null); // "summaries" | "vectors" | "all" | null
+  const [regenerating, setRegenerating] = useState<string | null>(null); // "summaries" | "vectors" | null
   const [regenerateResult, setRegenerateResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const [togglingCurated, setTogglingCurated] = useState(false);
@@ -264,7 +264,7 @@ export function AdminBooksList() {
     }
   };
 
-  const handleRegenerate = async (bookId: string, action: "summaries" | "vectors" | "all") => {
+  const handleRegenerate = async (bookId: string, action: "summaries" | "vectors") => {
     setRegenerating(action);
     setRegenerateResult(null);
     try {
@@ -277,7 +277,7 @@ export function AdminBooksList() {
       if (!res.ok) {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
-      setRegenerateResult({ type: "success", message: `${action === "all" ? "Summaries & vectors" : action === "summaries" ? "Summaries" : "Vectors"} regenerated successfully.` });
+      setRegenerateResult({ type: "success", message: `${action === "summaries" ? "Summaries" : "Vectors"} regenerated successfully.` });
       // Re-fetch detail to show updated counts
       if (detailBook) {
         const detailRes = await fetch(`/api/admin/books/${bookId}/detail`);
@@ -562,15 +562,6 @@ export function AdminBooksList() {
                   >
                     {regenerating === "vectors" && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
                     Regenerate Vectors
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={regenerating !== null}
-                    onClick={() => handleRegenerate(detail.book.id, "all")}
-                  >
-                    {regenerating === "all" && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
-                    Regenerate All
                   </Button>
                 </div>
                 {regenerateResult && (
