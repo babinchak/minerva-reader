@@ -3,7 +3,7 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { BookOpen, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 /** Recursively extract plain text from React children. */
 function extractText(node: React.ReactNode): string {
@@ -107,49 +107,42 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                 : null;
               const isLibraryMode = !bookId && (!!sectionBook || !!ref.bookId);
               const pageNumber = ref.page ?? null;
+              const handleContainerClick = isLibraryMode && newTabUrl
+                ? undefined
+                : () => onRefClick({ ...ref, quotedText: raw });
               return (
-                <span className="my-1.5 flex flex-col gap-1 w-full rounded-md border border-border bg-muted/50 px-3 py-2 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words">
+                <span
+                  role={handleContainerClick ? "button" : undefined}
+                  tabIndex={handleContainerClick ? 0 : undefined}
+                  onClick={handleContainerClick}
+                  onKeyDown={handleContainerClick ? (e) => { if (e.key === "Enter" || e.key === " ") handleContainerClick(); } : undefined}
+                  className={`my-1.5 flex flex-col w-full rounded-md border border-border bg-muted/50 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words${handleContainerClick ? " cursor-pointer" : ""}`}
+                  title={handleContainerClick ? "Jump to this passage in the book" : undefined}
+                >
                   {isLibraryMode && sectionBook?.bookLabel && (
-                    <span className="text-xs font-medium text-muted-foreground">{sectionBook.bookLabel}</span>
+                    <span className="px-3 pt-2 text-xs font-medium text-muted-foreground">{sectionBook.bookLabel}</span>
                   )}
-                  <span className="flex items-start gap-2">
-                    {isLibraryMode && newTabUrl ? (
-                      <a
-                        href={newTabUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-start gap-2 flex-1 min-w-0 text-left cursor-pointer"
-                        title="Open in book"
-                      >
-                        <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span className="italic">{display}</span>
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onRefClick({ ...ref, quotedText: raw })}
-                        className="flex items-start gap-2 flex-1 min-w-0 text-left cursor-pointer"
-                        title="Jump to this passage in the book"
-                      >
-                        <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span className="italic">{display}</span>
-                      </button>
-                    )}
-                    {pageNumber != null && (
-                      <span className="shrink-0 text-xs text-muted-foreground mt-0.5">p.{pageNumber}</span>
-                    )}
-                    {newTabUrl && !isLibraryMode && (
-                      <a
-                        href={newTabUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="shrink-0 p-0.5 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
-                        title="Open in new tab"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    )}
+                  {(pageNumber != null || newTabUrl) && (
+                    <span className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground">
+                      {pageNumber != null && (
+                        <span>Page {pageNumber}</span>
+                      )}
+                      {newTabUrl && (
+                        <a
+                          href={newTabUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="ml-auto p-0.5 rounded hover:bg-background/80 hover:text-foreground transition-colors"
+                          title="Open in new tab"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </span>
+                  )}
+                  <span className={pageNumber != null || newTabUrl ? "border-t border-border px-3 py-2" : "px-3 py-2"}>
+                    <span className="italic">{display}</span>
                   </span>
                 </span>
               );
