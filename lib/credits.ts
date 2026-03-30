@@ -31,9 +31,9 @@ export interface UserCredits {
 
 /** Model env vars per tier. Map to actual OpenAI model IDs. */
 export const TIER_MODELS = {
-  anonymous: process.env.OPENAI_MODEL_ANONYMOUS || "gpt-5-mini",
-  free: process.env.OPENAI_MODEL_FREE || "gpt-5-mini",
-  paid: process.env.OPENAI_MODEL_PAID || "gpt-5.2",
+  anonymous: process.env.OPENAI_MODEL_ANONYMOUS || "gpt-5.4-mini",
+  free: process.env.OPENAI_MODEL_FREE || "gpt-5.4-mini",
+  paid: process.env.OPENAI_MODEL_PAID || "gpt-5.4",
 } as const;
 
 /** Monthly allowance per tier (credits). */
@@ -47,10 +47,10 @@ export const MODEL_CREDIT_RATES: Record<string, { input: number; output: number 
   "gpt-4o-mini": { input: 0.1, output: 0.2 },
   "gpt-4o": { input: 0.5, output: 1.0 },
   "gpt-4.1": { input: 0.5, output: 1.0 },
-  "gpt-5-mini": { input: 0.1, output: 0.2 },
+  "gpt-5.4-mini": { input: 0.1, output: 0.2 },
   "gpt-5-nano": { input: 0.05, output: 0.1 },
   "gpt-5": { input: 0.5, output: 1.0 },
-  "gpt-5.2": { input: 0.5, output: 1.0 },
+  "gpt-5.4": { input: 0.5, output: 1.0 },
   "gpt-5.4": { input: 0.5, output: 1.0 },
 };
 

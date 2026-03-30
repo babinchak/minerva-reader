@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
           const tokens = (m.input_tokens ?? 0) + (m.output_tokens ?? 0);
           const inputT = m.input_tokens ?? 0;
           const outputT = m.output_tokens ?? 0;
-          const model = m.model ?? "gpt-5-mini";
+          const model = m.model ?? "gpt-5.4-mini";
           const isAgentic = m.chat_mode === "agentic";
           const costCents = m.cost_cents ?? (inputT + outputT > 0 ? costCentsFromTokens(model, inputT, outputT, isAgentic) : undefined);
           chatRecords.push({

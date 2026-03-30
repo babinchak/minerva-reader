@@ -34,7 +34,7 @@ export function createAgentGraph(
   options?: AgentGraphOptions
 ) {
   const vectorsReady = options?.vectorsReady ?? false;
-  const modelId = options?.model ?? process.env.OPENAI_MODEL ?? "gpt-5-mini";
+  const modelId = options?.model ?? process.env.OPENAI_MODEL ?? "gpt-5.4-mini";
   const tools = options?.bookIds?.length
     ? createLibraryAgentTools(options.bookIds, userId, { vectorsReady }) as StructuredToolInterface[]
     : createAgentTools(bookId, userId, { vectorsReady }) as StructuredToolInterface[];
