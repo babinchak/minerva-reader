@@ -1143,12 +1143,12 @@
 
   /* Make text selection clearly visible inside the AI pane (both themes). */
   [data-ai-pane="true"] ::selection {
-    background: hsl(var(--primary) / 0.35);
-    color: hsl(var(--primary-foreground));
+    background: Highlight;
+    color: HighlightText;
   }
   [data-ai-pane="true"] ::-moz-selection {
-    background: hsl(var(--primary) / 0.35);
-    color: hsl(var(--primary-foreground));
+    background: Highlight;
+    color: HighlightText;
   }
 
 }
