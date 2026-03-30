@@ -51,7 +51,6 @@ export const MODEL_CREDIT_RATES: Record<string, { input: number; output: number 
   "gpt-5-nano": { input: 0.05, output: 0.1 },
   "gpt-5": { input: 0.5, output: 1.0 },
   "gpt-5.4": { input: 0.5, output: 1.0 },
-  "gpt-5.4": { input: 0.5, output: 1.0 },
 };
 
 /** Agentic multiplier (tool calls add overhead). */
