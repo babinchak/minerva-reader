@@ -66,60 +66,16 @@ type PdfFindApi = {
   findController: { setDocument: (doc: PDFDocumentProxy) => void };
 };
 
-/** pdf.js find controller fields we read for snippets / jumping (not all are public API). */
+/** pdf.js find controller fields we read for jumping (not all are public API). */
 type PdfFindControllerRuntime = {
   pageMatches?: number[][];
-  pageMatchesLength?: number[][];
   _pageMatches?: number[][];
-  _pageMatchesLength?: number[][];
-  _pageContents?: string[];
   _selected?: { pageIdx: number; matchIdx: number };
   _offset?: { pageIdx: number; matchIdx: number; wrapped: boolean };
   _scrollMatches?: boolean;
   _matchesCountTotal?: number;
   highlightMatches?: boolean;
 };
-
-type PdfFindResultEntry = {
-  key: string;
-  pageIdx: number;
-  matchIdx: number;
-  pageLabel: number;
-  snippet: string;
-};
-
-function buildPdfFindResultEntries(fc: PdfFindControllerRuntime): PdfFindResultEntry[] {
-  const matches = fc.pageMatches ?? fc._pageMatches;
-  const lengths = fc.pageMatchesLength ?? fc._pageMatchesLength;
-  const contents = fc._pageContents;
-  if (!matches || !contents?.length) return [];
-
-  const out: PdfFindResultEntry[] = [];
-  for (let p = 0; p < matches.length; p++) {
-    const pageMatchStarts = matches[p];
-    const pageMatchLens = lengths?.[p];
-    const text = contents[p] ?? "";
-    if (!pageMatchStarts?.length) continue;
-
-    for (let m = 0; m < pageMatchStarts.length; m++) {
-      const start = pageMatchStarts[m];
-      const len = pageMatchLens?.[m] ?? 0;
-      const sliceStart = Math.max(0, start - 24);
-      const sliceEnd = Math.min(text.length, start + len + 48);
-      let snippet = text.slice(sliceStart, sliceEnd).replace(/\s+/g, " ").trim();
-      if (sliceStart > 0) snippet = `…${snippet}`;
-      if (sliceEnd < text.length) snippet = `${snippet}…`;
-      out.push({
-        key: `${p}-${m}`,
-        pageIdx: p,
-        matchIdx: m,
-        pageLabel: p + 1,
-        snippet: snippet || "(match)",
-      });
-    }
-  }
-  return out;
-}
 
 function PdfToolbarSearchPanel({
   searchQuery,
@@ -128,11 +84,9 @@ function PdfToolbarSearchPanel({
   pdfFindReady,
   findMatches,
   findPending,
-  findResults,
   onSearch,
   onFindNext,
   onFindPrev,
-  onSelectResult,
 }: {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
@@ -140,11 +94,9 @@ function PdfToolbarSearchPanel({
   pdfFindReady: boolean;
   findMatches: { current: number; total: number } | null;
   findPending: boolean;
-  findResults: PdfFindResultEntry[];
   onSearch: () => void;
   onFindNext: () => void;
   onFindPrev: () => void;
-  onSelectResult: (pageIdx: number, matchIdx: number) => void;
 }) {
   const canQuery = Boolean(searchQuery.trim());
   const canSearch = pdfFindReady && canQuery;
@@ -217,27 +169,6 @@ function PdfToolbarSearchPanel({
         {!pdfFindReady ? "Preparing search…" : statusLine}
       </div>
 
-      {findResults.length > 0 && (
-        <ul
-          className="mt-3 max-h-44 overflow-y-auto rounded-md border border-border divide-y divide-border"
-          aria-label="Search hits in document"
-        >
-          {findResults.map((r) => (
-            <li key={r.key}>
-              <button
-                type="button"
-                className="w-full text-left px-2.5 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
-                onClick={() => onSelectResult(r.pageIdx, r.matchIdx)}
-              >
-                <span className="font-medium text-foreground">Page {r.pageLabel}</span>
-                <span className="block text-muted-foreground truncate" title={r.snippet}>
-                  {r.snippet}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
@@ -304,8 +235,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   const currentPageForFindRef = useRef(currentPage);
   const [findMatches, setFindMatches] = useState<{ current: number; total: number } | null>(null);
   const [findPending, setFindPending] = useState(false);
-  const [findResultEntries, setFindResultEntries] = useState<PdfFindResultEntry[]>([]);
-  const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unknown; items?: unknown[] }> | null>(null);
+const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unknown; items?: unknown[] }> | null>(null);
   const [isTocOpen, setIsTocOpen] = useState(false);
   const [tocDrawerMode, setTocDrawerMode] = useState<"contents" | "pages" | "bookmarks">("contents");
   const [bookmarks, setBookmarks] = useState<number[]>(initialBookmarks ?? []);
@@ -606,7 +536,6 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
       if (toolbarRef.current?.contains(t)) return;
       pdfFindApiRef.current?.eventBus.dispatch("findbarclose", {});
       setFindMatches(null);
-      setFindResultEntries([]);
       setFindPending(false);
       setIsSearchOpen(false);
     };
@@ -1158,50 +1087,15 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   const runPdfToolbarFind = () => {
     if (!pdfFindApiRef.current || !searchQueryRef.current.trim()) return;
     setFindMatches(null);
-    setFindResultEntries([]);
     dispatchPdfFind({ type: "" });
   };
 
   const findPdfNext = () => dispatchPdfFind({ type: "again", findPrevious: false });
   const findPdfPrev = () => dispatchPdfFind({ type: "again", findPrevious: true });
 
-  const activatePdfFindMatch = (pageIdx: number, matchIdx: number) => {
-    const api = pdfFindApiRef.current;
-    if (!api) return;
-    goToPage(pageIdx + 1);
-    const applySelection = () => {
-      const fc = api.findController as PdfFindControllerRuntime;
-      const prevPage = fc._selected?.pageIdx ?? -1;
-      fc._selected = { pageIdx, matchIdx };
-      fc._offset = { pageIdx, matchIdx, wrapped: false };
-      fc._scrollMatches = true;
-      if (prevPage >= 0 && prevPage !== pageIdx) {
-        api.eventBus.dispatch("updatetextlayermatches", {
-          source: api.findController,
-          pageIndex: prevPage,
-        });
-      }
-      api.eventBus.dispatch("updatetextlayermatches", {
-        source: api.findController,
-        pageIndex: pageIdx,
-      });
-      api.eventBus.dispatch("updatetextlayermatches", {
-        source: api.findController,
-        pageIndex: -1,
-      });
-      const pm = fc.pageMatches ?? fc._pageMatches ?? [];
-      let ord = 0;
-      for (let p = 0; p < pageIdx; p++) ord += pm[p]?.length ?? 0;
-      const total = fc._matchesCountTotal ?? ord + matchIdx + 1;
-      setFindMatches({ current: ord + matchIdx + 1, total });
-    };
-    requestAnimationFrame(() => requestAnimationFrame(applySelection));
-  };
-
   const closePdfSearch = () => {
     pdfFindApiRef.current?.eventBus.dispatch("findbarclose", {});
     setFindMatches(null);
-    setFindResultEntries([]);
     setFindPending(false);
     setIsSearchOpen(false);
   };
@@ -1543,27 +1437,26 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   }, [pdfDoc]);
 
   useEffect(() => {
-    if (!pdfFindApi) {
-      setFindResultEntries([]);
-      return;
-    }
+    if (!pdfFindApi) return;
     const { eventBus } = pdfFindApi;
     const onCount = (evt: unknown) => {
       const e = evt as {
         matchesCount?: { current: number; total: number };
-        source?: PdfFindControllerRuntime;
       };
-      if (e.matchesCount) setFindMatches(e.matchesCount);
-      const total = e.matchesCount?.total ?? 0;
-      if (total === 0) {
-        setFindResultEntries([]);
-      } else if (e.source) {
-        setFindResultEntries(buildPdfFindResultEntries(e.source));
+      // Only use this event for progressive total updates during initial scan.
+      // Ignore current-index changes here — they can arrive stale from text
+      // layer re-renders and race with the authoritative onControl handler.
+      if (e.matchesCount) {
+        setFindMatches((prev) => {
+          if (!prev || prev.total !== e.matchesCount!.total) return e.matchesCount!;
+          return prev;
+        });
       }
     };
     const onControl = (evt: unknown) => {
-      const e = evt as { state?: number };
+      const e = evt as { state?: number; matchesCount?: { current: number; total: number } };
       setFindPending(e.state === PDF_FIND_STATE_PENDING);
+      if (e.matchesCount) setFindMatches(e.matchesCount);
     };
     eventBus.on("updatefindmatchescount", onCount);
     eventBus.on("updatefindcontrolstate", onControl);
@@ -2028,17 +1921,14 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                     onSearchQueryChange={(v) => {
                       setSearchQuery(v);
                       setFindMatches(null);
-                      setFindResultEntries([]);
                     }}
                     onClose={closePdfSearch}
                     pdfFindReady={Boolean(pdfFindApi)}
                     findMatches={findMatches}
                     findPending={findPending}
-                    findResults={findResultEntries}
                     onSearch={runPdfToolbarFind}
                     onFindNext={findPdfNext}
                     onFindPrev={findPdfPrev}
-                    onSelectResult={activatePdfFindMatch}
                   />
                 )}
             </div>
@@ -2222,17 +2112,14 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
                     onSearchQueryChange={(v) => {
                       setSearchQuery(v);
                       setFindMatches(null);
-                      setFindResultEntries([]);
                     }}
                     onClose={closePdfSearch}
                     pdfFindReady={Boolean(pdfFindApi)}
                     findMatches={findMatches}
                     findPending={findPending}
-                    findResults={findResultEntries}
                     onSearch={runPdfToolbarFind}
                     onFindNext={findPdfNext}
                     onFindPrev={findPdfPrev}
-                    onSelectResult={activatePdfFindMatch}
                   />
                 )}
               </div>
