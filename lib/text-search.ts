@@ -115,24 +115,51 @@ export async function textSearch(
   for (const row of data ?? []) {
     re.lastIndex = 0;
     let content = row.content_text ?? "";
+    let startPos: string | null = row.start_position ?? null;
+    let pageBreaks: number[] | null = Array.isArray((row as any).page_breaks) ? (row as any).page_breaks : null;
     const match = re.exec(content);
     if (!match && matchCtx > 0) {
       continue;
     }
     if (match && matchCtx > 0 && content.length > matchCtx * 2) {
-      const start = Math.max(0, match.index - matchCtx);
+      const winStart = Math.max(0, match.index - matchCtx);
       const end = Math.min(content.length, match.index + match[0].length + matchCtx);
-      const excerpt = content.slice(start, end);
-      content = (start > 0 ? "…" : "") + excerpt + (end < content.length ? "…" : "");
+      const excerpt = content.slice(winStart, end);
+      const prefix = winStart > 0 ? "…" : "";
+      content = prefix + excerpt + (end < content.length ? "…" : "");
+      // Adjust page_breaks and start_position to match the windowed content.
+      // Breaks before the window mean the window starts on a later page;
+      // breaks within the window need their offsets shifted.
+      if (pageBreaks) {
+        const prefixLen = prefix.length;
+        let skippedBreaks = 0;
+        const adjusted: number[] = [];
+        for (const offset of pageBreaks) {
+          const shifted = offset - winStart + prefixLen;
+          if (shifted < 0) {
+            skippedBreaks++;
+          } else if (shifted < content.length) {
+            adjusted.push(shifted);
+          }
+        }
+        pageBreaks = adjusted;
+        // Advance start_position past breaks that fell before the window
+        if (skippedBreaks > 0 && startPos != null) {
+          const parsed = parseInt(startPos, 10);
+          if (!Number.isNaN(parsed)) {
+            startPos = String(parsed + skippedBreaks);
+          }
+        }
+      }
     }
     if (snippetLen != null && content.length > snippetLen) {
       content = content.slice(0, snippetLen).trim() + "…";
     }
     results.push({
       content_text: content,
-      start_position: row.start_position ?? null,
+      start_position: startPos,
       end_position: row.end_position ?? null,
-      page_breaks: Array.isArray((row as any).page_breaks) ? (row as any).page_breaks : null,
+      page_breaks: pageBreaks,
       section_id: row.id,
     });
     if (results.length >= maxResults) break;
@@ -216,15 +243,39 @@ export async function textSearchMulti(
   for (const row of data ?? []) {
     re.lastIndex = 0;
     let content = row.content_text ?? "";
+    let startPos: string | null = row.start_position ?? null;
+    let pageBreaks: number[] | null = Array.isArray((row as any).page_breaks) ? (row as any).page_breaks : null;
     const match = re.exec(content);
     if (!match && matchCtx > 0) {
       continue;
     }
     if (match && matchCtx > 0 && content.length > matchCtx * 2) {
-      const start = Math.max(0, match.index - matchCtx);
+      const winStart = Math.max(0, match.index - matchCtx);
       const end = Math.min(content.length, match.index + match[0].length + matchCtx);
-      const excerpt = content.slice(start, end);
-      content = (start > 0 ? "…" : "") + excerpt + (end < content.length ? "…" : "");
+      const excerpt = content.slice(winStart, end);
+      const prefix = winStart > 0 ? "…" : "";
+      content = prefix + excerpt + (end < content.length ? "…" : "");
+      // Adjust page_breaks and start_position to match the windowed content
+      if (pageBreaks) {
+        const prefixLen = prefix.length;
+        let skippedBreaks = 0;
+        const adjusted: number[] = [];
+        for (const offset of pageBreaks) {
+          const shifted = offset - winStart + prefixLen;
+          if (shifted < 0) {
+            skippedBreaks++;
+          } else if (shifted < content.length) {
+            adjusted.push(shifted);
+          }
+        }
+        pageBreaks = adjusted;
+        if (skippedBreaks > 0 && startPos != null) {
+          const parsed = parseInt(startPos, 10);
+          if (!Number.isNaN(parsed)) {
+            startPos = String(parsed + skippedBreaks);
+          }
+        }
+      }
     }
     if (snippetLen != null && content.length > snippetLen) {
       content = content.slice(0, snippetLen).trim() + "…";
@@ -232,9 +283,9 @@ export async function textSearchMulti(
     const book = bookMap.get(row.book_id);
     results.push({
       content_text: content,
-      start_position: row.start_position ?? null,
+      start_position: startPos,
       end_position: row.end_position ?? null,
-      page_breaks: Array.isArray((row as any).page_breaks) ? (row as any).page_breaks : null,
+      page_breaks: pageBreaks,
       section_id: row.id,
       book_id: row.book_id,
       book_title: book?.title ?? null,
