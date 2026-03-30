@@ -281,7 +281,14 @@ export function AIAgentPanel({
   >([]);
   const [userId, setUserId] = useState<string | null>(null);
   const isLibraryMode = !bookId && Array.isArray(bookIds) && bookIds.length > 0;
-  const [chatMode, setChatMode] = useState<"fast" | "agentic">(isLibraryMode ? "agentic" : "fast");
+  const [chatMode, setChatMode] = useState<"fast" | "agentic">(() => {
+    if (isLibraryMode) return "agentic";
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("minerva-chat-mode");
+      if (stored === "fast" || stored === "agentic") return stored;
+    }
+    return "fast";
+  });
   const [isPrivateChat, setIsPrivateChat] = useState(false);
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const sendingRef = useRef(false);
@@ -663,8 +670,8 @@ export function AIAgentPanel({
 
   // Anonymous: force fast mode only (unless FREE_BETA_MODE)
   useEffect(() => {
-    if (!userId && chatMode === "agentic" && !creditsInfo?.freeBetaMode) setChatMode("fast");
-  }, [userId, chatMode, creditsInfo?.freeBetaMode]);
+    if (authChecked && !userId && chatMode === "agentic" && !creditsInfo?.freeBetaMode) setChatMode("fast");
+  }, [authChecked, userId, chatMode, creditsInfo?.freeBetaMode]);
 
   // Processing status: summaries and vectors (both improve AI context quality)
   const [processingStatus, setProcessingStatus] = useState<{
@@ -1980,7 +1987,11 @@ export function AIAgentPanel({
                       aria-checked={chatMode === "agentic"}
                       aria-label={chatMode === "fast" ? "Quick mode (single call)" : "Deep mode (tools: vector, text, web search)"}
                       title={chatMode === "fast" ? "Quick mode (single call)" : "Deep mode (tools: vector, text, web search)"}
-                      onClick={() => setChatMode(chatMode === "fast" ? "agentic" : "fast")}
+                      onClick={() => {
+                        const next = chatMode === "fast" ? "agentic" : "fast";
+                        setChatMode(next);
+                        localStorage.setItem("minerva-chat-mode", next);
+                      }}
                       disabled={
                         creditsInfo?.tier === "free" &&
                         (creditsInfo?.agenticToday ?? 0) >= (creditsInfo?.agenticLimit ?? 5)
