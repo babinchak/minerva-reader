@@ -11,7 +11,7 @@ import {
   usePreferences,
   useEpubNavigator,
 } from "@edrlab/thorium-web/epub";
-import { Link } from "@readium/shared";
+import { Link, type Locator } from "@readium/shared";
 import {
   createPreferences,
   defaultPreferences,
@@ -31,6 +31,7 @@ import { hapticLight } from "@/lib/haptic";
 import { getLiveSelectedText, getTextSelection } from "@/lib/book-position-utils";
 import { getThoriumThemeFromStoredVariants } from "@/lib/theme-variants";
 import { ReadPageSkeleton } from "@/components/read-page-skeleton";
+import { ReadingAnchorPill } from "@/components/reading-anchor-pill";
 
 /** Fallback when document theme can't be read (SSR, etc.) */
 const FALLBACK_LIGHT = {
@@ -163,13 +164,26 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   const [mobileDrawerAnchor, setMobileDrawerAnchor] = useState<"top" | "bottom">("bottom");
   const epubNavNonceRef = useRef(0);
   const [epubNavRef, setEpubNavRef] = useState<{ readingOrderIndex: number; quotedText?: string } | null>(null);
+
+  // --- Reading anchor (return-to-reading after ref navigation) ---
+  const [readingAnchor, setReadingAnchor] = useState(false);
+  // Refs populated by EpubReadingAnchor (inside Thorium context) so BookReader can trigger save/restore
+  const saveAnchorRef = useRef<() => boolean>(() => false);
+  const restoreAnchorRef = useRef<() => void>(() => {});
+
   const handleNavigateToRef = useCallback((ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => {
     if (typeof ref.readingOrderIndex === "number") {
+      // Save reading anchor before first ref jump
+      if (!readingAnchor) {
+        const saved = saveAnchorRef.current();
+        if (saved) setReadingAnchor(true);
+      }
+
       epubNavNonceRef.current += 1;
       // Create a new object each time to ensure useEffect triggers even for the same reading order index
       setEpubNavRef({ readingOrderIndex: ref.readingOrderIndex, quotedText: ref.quotedText });
     }
-  }, []);
+  }, [readingAnchor]);
 
   // Handle ?refSection=...&refQuote=... URL params (e.g. from "open in new tab")
   const refParamsHandledRef = useRef(false);
@@ -376,6 +390,19 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     isAiPaneOpen={isAiPaneOpen}
                   />
                 </div>
+                {readingAnchor && (
+                  <ReadingAnchorPill
+                    label="previous position"
+                    visible={chromeVisible}
+                    autoHideMs={5000}
+                    topOffset={56}
+                    onReturn={() => {
+                      restoreAnchorRef.current();
+                      setReadingAnchor(false);
+                    }}
+                    onDismiss={() => setReadingAnchor(false)}
+                  />
+                )}
                 <div
                   className="flex flex-1 relative min-h-0 min-w-0"
                   style={{ touchAction: "pan-x pan-y" }}
@@ -455,6 +482,18 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                 <div className="flex flex-1 relative min-h-0 min-w-0">
                   <div className="flex-1 min-w-0 h-full relative">
                     <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
+                    {readingAnchor && (
+                      <ReadingAnchorPill
+                        label="previous position"
+                        visible
+                        topOffset={8}
+                        onReturn={() => {
+                          restoreAnchorRef.current();
+                          setReadingAnchor(false);
+                        }}
+                        onDismiss={() => setReadingAnchor(false)}
+                      />
+                    )}
                   </div>
                   <AIAssistant
                     selectedText={selectedText}
@@ -473,6 +512,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
             )}
 
             <EpubRefNavigator navRef={epubNavRef} rawManifest={rawManifest} />
+            <EpubReadingAnchor saveRef={saveAnchorRef} restoreRef={restoreAnchorRef} />
             <EpubPositionSync bookId={bookId} storageKey={`${selfHref}${EPUB_STORAGE_KEY_SUFFIX}`} isLoggedIn={isLoggedIn} />
           </div>
         </ThI18nProvider>
@@ -1321,6 +1361,40 @@ function highlightQuoteInDocument(
       cleanup();
     },
   };
+}
+
+/**
+ * Captures and restores the exact EPUB reading position (Locator) for the
+ * reading-anchor "return to where you were" feature.  Lives inside the Thorium
+ * store context so it can call useEpubNavigator.
+ */
+function EpubReadingAnchor({
+  saveRef,
+  restoreRef,
+}: {
+  saveRef: React.RefObject<() => boolean>;
+  restoreRef: React.RefObject<() => void>;
+}) {
+  const { go, currentLocator } = useEpubNavigator();
+  const savedLocatorRef = useRef<Locator | null>(null);
+
+  // Expose save/restore to the parent via refs
+  useEffect(() => {
+    (saveRef as React.MutableRefObject<() => boolean>).current = () => {
+      const loc = currentLocator();
+      if (!loc) return false;
+      savedLocatorRef.current = loc;
+      return true;
+    };
+    (restoreRef as React.MutableRefObject<() => void>).current = () => {
+      const loc = savedLocatorRef.current;
+      if (!loc) return;
+      go(loc, false, () => {});
+      savedLocatorRef.current = null;
+    };
+  }, [saveRef, restoreRef, go, currentLocator]);
+
+  return null;
 }
 
 /** Syncs EPUB reading position from localStorage (written by Thorium) to our API. Skips API when not logged in (curated books). */

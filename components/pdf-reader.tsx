@@ -32,6 +32,7 @@ import {
 } from "@/lib/pdf-find-text-highlighter";
 import { centerElementInScroller } from "@/lib/pdf-center-match-in-scroller";
 import { ReadPageSkeleton } from "@/components/read-page-skeleton";
+import { ReadingAnchorPill } from "@/components/reading-anchor-pill";
 
 type PDFDocumentLoadingTask = {
   promise: Promise<PDFDocumentProxy>;
@@ -311,6 +312,11 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
   const lastSyncedRef = useRef<string>(JSON.stringify([...(initialBookmarks ?? [])].sort((a, b) => a - b)));
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingTocPageRef = useRef<number | null>(null);
+
+  // --- Reading anchor (return-to-reading after ref navigation) ---
+  const [readingAnchor, setReadingAnchor] = useState<{ page: number } | null>(null);
+  const isRefNavRef = useRef(false);
+  const manualTurnsSinceAnchorRef = useRef(0);
 
   useEffect(() => {
     setBookmarks(initialBookmarks ?? []);
@@ -626,6 +632,22 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
     };
   }, [bookId, currentPage, isLoggedIn]);
 
+  // Clear reading anchor after 3 manual (non-ref) page turns
+  useEffect(() => {
+    if (!readingAnchor) {
+      manualTurnsSinceAnchorRef.current = 0;
+      return;
+    }
+    if (isRefNavRef.current) {
+      isRefNavRef.current = false;
+      return;
+    }
+    manualTurnsSinceAnchorRef.current += 1;
+    if (manualTurnsSinceAnchorRef.current >= 3) {
+      setReadingAnchor(null);
+    }
+  }, [currentPage, readingAnchor]);
+
   const requestAiRun = (action: "page" | "selection") => {
     aiNonceRef.current += 1;
     const payload = { nonce: aiNonceRef.current, action };
@@ -687,6 +709,16 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
     (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => {
       console.group("[NAV_REF] handleNavigateToRef");
       console.log("page:", ref.page, "quotedText:", ref.quotedText);
+
+      // Save reading anchor before first ref jump
+      if (!readingAnchor && ref.page != null) {
+        isRefNavRef.current = true;
+        manualTurnsSinceAnchorRef.current = 0;
+        setReadingAnchor({ page: currentPage });
+      } else if (ref.page != null) {
+        // Subsequent ref jumps: flag as ref nav so manual-turn counter doesn't increment
+        isRefNavRef.current = true;
+      }
 
       // Clean up any previous ref highlight
       refHighlightCleanupRef.current?.();
@@ -1007,7 +1039,7 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
         if (pollTimer) clearTimeout(pollTimer);
       };
     },
-    []
+    [readingAnchor, currentPage]
   );
 
   // Handle ?refSection=...&refQuote=... URL params (e.g. from "open in new tab")
@@ -2207,6 +2239,20 @@ export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLog
             </>
           )}
           <div className="relative flex-1 min-h-0 bg-background">
+            {readingAnchor && (
+              <ReadingAnchorPill
+                label={`page ${readingAnchor.page}`}
+                visible={isMobile ? chromeVisible : true}
+                autoHideMs={isMobile ? 5000 : undefined}
+                topOffset={isMobile ? 56 : 8}
+                onReturn={() => {
+                  isRefNavRef.current = true;
+                  goToPage(readingAnchor.page);
+                  setReadingAnchor(null);
+                }}
+                onDismiss={() => setReadingAnchor(null)}
+              />
+            )}
             <div
               className={`pdf-scroll-host absolute inset-0 bg-background ${
                 isMobilePagedMode
