@@ -1,7 +1,6 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { isFreeBetaMode } from "@/lib/credits";
-import { costCentsFromTokens } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -38,65 +37,59 @@ export async function GET(req: NextRequest) {
 
     const serviceSupabase = createServiceClient();
 
-    // Get user's chats with book info
-    const { data: userChats } = await serviceSupabase
-      .from("chats")
-      .select("id, title, book_id")
-      .eq("user_id", user.id);
-    const chatIds = (userChats ?? []).map((c) => c.id);
-    const chatTitleMap = new Map((userChats ?? []).map((c) => [c.id, c.title ?? "Chat"]));
-    const chatBookIds = [...new Set((userChats ?? []).map((c) => c.book_id).filter(Boolean))] as string[];
+    // Chat usage from usage_records (billing survives chat deletion / private mode)
+    const { data: chatUsageRows } = await serviceSupabase
+      .from("usage_records")
+      .select("id, cost_cents, usage_type, model, input_tokens, output_tokens, reference_id, included, created_at")
+      .eq("user_id", user.id)
+      .eq("usage_type", "chat")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    const bookTitleMap = new Map<string, string>();
-    if (chatBookIds.length > 0) {
-      const { data: chatBooks } = await serviceSupabase
-        .from("books")
-        .select("id, title")
-        .in("id", chatBookIds);
-      for (const b of chatBooks ?? []) {
-        bookTitleMap.set(b.id, b.title ?? "Book");
+    // Resolve chat titles and book titles for display
+    const chatIdsFromUsage = [...new Set((chatUsageRows ?? []).map((r) => r.reference_id).filter(Boolean))] as string[];
+    const chatTitleMap = new Map<string, string>();
+    const chatBookMap = new Map<string, string | undefined>();
+
+    if (chatIdsFromUsage.length > 0) {
+      const { data: chatsData } = await serviceSupabase
+        .from("chats")
+        .select("id, title, book_id")
+        .in("id", chatIdsFromUsage);
+      const chatBookIds = [...new Set((chatsData ?? []).map((c) => c.book_id).filter(Boolean))] as string[];
+      const bookTitleMap = new Map<string, string>();
+      if (chatBookIds.length > 0) {
+        const { data: chatBooks } = await serviceSupabase
+          .from("books")
+          .select("id, title")
+          .in("id", chatBookIds);
+        for (const b of chatBooks ?? []) bookTitleMap.set(b.id, b.title ?? "Book");
+      }
+      for (const c of chatsData ?? []) {
+        chatTitleMap.set(c.id, c.title ?? "Chat");
+        chatBookMap.set(c.id, c.book_id ? bookTitleMap.get(c.book_id) : undefined);
       }
     }
-    const chatBookMap = new Map((userChats ?? []).map((c) => [c.id, c.book_id ? bookTitleMap.get(c.book_id) : undefined]));
 
-    const chatRecords: UsageRecordDisplay[] = [];
-
-    if (chatIds.length > 0) {
-      const { data: chatMessages, error: chatError } = await serviceSupabase
-        .from("chat_messages")
-        .select("id, chat_id, cost_cents, input_tokens, output_tokens, model, usage_included, chat_mode, created_at")
-        .eq("role", "assistant")
-        .in("chat_id", chatIds)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (!chatError && chatMessages) {
-        const freeBeta = isFreeBetaMode();
-        for (const m of chatMessages) {
-          const tokens = (m.input_tokens ?? 0) + (m.output_tokens ?? 0);
-          const inputT = m.input_tokens ?? 0;
-          const outputT = m.output_tokens ?? 0;
-          const model = m.model ?? "gpt-5.4-mini";
-          const isAgentic = m.chat_mode === "agentic";
-          const costCents = m.cost_cents ?? (inputT + outputT > 0 ? costCentsFromTokens(model, inputT, outputT, isAgentic) : undefined);
-          chatRecords.push({
-            id: m.id,
-            date: m.created_at,
-            usageType: "chat",
-            model: m.model ?? undefined,
-            inputTokens: m.input_tokens ?? undefined,
-            outputTokens: m.output_tokens ?? undefined,
-            tokens: tokens > 0 ? tokens : undefined,
-            included: freeBeta ? false : (m.usage_included ?? true),
-            costCents: freeBeta ? (costCents ?? 0) : (m.usage_included ? undefined : (m.cost_cents ?? undefined)),
-            referenceId: m.chat_id,
-            title: chatTitleMap.get(m.chat_id),
-            bookTitle: chatBookMap.get(m.chat_id),
-            chatMode: m.chat_mode ?? undefined,
-          });
-        }
-      }
-    }
+    const freeBetaChat = isFreeBetaMode();
+    const chatRecords: UsageRecordDisplay[] = (chatUsageRows ?? []).map((r) => {
+      const costCents = r.cost_cents ?? 0;
+      const tokens = (r.input_tokens ?? 0) + (r.output_tokens ?? 0);
+      return {
+        id: r.id,
+        date: r.created_at,
+        usageType: "chat" as const,
+        model: r.model ?? undefined,
+        inputTokens: r.input_tokens ?? undefined,
+        outputTokens: r.output_tokens ?? undefined,
+        tokens: tokens > 0 ? tokens : undefined,
+        included: freeBetaChat ? false : (r.included ?? true),
+        costCents: freeBetaChat ? costCents : (r.included ? undefined : costCents),
+        referenceId: r.reference_id ?? undefined,
+        title: r.reference_id ? chatTitleMap.get(r.reference_id) ?? "Deleted chat" : undefined,
+        bookTitle: r.reference_id ? chatBookMap.get(r.reference_id) : undefined,
+      };
+    });
 
     // Books: user's uploads with processing cost (backend sets these)
     const { data: books, error: booksError } = await serviceSupabase

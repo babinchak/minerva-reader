@@ -136,20 +136,16 @@ export async function recordUsage(params: RecordUsageParams): Promise<RecordUsag
 
   if (updateError) return { success: false, included: true, costCents };
 
-  // Only insert into usage_records for non-chat (uploads, summaries, embeddings).
-  // Chat usage is stored on chat_messages by the client.
-  if (usageType !== "chat") {
-    await supabase.from("usage_records").insert({
-      user_id: userId,
-      cost_cents: costCents,
-      usage_type: usageType,
-      model: model ?? null,
-      input_tokens: inputTokens ?? null,
-      output_tokens: outputTokens ?? null,
-      reference_id: referenceId ?? null,
-      included: !isOnDemand,
-    });
-  }
+  await supabase.from("usage_records").insert({
+    user_id: userId,
+    cost_cents: costCents,
+    usage_type: usageType,
+    model: model ?? null,
+    input_tokens: inputTokens ?? null,
+    output_tokens: outputTokens ?? null,
+    reference_id: referenceId ?? null,
+    included: !isOnDemand,
+  });
 
   if (isOnDemand) {
     const onDemandCents = -newBalanceCents;

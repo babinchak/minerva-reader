@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen } from "lucide-react";
+import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff } from "lucide-react";
 import { Markdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -282,6 +282,7 @@ export function AIAgentPanel({
   const [userId, setUserId] = useState<string | null>(null);
   const isLibraryMode = !bookId && Array.isArray(bookIds) && bookIds.length > 0;
   const [chatMode, setChatMode] = useState<"fast" | "agentic">(isLibraryMode ? "agentic" : "fast");
+  const [isPrivateChat, setIsPrivateChat] = useState(false);
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const sendingRef = useRef(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
@@ -771,7 +772,7 @@ export function AIAgentPanel({
   // Anonymous: never clear on !activeChatId - we keep ephemeral messages in state (and sessionStorage)
   useEffect(() => {
     if (!activeChatId) {
-      if (userId) setMessages([]);
+      if (userId && !isPrivateChat) setMessages([]);
       return;
     }
     if (isLoading) return;
@@ -867,6 +868,7 @@ export function AIAgentPanel({
   const handleNewChat = () => {
     setActiveChatId(null);
     setMessages([]);
+    setIsPrivateChat(false);
     if (!userId && typeof window !== "undefined") {
       try {
         sessionStorage.removeItem(`minerva-anon-chat-${bookId ?? "general"}`);
@@ -876,8 +878,29 @@ export function AIAgentPanel({
     }
   };
 
+  const handleNewPrivateChat = () => {
+    setActiveChatId(null);
+    setMessages([]);
+    setIsPrivateChat(true);
+  };
+
   const handleSelectChat = (chatId: string) => {
     setActiveChatId(chatId);
+    setIsPrivateChat(false);
+  };
+
+  const handleDeleteChat = async (chatIdToDelete: string) => {
+    try {
+      const res = await fetch(`/api/chats/${chatIdToDelete}`, { method: "DELETE" });
+      if (!res.ok) return;
+      setChats((prev) => prev.filter((c) => c.id !== chatIdToDelete));
+      if (activeChatId === chatIdToDelete) {
+        setActiveChatId(null);
+        setMessages([]);
+      }
+    } catch {
+      // Best-effort
+    }
   };
 
   const persistUserMessage = async (
@@ -1281,7 +1304,7 @@ export function AIAgentPanel({
       let msgCount = 0;
       let historyForAPI: { role: "user" | "assistant"; content: string }[] = [];
 
-      if (userId) {
+      if (userId && !isPrivateChat) {
         const result = await ensureChat(bookId ?? null);
         if (result) {
           chatId = result.chatId;
@@ -1384,7 +1407,7 @@ export function AIAgentPanel({
         response,
         assistantMessageId,
         async (content, usage, toolCalls) => {
-          if (chatId) {
+          if (chatId && !isPrivateChat) {
             await persistAssistantMessage(chatId, content, assistantMsgIndex, usage, toolCalls);
             if (isNewChat) {
               generateAndUpdateChatTitle(chatId, userInput, content).catch(() => {});
@@ -1661,7 +1684,7 @@ export function AIAgentPanel({
       let chatId: string | null = null;
       let historyForAPI: { role: "user" | "assistant"; content: string }[] = [];
 
-      if (userId) {
+      if (userId && !isPrivateChat) {
         const result = await ensureChat(bookId ?? null);
         if (result) {
           chatId = result.chatId;
@@ -1732,7 +1755,7 @@ export function AIAgentPanel({
         response,
         assistantMessageId,
         async (content, usage, toolCalls) => {
-          if (chatId) {
+          if (chatId && !isPrivateChat) {
             await persistAssistantMessage(chatId, content, assistantMsgIndex, usage, toolCalls);
             if (isNewChat) {
               generateAndUpdateChatTitle(chatId, explainUserMessage, content).catch(() => {});
@@ -1798,16 +1821,46 @@ export function AIAgentPanel({
         <div className="flex flex-col border-b border-border">
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleNewChat}
-                className="h-8 w-8 text-foreground"
-                aria-label="New chat"
-                title="New chat"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
+              {userId ? (
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-foreground"
+                      aria-label="New chat"
+                      title="New chat"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                    onPointerDownOutside={(e) => e.detail.originalEvent.stopPropagation()}
+                  >
+                    <DropdownMenuItem onClick={handleNewChat} className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      New chat
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleNewPrivateChat} className="flex items-center gap-2">
+                      <EyeOff className="h-4 w-4" />
+                      New private chat
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleNewChat}
+                  className="h-8 w-8 text-foreground"
+                  aria-label="New chat"
+                  title="New chat"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              )}
               {userId && (
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
@@ -1836,12 +1889,24 @@ export function AIAgentPanel({
                         <DropdownMenuItem
                           key={chat.id}
                           onClick={() => handleSelectChat(chat.id)}
-                          className="flex items-center gap-2"
+                          className="flex items-center gap-2 group"
                         >
                           <MessageSquare className="h-4 w-4 shrink-0" />
-                          <span className="truncate min-w-0">
+                          <span className="truncate min-w-0 flex-1">
                             {chat.title?.trim() || new Date(chat.created_at).toLocaleDateString()}
                           </span>
+                          <button
+                            type="button"
+                            className="opacity-0 group-hover:opacity-100 shrink-0 p-0.5 rounded hover:bg-destructive/10 hover:text-destructive transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteChat(chat.id);
+                            }}
+                            aria-label="Delete chat"
+                            title="Delete chat"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </DropdownMenuItem>
                       ))
                     )}
@@ -2025,6 +2090,14 @@ export function AIAgentPanel({
                 </Button>
               </div>
             </div>
+        </div>
+      )}
+
+      {/* Private chat banner */}
+      {isPrivateChat && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-xs border-b border-amber-200 dark:border-amber-800">
+          <EyeOff className="h-3 w-3 shrink-0" />
+          Private chat — messages won&apos;t be saved to history
         </div>
       )}
 
