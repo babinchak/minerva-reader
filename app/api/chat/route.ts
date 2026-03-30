@@ -153,7 +153,8 @@ export async function POST(req: NextRequest) {
           if (user && usage) {
             const inputTokens = usage.prompt_tokens ?? 0;
             const outputTokens = usage.completion_tokens ?? 0;
-            const costCents = costCentsFromTokens(model, inputTokens, outputTokens, false);
+            const cachedInputTokens = (usage as { prompt_tokens_details?: { cached_tokens?: number } }).prompt_tokens_details?.cached_tokens ?? 0;
+            const costCents = costCentsFromTokens(model, inputTokens, outputTokens, false, cachedInputTokens);
             if (costCents > 0) {
               const result = await recordUsage({
                 userId: user.id,

@@ -235,6 +235,7 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     let capturedInputTokens: number | null = null;
     let capturedOutputTokens: number | null = null;
+    let capturedCachedInputTokens: number | null = null;
 
     const readable = new ReadableStream({
       async start(controller) {
@@ -244,7 +245,7 @@ export async function POST(req: NextRequest) {
             if (chunk.includes("[DONE]")) {
               const costCents =
                 capturedInputTokens != null && capturedOutputTokens != null
-                  ? costCentsFromTokens(model, capturedInputTokens, capturedOutputTokens, true)
+                  ? costCentsFromTokens(model, capturedInputTokens, capturedOutputTokens, true, capturedCachedInputTokens ?? 0)
                   : estimatedCents;
               const result =
                 user
@@ -277,10 +278,11 @@ export async function POST(req: NextRequest) {
               const match = chunk.match(/^data:\s*(\{.*\})\s*$/m);
               if (match) {
                 try {
-                  const parsed = JSON.parse(match[1]) as { type?: string; inputTokens?: number; outputTokens?: number };
+                  const parsed = JSON.parse(match[1]) as { type?: string; inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };
                   if (parsed.type === "usage_tokens") {
                     capturedInputTokens = parsed.inputTokens ?? null;
                     capturedOutputTokens = parsed.outputTokens ?? null;
+                    capturedCachedInputTokens = parsed.cachedInputTokens ?? null;
                     continue; // skip forwarding internal event
                   }
                 } catch {

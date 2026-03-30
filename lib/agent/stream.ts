@@ -166,7 +166,7 @@ class RefEnricher {
 /**
  * Stream LangGraph agent output and encode as SSE compatible with handleStreamingResponse.
  * Emits data: { content } for assistant text, data: { type: "status", message } for Cursor-style stage updates.
- * Emits data: { type: "usage_tokens", inputTokens, outputTokens } before [DONE] when available from AIMessage.usage_metadata.
+ * Emits data: { type: "usage_tokens", inputTokens, outputTokens, cachedInputTokens } before [DONE] when available from AIMessage.usage_metadata.
  */
 export async function* streamAgentToSSE(
   graph: AgentGraph,
@@ -179,6 +179,7 @@ export async function* streamAgentToSSE(
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let totalCachedInputTokens = 0;
   const refEnricher = new RefEnricher();
 
   for await (const payload of stream) {
@@ -207,14 +208,16 @@ export async function* streamAgentToSSE(
           yield `data: ${JSON.stringify({ type: "status", message: "Generating response..." })}\n\n`;
         }
         // Accumulate token usage from AIMessage.usage_metadata or response_metadata.tokenUsage
-        const um = last?.usage_metadata as { input_tokens?: number; output_tokens?: number } | undefined;
-        const rm = last?.response_metadata as { tokenUsage?: { promptTokens?: number; completionTokens?: number } } | undefined;
+        const um = last?.usage_metadata as { input_tokens?: number; output_tokens?: number; input_token_details?: { cache_read?: number } } | undefined;
+        const rm = last?.response_metadata as { tokenUsage?: { promptTokens?: number; completionTokens?: number }; usage?: { prompt_tokens_details?: { cached_tokens?: number } } } | undefined;
         if (um) {
           totalInputTokens += um.input_tokens ?? 0;
           totalOutputTokens += um.output_tokens ?? 0;
+          totalCachedInputTokens += um.input_token_details?.cache_read ?? 0;
         } else if (rm?.tokenUsage) {
           totalInputTokens += rm.tokenUsage.promptTokens ?? 0;
           totalOutputTokens += rm.tokenUsage.completionTokens ?? 0;
+          totalCachedInputTokens += rm.usage?.prompt_tokens_details?.cached_tokens ?? 0;
         }
       }
       if (updates.tools?.messages?.length) {
@@ -318,7 +321,7 @@ export async function* streamAgentToSSE(
   }
 
   if (totalInputTokens > 0 || totalOutputTokens > 0) {
-    yield `data: ${JSON.stringify({ type: "usage_tokens", inputTokens: totalInputTokens, outputTokens: totalOutputTokens })}\n\n`;
+    yield `data: ${JSON.stringify({ type: "usage_tokens", inputTokens: totalInputTokens, outputTokens: totalOutputTokens, cachedInputTokens: totalCachedInputTokens })}\n\n`;
   }
   yield `data: [DONE]\n\n`;
 }
