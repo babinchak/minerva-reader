@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AlertCircle, BookOpen, Check, FolderOpen, Loader2, MoreVertical, Pencil, Trash2, User } from "lucide-react";
+import { AlertCircle, BookOpen, Check, FileText, FolderOpen, Loader2, MoreVertical, Pencil, Trash2, User } from "lucide-react";
 import { hapticLight } from "@/lib/haptic";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +15,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EditBookMetadataDialog } from "@/components/edit-book-metadata-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Markdown } from "@/components/markdown";
+import { createClient } from "@/lib/supabase/client";
 import type { CollectionSummary } from "@/components/collections-view";
 
 interface BookCardProps {
@@ -50,6 +53,9 @@ export function BookCard({
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
 
   const handleRemove = async (e: React.MouseEvent) => {
@@ -65,6 +71,26 @@ export function BookCard({
       }
     } finally {
       setIsRemoving(false);
+    }
+  };
+
+  const handleViewSummary = async () => {
+    setSummaryOpen(true);
+    if (summaryText !== null) return; // already loaded
+    setSummaryLoading(true);
+    try {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("summaries")
+        .select("summary_text")
+        .eq("book_id", id)
+        .eq("summary_type", "book")
+        .single();
+      setSummaryText(data?.summary_text ?? "No summary available yet.");
+    } catch {
+      setSummaryText("Failed to load summary.");
+    } finally {
+      setSummaryLoading(false);
     }
   };
 
@@ -161,70 +187,74 @@ export function BookCard({
       )}
       <div className="mt-1 flex h-8 items-center justify-between">
         {statusBadge}
-        {showRemove ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 -mr-1"
-                aria-label="Book options"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setEditOpen(true)}>
-                <Pencil className="h-4 w-4" />
-                Edit title & author
-              </DropdownMenuItem>
-              {collections && collections.length > 0 && (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <FolderOpen className="h-4 w-4" />
-                    Add to collection
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {collections.map((col) => (
-                      <DropdownMenuItem
-                        key={col.id}
-                        onClick={async () => {
-                          const res = await fetch(`/api/collections/${col.id}/books`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ bookId: id }),
-                          });
-                          if (res.ok) {
-                            setAddedTo(col.id);
-                            router.refresh();
-                            setTimeout(() => setAddedTo(null), 2000);
-                          }
-                        }}
-                      >
-                        {addedTo === col.id ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <FolderOpen className="h-4 w-4" />
-                        )}
-                        {col.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              )}
-              <DropdownMenuItem
-                onClick={handleRemove}
-                disabled={isRemoving}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-                {isRemoving ? "Removing…" : "Remove from library"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <div />
-        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 -mr-1"
+              aria-label="Book options"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleViewSummary}>
+              <FileText className="h-4 w-4" />
+              Book summary
+            </DropdownMenuItem>
+            {showRemove && (
+              <>
+                <DropdownMenuItem onClick={() => setEditOpen(true)}>
+                  <Pencil className="h-4 w-4" />
+                  Edit title & author
+                </DropdownMenuItem>
+                {collections && collections.length > 0 && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <FolderOpen className="h-4 w-4" />
+                      Add to collection
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {collections.map((col) => (
+                        <DropdownMenuItem
+                          key={col.id}
+                          onClick={async () => {
+                            const res = await fetch(`/api/collections/${col.id}/books`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ bookId: id }),
+                            });
+                            if (res.ok) {
+                              setAddedTo(col.id);
+                              router.refresh();
+                              setTimeout(() => setAddedTo(null), 2000);
+                            }
+                          }}
+                        >
+                          {addedTo === col.id ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <FolderOpen className="h-4 w-4" />
+                          )}
+                          {col.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )}
+                <DropdownMenuItem
+                  onClick={handleRemove}
+                  disabled={isRemoving}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {isRemoving ? "Removing…" : "Remove from library"}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <EditBookMetadataDialog
         bookId={id}
@@ -233,6 +263,20 @@ export function BookCard({
         open={editOpen}
         onOpenChange={setEditOpen}
       />
+      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="line-clamp-2">{title}</DialogTitle>
+          </DialogHeader>
+          {summaryLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <Markdown content={summaryText ?? ""} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
