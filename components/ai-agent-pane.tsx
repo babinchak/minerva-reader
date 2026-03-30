@@ -1883,7 +1883,8 @@ export function AIAgentPanel({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="start"
-                    className="max-h-64 overflow-y-auto"
+                    className="max-h-64 overflow-y-auto max-w-[calc(100vw-2rem)]"
+                    collisionPadding={16}
                     onCloseAutoFocus={(e) => e.preventDefault()}
                     onPointerDownOutside={(e) => e.detail.originalEvent.stopPropagation()}
                   >
@@ -1904,7 +1905,7 @@ export function AIAgentPanel({
                           </span>
                           <button
                             type="button"
-                            className="opacity-0 group-hover:opacity-100 shrink-0 p-0.5 rounded hover:bg-destructive/10 hover:text-destructive transition-opacity"
+                            className="sm:opacity-0 sm:group-hover:opacity-100 shrink-0 p-0.5 rounded hover:bg-destructive/10 hover:text-destructive transition-opacity"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteChat(chat.id);
