@@ -75,6 +75,9 @@ type BookDetail = {
   users: { email: string; addedAt: string | null; lastOpenedAt: string | null }[];
   chatCount: number;
   embeddingCount: number;
+  embeddingModel: string | null;
+  chapterModel: string | null;
+  bookSummaryModel: string | null;
   summaryCounts: Record<string, number>;
   processingEvents: ProcessingEvent[];
 };
@@ -227,6 +230,7 @@ export function AdminBooksList() {
     setDetailBook(book);
     setDetail(null);
     setDetailLoading(true);
+    setRegenerating(null);
     setRegenerateResult(null);
     try {
       const res = await fetch(`/api/admin/books/${book.id}/detail`);
@@ -538,6 +542,26 @@ export function AdminBooksList() {
                       </span>
                     ))}
                   </div>
+                  {(detail.chapterModel || detail.bookSummaryModel) && (
+                    <div className="text-xs text-muted-foreground mt-1.5 space-y-0.5">
+                      {detail.bookSummaryModel && (
+                        <p>Book model: <span className="font-medium text-foreground">{detail.bookSummaryModel}</span></p>
+                      )}
+                      {detail.chapterModel && (
+                        <p>Chapter model: <span className="font-medium text-foreground">{detail.chapterModel}</span></p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Embedding model */}
+              {detail.embeddingModel && (
+                <div>
+                  <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Embeddings</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Model: <span className="font-medium text-foreground">{detail.embeddingModel}</span>
+                  </p>
                 </div>
               )}
 

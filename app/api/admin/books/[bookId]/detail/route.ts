@@ -58,11 +58,19 @@ export async function GET(
       .select("id", { count: "exact" })
       .eq("book_id", bookId);
 
-    // Embedding sections count
+    // Embedding sections count + distinct model
     const { count: embeddingCount } = await serviceSupabase
       .from("embedding_sections")
       .select("id", { count: "exact" })
       .eq("book_id", bookId);
+
+    const { data: embeddingModelRows } = await serviceSupabase
+      .from("embedding_sections")
+      .select("embedding_model")
+      .eq("book_id", bookId)
+      .limit(1);
+
+    const embeddingModel = embeddingModelRows?.[0]?.embedding_model ?? null;
 
     // Summary counts by type
     const { data: summaryRows } = await serviceSupabase
@@ -83,6 +91,14 @@ export async function GET(
       .order("created_at", { ascending: false })
       .limit(20);
 
+    // Extract summary models from the most recent completed summaries processing event metadata
+    const summariesEvent = (processingEvents ?? []).find(
+      (e) => e.action === "summaries" && e.status === "completed" && e.metadata
+    );
+    const summariesMeta = summariesEvent?.metadata as Record<string, unknown> | undefined;
+    const chapterModel = (summariesMeta?.chapter_model as string) ?? null;
+    const bookSummaryModel = (summariesMeta?.book_model as string) ?? null;
+
     return NextResponse.json({
       book: {
         id: book.id,
@@ -98,6 +114,9 @@ export async function GET(
       users,
       chatCount: chatCount ?? 0,
       embeddingCount: embeddingCount ?? 0,
+      embeddingModel,
+      chapterModel,
+      bookSummaryModel,
       summaryCounts,
       processingEvents: (processingEvents ?? []).map((e) => ({
         id: e.id,

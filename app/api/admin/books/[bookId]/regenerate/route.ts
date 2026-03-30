@@ -27,10 +27,10 @@ export async function POST(
 
     const { bookId } = await params;
 
-    // Validate book exists
+    // Validate book exists and get type
     const { data: book, error: bookError } = await serviceSupabase
       .from("books")
-      .select("id, title")
+      .select("id, title, book_type")
       .eq("id", bookId)
       .single();
 
@@ -49,19 +49,30 @@ export async function POST(
       );
     }
 
-    const apiUrl = process.env.SUMMARIES_API_URL;
+    const isPdf = book.book_type === "pdf";
+    const apiUrl = isPdf ? process.env.PDF_SUMMARIES_API_URL : process.env.SUMMARIES_API_URL;
     if (!apiUrl) {
       return NextResponse.json(
-        { error: "SUMMARIES_API_URL not configured" },
+        { error: `${isPdf ? "PDF_SUMMARIES_API_URL" : "SUMMARIES_API_URL"} not configured` },
         { status: 500 }
       );
     }
 
-    // Call the summaries Lambda via API Gateway
-    const url = new URL(apiUrl);
-    url.searchParams.set("book_id", bookId);
-    url.searchParams.set("action", action);
-    if (force) url.searchParams.set("force", "true");
+    let url: URL;
+    if (isPdf) {
+      // PDF lambda uses path routing: base path for both, /summaries, /embeddings
+      const path = action === "vectors" ? "/embeddings" : "/summaries";
+      url = new URL(path, apiUrl);
+      url.searchParams.set("book_id", bookId);
+      if (force) url.searchParams.set("force", "true");
+      if (force) url.searchParams.set("force_embeddings", "true");
+    } else {
+      // EPUB lambda uses query param routing: ?action=summaries|vectors
+      url = new URL(apiUrl);
+      url.searchParams.set("book_id", bookId);
+      url.searchParams.set("action", action);
+      if (force) url.searchParams.set("force", "true");
+    }
 
     const lambdaResp = await fetch(url.toString(), {
       method: "GET",
