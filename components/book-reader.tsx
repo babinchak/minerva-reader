@@ -432,7 +432,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     const dt = Date.now() - t.t;
                     if (t.moved || dt > 350) return;
                     const target = e.target as HTMLElement | null;
-                    if (target?.closest("button,a,input,textarea,select,[role='button']")) return;
+                    if (target?.closest("button,a,input,textarea,select,[role='button'],[role='menuitem'],[role='menu'],[data-radix-collection-item]")) return;
                     const w = window.innerWidth;
                     const third = w / 3;
                     const x = e.clientX;
