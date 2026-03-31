@@ -40,6 +40,11 @@ export async function GET() {
       .not("last_opened_at", "is", null)
       .order("last_opened_at", { ascending: false });
 
+    // Get billing data per user
+    const { data: userCredits } = await serviceSupabase
+      .from("user_credits")
+      .select("user_id, tier, balance_cents, allowance_cents, allowance_reset_at");
+
     // Aggregate counts
     const bookCountMap = new Map<string, number>();
     for (const row of bookCounts ?? []) {
@@ -59,15 +64,33 @@ export async function GET() {
       }
     }
 
-    const users = (authUsers ?? []).map((u) => ({
-      id: u.id,
-      email: u.email ?? null,
-      createdAt: u.created_at,
-      lastSignInAt: u.last_sign_in_at ?? null,
-      lastActiveAt: lastActivityMap.get(u.id) ?? null,
-      bookCount: bookCountMap.get(u.id) ?? 0,
-      chatCount: chatCountMap.get(u.id) ?? 0,
-    }));
+    // Billing data map
+    const creditsMap = new Map<string, { tier: string; balanceCents: number; allowanceCents: number; allowanceResetAt: string | null }>();
+    for (const row of userCredits ?? []) {
+      creditsMap.set(row.user_id, {
+        tier: row.tier ?? "free",
+        balanceCents: row.balance_cents ?? 0,
+        allowanceCents: row.allowance_cents ?? 0,
+        allowanceResetAt: row.allowance_reset_at ?? null,
+      });
+    }
+
+    const users = (authUsers ?? []).map((u) => {
+      const credits = creditsMap.get(u.id);
+      return {
+        id: u.id,
+        email: u.email ?? null,
+        createdAt: u.created_at,
+        lastSignInAt: u.last_sign_in_at ?? null,
+        lastActiveAt: lastActivityMap.get(u.id) ?? null,
+        bookCount: bookCountMap.get(u.id) ?? 0,
+        chatCount: chatCountMap.get(u.id) ?? 0,
+        tier: credits?.tier ?? "free",
+        balanceCents: credits?.balanceCents ?? 0,
+        allowanceCents: credits?.allowanceCents ?? 0,
+        allowanceResetAt: credits?.allowanceResetAt ?? null,
+      };
+    });
 
     return NextResponse.json({ users });
   } catch (err) {

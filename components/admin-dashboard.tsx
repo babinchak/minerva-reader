@@ -17,6 +17,8 @@ import {
   ExternalLink,
   ArrowRight,
   Clock,
+  DollarSign,
+  Gauge,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,18 @@ type NeedsAttention = {
   createdAt: string;
   hasEmbeddings: boolean;
   hasSummaries: boolean;
+};
+
+type BillingData = {
+  usage: {
+    today: { totalCents: number; requests: number; byType: Record<string, { count: number; totalCents: number }> };
+    week: { totalCents: number; requests: number };
+    month: { totalCents: number; requests: number; onDemandCents: number };
+  };
+  tiers: {
+    free: { count: number };
+    paid: { count: number; onDemandCentsThisPeriod: number };
+  };
 };
 
 const SERVICE_LINKS = [
@@ -131,6 +145,7 @@ export function AdminDashboard() {
   const [health, setHealth] = useState<HealthSummary | null>(null);
   const [recentBooks, setRecentBooks] = useState<RecentBook[]>([]);
   const [needsAttention, setNeedsAttention] = useState<NeedsAttention[]>([]);
+  const [billing, setBilling] = useState<BillingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,10 +153,11 @@ export function AdminDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [statsRes, healthRes, activityRes] = await Promise.all([
+      const [statsRes, healthRes, activityRes, billingRes] = await Promise.all([
         fetch("/api/admin/stats"),
         fetch("/api/admin/health"),
         fetch("/api/admin/activity"),
+        fetch("/api/admin/billing"),
       ]);
 
       if (!statsRes.ok || !healthRes.ok || !activityRes.ok) {
@@ -158,6 +174,10 @@ export function AdminDashboard() {
       setHealth(healthData.summary);
       setRecentBooks(activityData.recentBooks ?? []);
       setNeedsAttention(activityData.needsAttention ?? []);
+
+      if (billingRes.ok) {
+        setBilling(await billingRes.json());
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
@@ -273,6 +293,45 @@ export function AdminDashboard() {
               value={stats.orphanedBookCount}
               icon={AlertTriangle}
               href="/admin/health"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Billing overview */}
+      {billing && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Billing</h2>
+            <Link href="/admin/billing" className="text-xs text-primary hover:underline flex items-center gap-1">
+              Details <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label="Spend Today"
+              value={`$${(billing.usage.today.totalCents / 100).toFixed(2)}`}
+              icon={DollarSign}
+              detail={`${billing.usage.today.requests} requests`}
+              href="/admin/billing"
+            />
+            <MetricCard
+              label="Spend (7d)"
+              value={`$${(billing.usage.week.totalCents / 100).toFixed(2)}`}
+              icon={DollarSign}
+              detail={`${billing.usage.week.requests} requests`}
+            />
+            <MetricCard
+              label="Spend (30d)"
+              value={`$${(billing.usage.month.totalCents / 100).toFixed(2)}`}
+              icon={Gauge}
+              detail={`${billing.usage.month.requests} requests`}
+            />
+            <MetricCard
+              label="Paid Users"
+              value={billing.tiers.paid.count}
+              icon={Users}
+              detail={`${billing.tiers.free.count} free`}
             />
           </div>
         </div>

@@ -230,18 +230,15 @@ export async function POST(req: NextRequest) {
                 capturedInputTokens != null && capturedOutputTokens != null
                   ? costCentsFromTokens(model, capturedInputTokens, capturedOutputTokens, true, capturedCachedInputTokens ?? 0)
                   : estimatedCents;
-              const result =
-                user
-                  ? await recordUsage({
-                      userId: user.id,
+              const result = await recordUsage({
+                      userId: user?.id ?? null,
                       costCents,
                       usageType: "chat_agentic",
                       model,
                       inputTokens: capturedInputTokens ?? undefined,
                       outputTokens: capturedOutputTokens ?? undefined,
                       referenceId: chatId,
-                    })
-                  : { success: false, costCents, included: true };
+                    });
               controller.enqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({

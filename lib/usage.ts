@@ -59,7 +59,7 @@ export function costCentsFromEmbeddingTokens(model: string, tokens: number): num
 }
 
 export interface RecordUsageParams {
-  userId: string;
+  userId?: string | null;
   costCents: number;
   usageType: UsageType;
   model?: string;
@@ -94,12 +94,28 @@ export async function recordUsage(params: RecordUsageParams): Promise<RecordUsag
 
   if (costCents <= 0) return { success: true, included: true, costCents: 0 };
 
+  const supabase = createServiceClient();
+
+  // Anonymous usage: just record it, no balance deduction
+  if (!userId) {
+    await supabase.from("usage_records").insert({
+      user_id: null,
+      cost_cents: costCents,
+      usage_type: usageType,
+      model: model ?? null,
+      input_tokens: inputTokens ?? null,
+      output_tokens: outputTokens ?? null,
+      reference_id: referenceId ?? null,
+      included: false,
+    });
+    return { success: true, included: false, costCents };
+  }
+
   const { isFreeBetaMode } = await import("@/lib/credits");
   if (isFreeBetaMode()) {
     return { success: true, included: false, costCents };
   }
 
-  const supabase = createServiceClient();
   const { ensureUserCredits } = await import("@/lib/credits");
   await ensureUserCredits(userId);
 
