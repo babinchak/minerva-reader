@@ -639,12 +639,11 @@ export function AIAgentPanel({
     }
   }, [userId, messages, anonChatKey]);
 
-  // Credits/tier info (for Deep mode limits and display). Fetch for both logged-in and anonymous (freeBetaMode).
+  // Credits/tier info. Fetch for both logged-in and anonymous (freeBetaMode).
   const [creditsInfo, setCreditsInfo] = useState<{
     tier: string;
-    agenticToday: number;
-    agenticLimit: number;
     balanceCents: number;
+    allowanceCents: number;
     freeBetaMode?: boolean;
   } | null>(null);
 
@@ -657,9 +656,8 @@ export function AIAgentPanel({
         d
           ? {
               tier: d.tier,
-              agenticToday: d.agenticToday ?? 0,
-              agenticLimit: d.agenticLimit ?? 5,
               balanceCents: d.balanceCents ?? 0,
+              allowanceCents: d.allowanceCents ?? 0,
               freeBetaMode: d.freeBetaMode ?? false,
             }
           : null
@@ -1975,11 +1973,6 @@ export function AIAgentPanel({
                   <a href="/auth/login" className="text-xs text-primary hover:underline" title="Sign in for Deep mode and higher quality answers">
                     Sign in for better answers
                   </a>
-                ) : creditsInfo?.tier === "free" &&
-                  (creditsInfo?.agenticToday ?? 0) >= (creditsInfo?.agenticLimit ?? 5) ? (
-                  <span className="text-xs text-muted-foreground" title="5 deep mode questions per day on free tier">
-                    {creditsInfo.agenticToday}/5 Deep today
-                  </span>
                 ) : (
                   <>
                     <button
@@ -1993,10 +1986,7 @@ export function AIAgentPanel({
                         setChatMode(next);
                         localStorage.setItem("minerva-chat-mode", next);
                       }}
-                      disabled={
-                        creditsInfo?.tier === "free" &&
-                        (creditsInfo?.agenticToday ?? 0) >= (creditsInfo?.agenticLimit ?? 5)
-                      }
+                      disabled={false}
                       className={cn(
                         "relative flex h-6 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 focus:outline-none focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed",
                         chatMode === "fast" ? "bg-amber-400 dark:bg-amber-500" : "bg-blue-500 dark:bg-blue-600"
@@ -2014,11 +2004,6 @@ export function AIAgentPanel({
                     </button>
                     <span className="text-xs text-muted-foreground">
                       {chatMode === "fast" ? "Quick" : "Deep"}
-                      {creditsInfo?.tier === "free" && (
-                        <span className="ml-0.5">
-                          ({creditsInfo.agenticToday}/{creditsInfo.agenticLimit})
-                        </span>
-                      )}
                     </span>
                   </>
                 )}

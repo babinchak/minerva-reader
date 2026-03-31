@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Upload, Sparkles, Zap, MessageSquare, BookOpen } from "lucide-react";
+import { Loader2, Upload, Zap, MessageSquare, BookOpen } from "lucide-react";
 import { UsageContentSkeleton } from "@/components/usage-content-skeleton";
 import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
@@ -19,8 +19,6 @@ interface CreditsInfo {
   allowanceResetAt: string | null;
   booksUploadedThisWeek: number;
   booksUploadLimit: number;
-  agenticToday: number;
-  agenticLimit: number;
   onDemandLimitType: OnDemandLimitType;
   onDemandLimitCents: number;
   onDemandCentsThisPeriod: number;
@@ -458,24 +456,6 @@ export function UsageContent() {
         </Card>
       )}
 
-      {!isPaid && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              AI requests
-            </CardTitle>
-            <CardDescription>
-              Agentic AI requests today
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-foreground">
-              {info.agenticToday} / {info.agenticLimit}
-            </p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

@@ -7,7 +7,6 @@ import {
   getTier,
   getModelForTier,
   canMakeRequest,
-  countAgenticRequestsToday,
   AGENTIC_ESTIMATED_CENTS,
   isFreeBetaMode,
 } from "@/lib/credits";
@@ -121,30 +120,14 @@ export async function POST(req: NextRequest) {
 
     const tier = await getTier(user?.id ?? null);
 
-    // Logged-in: enforce limits and access
+    // Logged-in: check usage budget
     if (user) {
-      // Free tier: 5 deep mode questions per day
-      if (tier === "free") {
-        const agenticToday = await countAgenticRequestsToday(user.id);
-        if (agenticToday >= 5) {
-          return NextResponse.json(
-            {
-              error: "Deep mode limit reached",
-              message:
-                "Free tier allows 5 deep mode questions per day. Upgrade to Pro for unlimited.",
-            },
-            { status: 403 }
-          );
-        }
-      }
-
-      // Included mode: allow. On-demand mode: check can afford ~$1 for Deep mode.
       const canAfford = await canMakeRequest(user.id, AGENTIC_ESTIMATED_CENTS);
       if (!canAfford) {
         return NextResponse.json(
           {
-            error: "Insufficient credits",
-            message: "You've run out of credits. Upgrade or add more to continue.",
+            error: "Usage limit reached",
+            message: "You've used your included usage. Upgrade to Pro or wait for your allowance to reset.",
           },
           { status: 402 }
         );

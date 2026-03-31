@@ -4,7 +4,6 @@ import {
   getCredits,
   getTier,
   countBooksUploadedThisWeek,
-  countAgenticRequestsToday,
   isFreeBetaMode,
 } from "@/lib/credits";
 
@@ -22,8 +21,6 @@ export async function GET() {
         balanceCents: 0,
         allowanceCents: 0,
         booksUploadedThisWeek: 0,
-        agenticToday: 0,
-        agenticLimit: freeBeta ? 999999 : 0,
         allowanceResetAt: null,
         onDemandLimitType: "disabled",
         onDemandLimitCents: 1000,
@@ -35,8 +32,6 @@ export async function GET() {
     const credits = await getCredits(user.id);
     const booksUploadedThisWeek =
       tier === "free" ? await countBooksUploadedThisWeek(user.id) : 0;
-    const agenticToday = tier === "free" ? await countAgenticRequestsToday(user.id) : 0;
-    const agenticLimit = tier === "free" ? 5 : 999999;
 
     return NextResponse.json(
       {
@@ -47,8 +42,6 @@ export async function GET() {
         allowanceResetAt: credits?.allowanceResetAt?.toISOString() ?? null,
         booksUploadedThisWeek,
         booksUploadLimit: tier === "free" ? 3 : 999999,
-        agenticToday,
-        agenticLimit,
         onDemandLimitType: credits?.onDemandLimitType ?? "disabled",
         onDemandLimitCents: credits?.onDemandLimitCents ?? 1000,
         onDemandCentsThisPeriod: credits?.onDemandCentsThisPeriod ?? 0,

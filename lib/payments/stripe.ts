@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { CheckoutSessionParams, CheckoutSessionResult } from "./provider";
-import { ALLOWANCE_CENTS } from "@/lib/credits";
+import { ALLOWANCE_CENTS_PAID_MONTHLY, ALLOWANCE_CENTS_FREE_DAILY } from "@/lib/credits";
 
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -157,8 +157,8 @@ export async function handleStripeWebhook(
             {
               user_id: userId,
               tier: "paid",
-              allowance_cents: ALLOWANCE_CENTS.paid,
-              balance_cents: ALLOWANCE_CENTS.paid,
+              allowance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
+              balance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
               stripe_subscription_id: sub.id,
               stripe_subscription_item_overage: overageItemId,
               allowance_reset_at: resetAt,
@@ -195,8 +195,8 @@ export async function handleStripeWebhook(
           {
             user_id: userId,
             tier: "paid",
-            allowance_cents: ALLOWANCE_CENTS.paid,
-            balance_cents: ALLOWANCE_CENTS.paid,
+            allowance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
+            balance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
             stripe_subscription_id: sub.id,
             stripe_subscription_item_overage: overageItemId,
             allowance_reset_at: resetAt,
@@ -234,7 +234,7 @@ export async function handleStripeWebhook(
           .from("user_credits")
           .update({
             tier: "free",
-            allowance_cents: ALLOWANCE_CENTS.free,
+            allowance_cents: ALLOWANCE_CENTS_FREE_DAILY,
             stripe_subscription_id: null,
             stripe_subscription_item_overage: null,
             updated_at: new Date().toISOString(),
@@ -248,7 +248,7 @@ export async function handleStripeWebhook(
         await supabase
           .from("user_credits")
           .update({
-            allowance_cents: ALLOWANCE_CENTS.paid,
+            allowance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
             stripe_subscription_item_overage: overageItemId,
             allowance_reset_at: resetAt,
             updated_at: new Date().toISOString(),
@@ -274,8 +274,8 @@ export async function handleStripeWebhook(
           await supabase
             .from("user_credits")
             .update({
-              balance_cents: ALLOWANCE_CENTS.paid,
-              allowance_cents: ALLOWANCE_CENTS.paid,
+              balance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
+              allowance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
               allowance_reset_at: resetAt,
               on_demand_cents_this_period: 0,
               updated_at: new Date().toISOString(),

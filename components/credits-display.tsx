@@ -11,8 +11,6 @@ interface CreditsInfo {
   allowanceCents: number;
   booksUploadedThisWeek: number;
   booksUploadLimit: number;
-  agenticToday: number;
-  agenticLimit: number;
 }
 
 export function CreditsDisplay() {

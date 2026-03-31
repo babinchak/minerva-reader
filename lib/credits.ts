@@ -8,11 +8,13 @@ export type UserTier = "anonymous" | "free" | "paid";
 
 export type OnDemandLimitType = "disabled" | "fixed" | "unlimited";
 
-/** Monthly allowance in cents. $20 = 2000, $5 = 500. */
-export const ALLOWANCE_CENTS = {
-  free: Number(process.env.ALLOWANCE_CENTS_FREE) || 500,
-  paid: Number(process.env.ALLOWANCE_CENTS_PAID) || 2000,
-} as const;
+/** Daily allowance for free tier in cents. $0.50 = 50 cents. */
+export const ALLOWANCE_CENTS_FREE_DAILY =
+  Number(process.env.ALLOWANCE_CENTS_FREE_DAILY) || 50;
+
+/** Monthly allowance for paid tier in cents. $20 = 2000. */
+export const ALLOWANCE_CENTS_PAID_MONTHLY =
+  Number(process.env.ALLOWANCE_CENTS_PAID) || 2000;
 
 export interface UserCredits {
   balanceCents: number;
@@ -27,9 +29,26 @@ export interface UserCredits {
 /** Model env vars per tier. Map to actual OpenAI model IDs. */
 export const TIER_MODELS = {
   anonymous: process.env.OPENAI_MODEL_ANONYMOUS || "gpt-5.4-mini",
-  free: process.env.OPENAI_MODEL_FREE || "gpt-5.4-mini",
+  free: process.env.OPENAI_MODEL_FREE || "gpt-5.4",
   paid: process.env.OPENAI_MODEL_PAID || "gpt-5.4",
 } as const;
+
+/** Get allowance in cents for a tier. Free = daily, paid = monthly. */
+export function allowanceCentsForTier(tier: UserTier): number {
+  return tier === "paid" ? ALLOWANCE_CENTS_PAID_MONTHLY : ALLOWANCE_CENTS_FREE_DAILY;
+}
+
+/** Get the next reset date for a tier. Free = tomorrow, paid = next month. */
+function nextResetDate(tier: UserTier, from: Date = new Date()): Date {
+  const next = new Date(from);
+  if (tier === "paid") {
+    next.setMonth(next.getMonth() + 1);
+  } else {
+    next.setDate(next.getDate() + 1);
+    next.setHours(0, 0, 0, 0);
+  }
+  return next;
+}
 
 /** Estimated cost in cents per agentic request ($1 = 100 cents). */
 export const AGENTIC_ESTIMATED_CENTS =
@@ -83,7 +102,7 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
   if (error || !data) return null;
 
   const tier = (data.tier as UserTier) || "free";
-  const allowanceCents = data.allowance_cents ?? (tier === "paid" ? ALLOWANCE_CENTS.paid : ALLOWANCE_CENTS.free);
+  const allowanceCents = data.allowance_cents ?? allowanceCentsForTier(tier);
 
   return {
     balanceCents: data.balance_cents ?? 0,
@@ -99,7 +118,8 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
 }
 
 /**
- * Ensure user has a user_credits row. Apply monthly allowance if reset is due.
+ * Ensure user has a user_credits row. Apply allowance if reset is due.
+ * Free tier resets daily, paid tier resets monthly.
  * On reset, balance is set to (not added to) the allowance amount.
  */
 export async function ensureUserCredits(userId: string): Promise<void> {
@@ -113,11 +133,10 @@ export async function ensureUserCredits(userId: string): Promise<void> {
 
   const now = new Date();
   const tier = (existing?.tier as UserTier) || "free";
-  const allowanceCents = tier === "paid" ? ALLOWANCE_CENTS.paid : ALLOWANCE_CENTS.free;
+  const allowanceCents = allowanceCentsForTier(tier);
 
   if (!existing) {
-    const resetAt = new Date(now);
-    resetAt.setMonth(resetAt.getMonth() + 1);
+    const resetAt = nextResetDate("free", now);
 
     // Insert only - avoid overwriting tier=paid from a concurrent webhook (upsert would overwrite)
     const { error: insertError } = await supabase.from("user_credits").insert({
@@ -142,17 +161,14 @@ export async function ensureUserCredits(userId: string): Promise<void> {
     : null;
 
   if (resetAt && now >= resetAt) {
-    const nextReset = new Date(now);
-    nextReset.setMonth(nextReset.getMonth() + 1);
-
-    const allowanceCentsNow = tier === "paid" ? ALLOWANCE_CENTS.paid : ALLOWANCE_CENTS.free;
+    const allowanceCentsNow = allowanceCentsForTier(tier);
 
     await supabase
       .from("user_credits")
       .update({
         balance_cents: allowanceCentsNow,
         allowance_cents: allowanceCentsNow,
-        allowance_reset_at: nextReset.toISOString(),
+        allowance_reset_at: nextResetDate(tier, now).toISOString(),
         on_demand_cents_this_period: 0,
         updated_at: now.toISOString(),
       })
@@ -258,24 +274,6 @@ export async function countBooksUploadedThisWeek(userId: string): Promise<number
   return count ?? 0;
 }
 
-/**
- * Count agentic (deep mode) requests today for user.
- */
-export async function countAgenticRequestsToday(userId: string): Promise<number> {
-  const supabase = createServiceClient();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const { count, error } = await supabase
-    .from("usage_records")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("usage_type", "chat_agentic")
-    .gte("created_at", today.toISOString());
-
-  if (error) return 0;
-  return count ?? 0;
-}
 
 /**
  * Estimate processing cost in cents for a book upload based on file size.
