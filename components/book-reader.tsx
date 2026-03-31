@@ -28,6 +28,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
 import { hapticLight } from "@/lib/haptic";
+import { PortraitLockOverlay } from "@/components/portrait-lock-overlay";
 import { getLiveSelectedText, getTextSelection } from "@/lib/book-position-utils";
 import { getThoriumThemeFromStoredVariants } from "@/lib/theme-variants";
 import { ReadPageSkeleton } from "@/components/read-page-skeleton";
@@ -349,6 +350,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
 
   return (
     <ThStoreProvider>
+      <PortraitLockOverlay />
       <StatefulPreferencesProvider
         key={isMobile ? "mobile" : "desktop"}
         initialPreferences={thoriumPreferences}

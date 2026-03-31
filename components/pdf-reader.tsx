@@ -24,6 +24,7 @@ import { AIAssistant } from "@/components/ai-assistant";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
 import { hapticLight } from "@/lib/haptic";
+import { PortraitLockOverlay } from "@/components/portrait-lock-overlay";
 import { getCachedPdf, setCachedPdf } from "@/lib/pdf-cache";
 import {
   PdfFindTextHighlighter,
@@ -1761,6 +1762,7 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
 
   return (
     <div className={`w-full flex ${isMobile ? "h-svh" : "h-screen"}`}>
+      <PortraitLockOverlay />
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="flex flex-col h-full relative">
           {/* Desktop: toolbar docks in flow. Mobile: always rendered as overlay, visibility toggled (no layout shift). */}
