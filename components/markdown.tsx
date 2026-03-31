@@ -108,15 +108,15 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
               // In library mode, resolve the bookId from the section map or enriched ref
               const sectionBook = sectionBookMap?.get(ref.sectionId);
               const resolvedBookId = bookId || sectionBook?.bookId || ref.bookId;
-              const newTabUrl = resolvedBookId
-                ? `/read/${resolvedBookId}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(raw)}${chatId ? `&refChatId=${encodeURIComponent(chatId)}` : ""}`
-                : null;
               const isLibraryMode = !bookId && (!!sectionBook || !!ref.bookId);
+              const newTabUrl = resolvedBookId
+                ? `/read/${resolvedBookId}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(raw)}${!isLibraryMode && chatId ? `&refChatId=${encodeURIComponent(chatId)}` : ""}`
+                : null;
               const pageNumber = ref.page ?? null;
               const positionNumber = ref.position ?? null;
               const locationLabel = pageNumber != null ? `Page ${pageNumber}` : positionNumber != null ? `Position ${positionNumber}` : null;
               const handleContainerClick = isLibraryMode && newTabUrl
-                ? undefined
+                ? () => window.open(newTabUrl, "_blank", "noreferrer")
                 : () => onRefClick({ ...ref, quotedText: raw });
               return (
                 <span
@@ -125,7 +125,7 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                   onClick={handleContainerClick}
                   onKeyDown={handleContainerClick ? (e) => { if (e.key === "Enter" || e.key === " ") handleContainerClick(); } : undefined}
                   className={`my-1.5 flex flex-col w-full rounded-md border border-border bg-muted/50 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words${handleContainerClick ? " cursor-pointer" : ""}`}
-                  title={handleContainerClick ? "Jump to this passage in the book" : undefined}
+                  title={isLibraryMode ? "Open this passage in a new tab" : "Jump to this passage in the book"}
                 >
                   {isLibraryMode && sectionBook?.bookLabel && (
                     <span className="px-3 pt-2 text-xs font-medium text-muted-foreground">{sectionBook.bookLabel}</span>
