@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { CheckoutSessionParams, CheckoutSessionResult } from "./provider";
+import { ALLOWANCE_CENTS } from "@/lib/credits";
 
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -70,9 +71,7 @@ export async function createStripeCheckoutSession(
     } else {
       await supabase.from("user_credits").insert({
         user_id: params.userId,
-        balance: 0,
         tier: "free",
-        monthly_allowance: 5000,
         stripe_customer_id: customerId,
       });
     }
@@ -144,8 +143,6 @@ export async function handleStripeWebhook(
           session.subscription as string
         )) as unknown as { id: string; status?: string; current_period_end: number; items: { data: { id: string; price: { id: string } }[] } };
         log("retrieved subscription", { subId: sub.id, status: sub.status });
-        const priceId = sub.items.data[0]?.price.id;
-        const allowance = priceId === PRICE_ID_PRO ? 50_000 : 0;
         const overageItemId = findOverageSubscriptionItemId(sub.items.data);
 
         const resetAt = unixToIso(sub.current_period_end) ?? (() => {
@@ -160,7 +157,8 @@ export async function handleStripeWebhook(
             {
               user_id: userId,
               tier: "paid",
-              monthly_allowance: allowance,
+              allowance_cents: ALLOWANCE_CENTS.paid,
+              balance_cents: ALLOWANCE_CENTS.paid,
               stripe_subscription_id: sub.id,
               stripe_subscription_item_overage: overageItemId,
               allowance_reset_at: resetAt,
@@ -184,7 +182,6 @@ export async function handleStripeWebhook(
       log("subscription created", { subId: sub.id, status: sub.status, hasUserId: !!userId });
       if (!userId || !["active", "trialing"].includes(sub.status)) break;
 
-      const allowance = sub.items.data[0]?.price.id === PRICE_ID_PRO ? 50_000 : 0;
       const overageItemId = findOverageSubscriptionItemId(sub.items.data);
       const resetAt = unixToIso(sub.current_period_end) ?? (() => {
         const d = new Date();
@@ -198,7 +195,8 @@ export async function handleStripeWebhook(
           {
             user_id: userId,
             tier: "paid",
-            monthly_allowance: allowance,
+            allowance_cents: ALLOWANCE_CENTS.paid,
+            balance_cents: ALLOWANCE_CENTS.paid,
             stripe_subscription_id: sub.id,
             stripe_subscription_item_overage: overageItemId,
             allowance_reset_at: resetAt,
@@ -236,7 +234,7 @@ export async function handleStripeWebhook(
           .from("user_credits")
           .update({
             tier: "free",
-            monthly_allowance: 5_000,
+            allowance_cents: ALLOWANCE_CENTS.free,
             stripe_subscription_id: null,
             stripe_subscription_item_overage: null,
             updated_at: new Date().toISOString(),
@@ -245,13 +243,12 @@ export async function handleStripeWebhook(
         log("→ DOWNGRADED to free", { subId: sub.id, reason: event.type === "customer.subscription.deleted" ? "deleted" : `status=${sub.status}` });
       } else if (["active", "trialing"].includes(sub.status)) {
         const subWithItems = sub as Stripe.Subscription & { items: { data: { id: string; price: { id: string } }[] } };
-        const allowance = subWithItems.items.data[0]?.price.id === PRICE_ID_PRO ? 50_000 : 0;
         const overageItemId = findOverageSubscriptionItemId(subWithItems.items.data);
         const resetAt = unixToIso(sub.current_period_end);
         await supabase
           .from("user_credits")
           .update({
-            monthly_allowance: allowance,
+            allowance_cents: ALLOWANCE_CENTS.paid,
             stripe_subscription_item_overage: overageItemId,
             allowance_reset_at: resetAt,
             updated_at: new Date().toISOString(),
@@ -274,32 +271,16 @@ export async function handleStripeWebhook(
         const userId = sub.metadata?.user_id;
         const resetAt = unixToIso(sub.current_period_end);
         if (userId && resetAt) {
-          const allowance = 50_000;
-          const allowanceCents = 2000;
-          const { data: row } = await supabase
-            .from("user_credits")
-            .select("balance, balance_cents")
-            .eq("user_id", userId)
-            .single();
-          const currentBalance = row?.balance ?? 0;
-          const currentBalanceCents = row?.balance_cents ?? 0;
           await supabase
             .from("user_credits")
             .update({
-              balance: currentBalance + allowance,
-              balance_cents: currentBalanceCents + allowanceCents,
+              balance_cents: ALLOWANCE_CENTS.paid,
+              allowance_cents: ALLOWANCE_CENTS.paid,
               allowance_reset_at: resetAt,
-              on_demand_credits_this_period: 0,
               on_demand_cents_this_period: 0,
               updated_at: new Date().toISOString(),
             })
             .eq("user_id", userId);
-          await supabase.from("credit_transactions").insert({
-            user_id: userId,
-            amount: allowance,
-            type: "allowance",
-            metadata: { reason: "subscription_renewal", invoice_id: invoice.id },
-          });
         }
       }
       break;

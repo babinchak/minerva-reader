@@ -5,7 +5,6 @@ import {
   getTier,
   countBooksUploadedThisWeek,
   countAgenticRequestsToday,
-  CREDITS_OVERAGE_CENTS_PER_1000,
   isFreeBetaMode,
 } from "@/lib/credits";
 
@@ -20,9 +19,7 @@ export async function GET() {
       return NextResponse.json({
         tier: freeBeta ? "paid" : "anonymous",
         freeBetaMode: freeBeta,
-        balance: 0,
         balanceCents: 0,
-        monthlyAllowance: 0,
         allowanceCents: 0,
         booksUploadedThisWeek: 0,
         agenticToday: 0,
@@ -30,9 +27,7 @@ export async function GET() {
         allowanceResetAt: null,
         onDemandLimitType: "disabled",
         onDemandLimitCents: 1000,
-        onDemandCreditsThisPeriod: 0,
         onDemandCentsThisPeriod: 0,
-        creditsOverageCentsPer1000: CREDITS_OVERAGE_CENTS_PER_1000,
       });
     }
 
@@ -47,9 +42,7 @@ export async function GET() {
       {
         tier,
         freeBetaMode: isFreeBetaMode(),
-        balance: credits?.balance ?? 0,
         balanceCents: credits?.balanceCents ?? 0,
-        monthlyAllowance: credits?.monthlyAllowance ?? 0,
         allowanceCents: credits?.allowanceCents ?? 0,
         allowanceResetAt: credits?.allowanceResetAt?.toISOString() ?? null,
         booksUploadedThisWeek,
@@ -58,9 +51,7 @@ export async function GET() {
         agenticLimit,
         onDemandLimitType: credits?.onDemandLimitType ?? "disabled",
         onDemandLimitCents: credits?.onDemandLimitCents ?? 1000,
-        onDemandCreditsThisPeriod: credits?.onDemandCreditsThisPeriod ?? 0,
         onDemandCentsThisPeriod: credits?.onDemandCentsThisPeriod ?? 0,
-        creditsOverageCentsPer1000: CREDITS_OVERAGE_CENTS_PER_1000,
       },
       {
         headers: {

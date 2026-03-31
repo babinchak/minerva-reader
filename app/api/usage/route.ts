@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       .from("usage_records")
       .select("id, cost_cents, usage_type, model, input_tokens, output_tokens, reference_id, included, created_at")
       .eq("user_id", user.id)
-      .eq("usage_type", "chat")
+      .in("usage_type", ["chat", "chat_agentic"])
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -88,44 +88,22 @@ export async function GET(req: NextRequest) {
         referenceId: r.reference_id ?? undefined,
         title: r.reference_id ? chatTitleMap.get(r.reference_id) ?? "Deleted chat" : undefined,
         bookTitle: r.reference_id ? chatBookMap.get(r.reference_id) : undefined,
+        chatMode: r.usage_type === "chat_agentic" ? "agentic" : "fast",
       };
     });
 
-    // Books: user's uploads with processing cost (backend sets these)
-    const { data: books, error: booksError } = await serviceSupabase
-      .from("books")
-      .select("id, title, processing_cost_cents, processing_cost_included, created_at")
-      .eq("uploaded_by", user.id)
-      .not("processing_cost_cents", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (booksError) {
-      console.error("Usage API books error:", booksError);
-    }
-
-    const freeBeta = isFreeBetaMode();
-    const uploadRecords: UsageRecordDisplay[] = (books ?? []).map((b) => ({
-      id: `upload-${b.id}`,
-      date: b.created_at,
-      usageType: "upload" as const,
-      included: freeBeta ? false : (b.processing_cost_included ?? true),
-      costCents: freeBeta ? (b.processing_cost_cents ?? 0) : (b.processing_cost_included ? undefined : (b.processing_cost_cents ?? undefined)),
-      referenceId: b.id,
-      title: b.title ?? "Book upload",
-    }));
-
-    // Also include usage_records for upload/summary/embedding (legacy/backend)
-    const { data: legacyRecords } = await serviceSupabase
+    // Upload/processing usage from usage_records (single source of truth)
+    const { data: uploadUsageRows } = await serviceSupabase
       .from("usage_records")
       .select("id, cost_cents, usage_type, model, reference_id, included, created_at")
       .eq("user_id", user.id)
       .in("usage_type", ["upload", "summary_book", "summary_chapter", "embedding"])
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(200);
 
+    // Aggregate per-step records into per-book totals
     const uploadByBook = new Map<string, { costCents: number; included: boolean; date: string }>();
-    for (const r of legacyRecords ?? []) {
+    for (const r of uploadUsageRows ?? []) {
       const bookId = r.reference_id ?? r.id;
       const costCents = r.cost_cents ?? 0;
       const included = r.included ?? true;
@@ -139,15 +117,17 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const { data: legacyBooks } =
-      uploadByBook.size > 0
-        ? await serviceSupabase.from("books").select("id, title").in("id", Array.from(uploadByBook.keys()))
+    const freeBeta = isFreeBetaMode();
+    const bookIds = Array.from(uploadByBook.keys());
+    const { data: uploadBooks } =
+      bookIds.length > 0
+        ? await serviceSupabase.from("books").select("id, title").in("id", bookIds)
         : { data: [] };
-    const bookMap = new Map((legacyBooks ?? []).map((b) => [b.id, b.title ?? "Book"]));
+    const bookMap = new Map((uploadBooks ?? []).map((b) => [b.id, b.title ?? "Book"]));
 
-    const legacyUploadRecords: UsageRecordDisplay[] = Array.from(uploadByBook.entries()).map(
+    const mergedUploads: UsageRecordDisplay[] = Array.from(uploadByBook.entries()).map(
       ([bookId, { costCents, included, date }]) => ({
-        id: `upload-legacy-${bookId}`,
+        id: `upload-${bookId}`,
         date,
         usageType: "upload" as const,
         included: freeBeta ? false : included,
@@ -156,10 +136,6 @@ export async function GET(req: NextRequest) {
         title: bookMap.get(bookId) ?? "Book upload",
       })
     );
-
-    const allUploads = [...uploadRecords, ...legacyUploadRecords];
-    const uploadById = new Map(allUploads.map((u) => [u.referenceId ?? u.id, u]));
-    const mergedUploads = Array.from(uploadById.values());
 
     const display: UsageRecordDisplay[] = [...chatRecords, ...mergedUploads].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()

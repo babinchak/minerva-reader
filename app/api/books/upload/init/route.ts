@@ -1,7 +1,15 @@
 import { tryResolveDuplicateUpload, parseBookFileMeta } from "@/lib/book-upload-pipeline";
 import { isSha256Hex } from "@/lib/file-hash";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { countBooksUploadedThisWeek, getTier, isFreeBetaMode } from "@/lib/credits";
+import {
+  countBooksUploadedThisWeek,
+  getTier,
+  isFreeBetaMode,
+  estimateUploadCostCents,
+  canMakeRequest,
+  countInFlightProcessing,
+  MAX_CONCURRENT_PROCESSING,
+} from "@/lib/credits";
 import { NextRequest, NextResponse } from "next/server";
 
 /** Sanity cap; large files must not pass through the serverless request body. */
@@ -71,6 +79,34 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Check concurrent processing limit
+  const inFlight = await countInFlightProcessing(user.id);
+  if (inFlight >= MAX_CONCURRENT_PROCESSING) {
+    return NextResponse.json(
+      {
+        error: "Processing limit reached",
+        message: `You have ${inFlight} books currently being processed. Please wait for them to finish before uploading more.`,
+      },
+      { status: 429 },
+    );
+  }
+
+  // Estimate cost and check affordability
+  const estimatedCents = estimateUploadCostCents(fileSize);
+  if (!isFreeBetaMode()) {
+    const canAfford = await canMakeRequest(user.id, estimatedCents);
+    if (!canAfford) {
+      return NextResponse.json(
+        {
+          error: "Insufficient balance",
+          message: `This book will cost approximately $${(estimatedCents / 100).toFixed(2)} to process. Please top up your balance or upgrade your plan.`,
+          estimatedCostCents: estimatedCents,
+        },
+        { status: 402 },
+      );
+    }
+  }
+
   const bookId = crypto.randomUUID();
   const storagePath = `books/${user.id}/${bookId}.${meta.extension}`;
 
@@ -96,5 +132,6 @@ export async function POST(request: NextRequest) {
     token: signed.token,
     signed_url: signed.signedUrl,
     content_type: meta.mimeType,
+    estimated_cost_cents: estimatedCents,
   });
 }

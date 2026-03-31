@@ -644,11 +644,11 @@ export function AIAgentPanel({
     tier: string;
     agenticToday: number;
     agenticLimit: number;
-    balance: number;
+    balanceCents: number;
     freeBetaMode?: boolean;
   } | null>(null);
 
-  // Dialog shown when user runs out of credits
+  // Dialog shown when user runs out of usage
   const [creditsExhaustedDialogOpen, setCreditsExhaustedDialogOpen] = useState(false);
   useEffect(() => {
     fetch(`/api/credits?t=${Date.now()}`, { cache: "no-store" })
@@ -659,7 +659,7 @@ export function AIAgentPanel({
               tier: d.tier,
               agenticToday: d.agenticToday ?? 0,
               agenticLimit: d.agenticLimit ?? 5,
-              balance: d.balance ?? 0,
+              balanceCents: d.balanceCents ?? 0,
               freeBetaMode: d.freeBetaMode ?? false,
             }
           : null
@@ -1972,9 +1972,9 @@ export function AIAgentPanel({
                     </span>
                   )
                 ) : !userId && creditsInfo && !creditsInfo.freeBetaMode ? (
-                  <span className="text-xs text-muted-foreground" title="Sign in for Deep mode">
-                    Sign in for Deep mode
-                  </span>
+                  <a href="/auth/login" className="text-xs text-primary hover:underline" title="Sign in for Deep mode and higher quality answers">
+                    Sign in for better answers
+                  </a>
                 ) : creditsInfo?.tier === "free" &&
                   (creditsInfo?.agenticToday ?? 0) >= (creditsInfo?.agenticLimit ?? 5) ? (
                   <span className="text-xs text-muted-foreground" title="5 deep mode questions per day on free tier">

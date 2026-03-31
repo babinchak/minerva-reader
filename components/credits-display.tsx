@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Coins } from "lucide-react";
+import { Gauge } from "lucide-react";
 import Link from "next/link";
 import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
 interface CreditsInfo {
   tier: string;
-  balance: number;
-  monthlyAllowance: number;
+  balanceCents: number;
+  allowanceCents: number;
   booksUploadedThisWeek: number;
   booksUploadLimit: number;
   agenticToday: number;
@@ -37,11 +37,15 @@ export function CreditsDisplay() {
 
   if (!info || info.tier === "anonymous") return null;
 
+  const pct = info.allowanceCents > 0
+    ? Math.max(0, Math.round((info.balanceCents / info.allowanceCents) * 100))
+    : 0;
+
   return (
     <div className="flex items-center gap-2 text-sm">
       <span className="flex items-center gap-1.5 text-muted-foreground">
-        <Coins className="h-4 w-4" aria-hidden />
-        <span>{info.balance.toLocaleString()} credits</span>
+        <Gauge className="h-4 w-4" aria-hidden />
+        <span>{pct}% remaining</span>
       </span>
       {info.tier === "free" && (
         <Link

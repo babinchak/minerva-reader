@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
                   ? await recordUsage({
                       userId: user.id,
                       costCents,
-                      usageType: "chat",
+                      usageType: "chat_agentic",
                       model,
                       inputTokens: capturedInputTokens ?? undefined,
                       outputTokens: capturedOutputTokens ?? undefined,

@@ -6,7 +6,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { reportOverageUsageToStripe } from "@/lib/stripe-usage";
 
-export type UsageType = "chat" | "summary_book" | "summary_chapter" | "embedding" | "upload";
+export type UsageType = "chat" | "chat_agentic" | "summary_book" | "summary_chapter" | "embedding" | "upload";
 
 /** OpenAI pricing per 1M tokens (input, cachedInput, output) in cents. */
 const MODEL_CENTS_PER_1M: Record<string, { input: number; cachedInput: number; output: number }> = {
@@ -168,9 +168,7 @@ export async function recordUsage(params: RecordUsageParams): Promise<RecordUsag
  *    recordUsage({ userId, costCents: totalCents, usageType: "upload", referenceId: bookId })
  *    This deducts from allowance and inserts into usage_records for the usage UI.
  *
- * 2. Or update the book directly: SET processing_cost_cents = X, processing_cost_included = true/false
- *    The usage UI reads from both usage_records and books.processing_cost_cents.
- *
- * 3. Or record per-step: Call recordUsage for each summary_book, summary_chapter, embedding
+ * 2. Or record per-step: Call recordUsage for each summary_book, summary_chapter, embedding
  *    with the cost for that step. referenceId = bookId for all.
+ *    The usage UI aggregates all usage_records per book for display.
  */

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Coins, Upload, Sparkles, Zap, MessageSquare, BookOpen } from "lucide-react";
+import { Loader2, Upload, Sparkles, Zap, MessageSquare, BookOpen } from "lucide-react";
 import { UsageContentSkeleton } from "@/components/usage-content-skeleton";
 import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
@@ -14,9 +14,7 @@ type OnDemandLimitType = "disabled" | "fixed" | "unlimited";
 interface CreditsInfo {
   tier: string;
   freeBetaMode?: boolean;
-  balance: number;
   balanceCents: number;
-  monthlyAllowance: number;
   allowanceCents: number;
   allowanceResetAt: string | null;
   booksUploadedThisWeek: number;
@@ -25,9 +23,7 @@ interface CreditsInfo {
   agenticLimit: number;
   onDemandLimitType: OnDemandLimitType;
   onDemandLimitCents: number;
-  onDemandCreditsThisPeriod: number;
   onDemandCentsThisPeriod: number;
-  creditsOverageCentsPer1000?: number;
 }
 
 interface UsageRecordDisplay {
@@ -141,7 +137,7 @@ export function UsageContent() {
       <Card>
         <CardContent className="pt-6">
           <p className="text-muted-foreground text-center py-8">
-            Sign in to view your usage and credits.
+            Sign in to view your usage.
           </p>
         </CardContent>
       </Card>
@@ -150,6 +146,13 @@ export function UsageContent() {
 
   const isPaid = info.tier === "paid";
   const freeBetaMode = info.freeBetaMode ?? false;
+
+  const allowanceCents = info.allowanceCents ?? 0;
+  const balanceCents = info.balanceCents ?? 0;
+  const includedUsedCents = Math.max(0, allowanceCents - balanceCents);
+  const usagePct = allowanceCents > 0
+    ? Math.min(100, Math.round((includedUsedCents / allowanceCents) * 100))
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -163,169 +166,137 @@ export function UsageContent() {
         </Card>
       )}
 
-      {!isPaid && (
+      {/* Usage allowance card — shown for both free and paid */}
+      {!freeBetaMode && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Coins className="h-5 w-5" />
-              Credits
+              <Zap className="h-5 w-5" />
+              {isPaid ? "Included in Pro" : "Included usage"}
             </CardTitle>
             <CardDescription>
-              Free tier includes a monthly allowance. Upgrade for more.
+              {info.allowanceResetAt
+                ? `Resets ${new Date(info.allowanceResetAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
+                : `$${(allowanceCents / 100).toFixed(2)}/month allowance`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-foreground">
-                {info.balance.toLocaleString()}
-              </span>
-              <span className="text-muted-foreground">credits</span>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Usage</span>
+                <span className="font-medium text-foreground">
+                  {usagePct}% used
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${usagePct}%` }}
+                />
+              </div>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Monthly allowance: {info.monthlyAllowance.toLocaleString()} credits
-            </p>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => handleCheckout()}
-                disabled={!!loading}
-              >
-                {loading === "pro" ? (
-                  <>
-                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                    Redirecting...
-                  </>
-                ) : (
-                  "Upgrade to Pro"
-                )}
-              </Button>
-            </div>
+            {!isPaid && (
+              <div className="flex gap-2 pt-2">
+                <Button
+                  onClick={() => handleCheckout()}
+                  disabled={!!loading}
+                >
+                  {loading === "pro" ? (
+                    <>
+                      <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                      Redirecting...
+                    </>
+                  ) : (
+                    "Upgrade to Pro"
+                  )}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
       {isPaid && !freeBetaMode && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5" />
-                Included in Pro
-              </CardTitle>
-              <CardDescription>
-                {info.allowanceResetAt
-                  ? `Resets ${new Date(info.allowanceResetAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
-                  : "Monthly allowance"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {(() => {
-                const allowanceCents = info.allowanceCents ?? 0;
-                const balanceCents = info.balanceCents ?? 0;
-                const includedUsedCents = Math.max(0, allowanceCents - balanceCents);
-                const pct = allowanceCents > 0
-                  ? Math.min(100, Math.round((includedUsedCents / allowanceCents) * 100))
-                  : 0;
-                return (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Usage</span>
-                      <span className="font-medium text-foreground">
-                        {pct}% used
-                      </span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full bg-primary transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5" />
-                On-demand usage
-              </CardTitle>
-              <CardDescription>
-                When included credits run out, you can keep using and pay for overage. Billed in arrears at the end of each billing period.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {(() => {
-                const onDemandCents = info.onDemandCentsThisPeriod ?? 0;
-                const savedLimitCents = info.onDemandLimitType === "fixed" ? info.onDemandLimitCents : 0;
-                return (
-                  <>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">This period</span>
-                      <span className="font-medium text-foreground">
-                        ${(onDemandCents / 100).toFixed(2)}
-                        {savedLimitCents > 0 && (
-                          <span className="text-muted-foreground font-normal"> / ${(savedLimitCents / 100).toFixed(2)}</span>
-                        )}
-                      </span>
-                    </div>
-
-                    <div className="space-y-3 pt-2 border-t border-border">
-                      <Label className="text-sm font-medium">Monthly limit</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Set a fixed amount, unlimited, or disable on-demand.
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {(["disabled", "fixed", "unlimited"] as const).map((t) => (
-                          <Button
-                            key={t}
-                            variant={limitType === t ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setLimitType(t)}
-                          >
-                            {t === "disabled" ? "Disabled" : t === "fixed" ? "Fixed" : "Unlimited"}
-                          </Button>
-                        ))}
-                      </div>
-                      {limitType === "fixed" && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground">$</span>
-                          <Input
-                            type="number"
-                            min={0}
-                            step={1}
-                            value={limitCents}
-                            onChange={(e) => setLimitCents(e.target.value)}
-                            className="w-24"
-                          />
-                          <span className="text-muted-foreground text-sm">/ month max</span>
-                        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              On-demand usage
+            </CardTitle>
+            <CardDescription>
+              When included usage runs out, you can keep using and pay for extra. Billed in arrears at the end of each billing period.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(() => {
+              const onDemandCents = info.onDemandCentsThisPeriod ?? 0;
+              const savedLimitCents = info.onDemandLimitType === "fixed" ? info.onDemandLimitCents : 0;
+              return (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">This period</span>
+                    <span className="font-medium text-foreground">
+                      ${(onDemandCents / 100).toFixed(2)}
+                      {savedLimitCents > 0 && (
+                        <span className="text-muted-foreground font-normal"> / ${(savedLimitCents / 100).toFixed(2)}</span>
                       )}
-                      <Button
-                        size="sm"
-                        onClick={handleSaveOnDemandLimit}
-                        disabled={!!loading}
-                      >
-                        {loading === "limit" ? (
-                          <>
-                            <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                            Saving...
-                          </>
-                        ) : (
-                          "Save"
-                        )}
-                      </Button>
+                    </span>
+                  </div>
+
+                  <div className="space-y-3 pt-2 border-t border-border">
+                    <Label className="text-sm font-medium">Monthly limit</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Set a fixed amount, unlimited, or disable on-demand.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(["disabled", "fixed", "unlimited"] as const).map((t) => (
+                        <Button
+                          key={t}
+                          variant={limitType === t ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setLimitType(t)}
+                        >
+                          {t === "disabled" ? "Disabled" : t === "fixed" ? "Fixed" : "Unlimited"}
+                        </Button>
+                      ))}
                     </div>
-                  </>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        </>
+                    {limitType === "fixed" && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">$</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={limitCents}
+                          onChange={(e) => setLimitCents(e.target.value)}
+                          className="w-24"
+                        />
+                        <span className="text-muted-foreground text-sm">/ month max</span>
+                      </div>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={handleSaveOnDemandLimit}
+                      disabled={!!loading}
+                    >
+                      {loading === "limit" ? (
+                        <>
+                          <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save"
+                      )}
+                    </Button>
+                  </div>
+                </>
+              );
+            })()}
+          </CardContent>
+        </Card>
       )}
 
-      {isPaid && (
+      {(isPaid || freeBetaMode) && (
         <>
           <Card>
             <CardHeader>
