@@ -33,6 +33,7 @@ import { getLiveSelectedText, getTextSelection } from "@/lib/book-position-utils
 import { getThoriumThemeFromStoredVariants } from "@/lib/theme-variants";
 import { ReadPageSkeleton } from "@/components/read-page-skeleton";
 import { ReadingAnchorPill } from "@/components/reading-anchor-pill";
+import { MinervaLogo } from "@/components/minerva-logo";
 
 /** Fallback when document theme can't be read (SSR, etc.) */
 const FALLBACK_LIGHT = {
@@ -952,11 +953,9 @@ function EpubMobileIframeHeightFix({ enabled }: { enabled: boolean }) {
 /** Covers the reader area while EPUB iframe content loads */
 function EpubLoadingOverlay() {
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Loading book&hellip;</p>
-      </div>
+    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background gap-4">
+      <MinervaLogo size={48} variant="large" />
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
     </div>
   );
 }

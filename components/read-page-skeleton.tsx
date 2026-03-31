@@ -1,29 +1,10 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { MinervaLogo } from "@/components/minerva-logo";
 
 export function ReadPageSkeleton() {
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      {/* Toolbar area */}
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-9 w-9 rounded-md" />
-          <Skeleton className="h-5 w-32" />
-        </div>
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-9 w-9 rounded-md" />
-          <Skeleton className="h-9 w-9 rounded-md" />
-        </div>
-      </div>
-      {/* Content area - mimics reader viewport */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-2xl space-y-6">
-          <Skeleton className="mx-auto h-12 w-12 rounded-full" />
-          <div className="space-y-2 text-center">
-            <Skeleton className="mx-auto h-4 w-32" />
-            <Skeleton className="mx-auto h-3 w-24" />
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+      <MinervaLogo size={48} variant="large" />
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
     </div>
   );
 }
