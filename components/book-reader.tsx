@@ -166,6 +166,9 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   const epubNavNonceRef = useRef(0);
   const [epubNavRef, setEpubNavRef] = useState<{ readingOrderIndex: number; quotedText?: string } | null>(null);
 
+  // --- EPUB content loading overlay ---
+  const [readerLoaded, setReaderLoaded] = useState(false);
+
   // --- Reading anchor (return-to-reading after ref navigation) ---
   const [readingAnchor, setReadingAnchor] = useState(false);
   // Refs populated by EpubReadingAnchor (inside Thorium context) so BookReader can trigger save/restore
@@ -344,6 +347,42 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
     setStorageReady(true);
   }, [selfHref, initialReadingPosition]);
 
+  // Detect when EPUB iframe content has actually loaded
+  useEffect(() => {
+    if (!mounted || !storageReady) return;
+    if (readerLoaded) return;
+
+    const checkIframeLoaded = () => {
+      const iframe = document.querySelector("iframe.readium-navigator-iframe") as HTMLIFrameElement | null;
+      if (iframe?.contentDocument?.body?.innerHTML) {
+        setReaderLoaded(true);
+        return true;
+      }
+      return false;
+    };
+
+    // Already loaded (fast cache hit)
+    if (checkIframeLoaded()) return;
+
+    // Poll for iframe appearing and loading content
+    const interval = setInterval(checkIframeLoaded, 150);
+
+    // Also watch for iframe being added to the DOM
+    const observer = new MutationObserver(() => {
+      if (checkIframeLoaded()) {
+        clearInterval(interval);
+        observer.disconnect();
+      }
+    });
+    const root = document.querySelector(".epub-reader-with-custom-toolbar") ?? document.body;
+    observer.observe(root, { childList: true, subtree: true });
+
+    return () => {
+      clearInterval(interval);
+      observer.disconnect();
+    };
+  }, [mounted, storageReady, readerLoaded]);
+
   if (!mounted || !storageReady) {
     return <ReadPageSkeleton />;
   }
@@ -449,6 +488,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                 >
                   <div className="flex-1 min-w-0 h-full relative bg-background">
                     <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
+                    {!readerLoaded && <EpubLoadingOverlay />}
                   </div>
                   <AIAssistant
                     selectedText={selectedText}
@@ -484,6 +524,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                 <div className="flex flex-1 relative min-h-0 min-w-0">
                   <div className="flex-1 min-w-0 h-full relative">
                     <StatefulReader rawManifest={rawManifest} selfHref={selfHref} />
+                    {!readerLoaded && <EpubLoadingOverlay />}
                     {readingAnchor && (
                       <ReadingAnchorPill
                         label="previous position"
@@ -908,6 +949,18 @@ function EpubMobileIframeHeightFix({ enabled }: { enabled: boolean }) {
 }
 
 /** Syncs app theme (next-themes + theme variants) to Thorium */
+/** Covers the reader area while EPUB iframe content loads */
+function EpubLoadingOverlay() {
+  return (
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Loading book&hellip;</p>
+      </div>
+    </div>
+  );
+}
+
 function ThoriumThemeSync() {
   const { resolvedTheme } = useTheme();
   const dispatch = useAppDispatch();

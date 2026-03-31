@@ -19,7 +19,8 @@ import {
   X,
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "nextjs-toploader/app";
+import { useSearchParams } from "next/navigation";
 import { AIAssistant } from "@/components/ai-assistant";
 import { useSelectedText } from "@/lib/use-selected-text";
 import { useIsMobile } from "@/lib/use-media-query";
