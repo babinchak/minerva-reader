@@ -120,11 +120,11 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                 : () => onRefClick({ ...ref, quotedText: raw });
               return (
                 <span
-                  role={handleContainerClick ? "button" : undefined}
-                  tabIndex={handleContainerClick ? 0 : undefined}
+                  role="button"
+                  tabIndex={0}
                   onClick={handleContainerClick}
-                  onKeyDown={handleContainerClick ? (e) => { if (e.key === "Enter" || e.key === " ") handleContainerClick(); } : undefined}
-                  className={`my-1.5 flex flex-col w-full rounded-md border border-border bg-muted/50 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words${handleContainerClick ? " cursor-pointer" : ""}`}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleContainerClick(); }}
+                  className="my-1.5 flex flex-col w-full rounded-md border border-border bg-muted/50 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words cursor-pointer"
                   title={isLibraryMode ? "Open this passage in a new tab" : "Jump to this passage in the book"}
                 >
                   {isLibraryMode && sectionBook?.bookLabel && (
