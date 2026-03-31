@@ -859,7 +859,38 @@ function EpubMobileIframeHeightFix({ enabled }: { enabled: boolean }) {
     const mo = new MutationObserver(syncIframes);
     mo.observe(document.body, { childList: true, subtree: true });
 
+    // When iOS backgrounds a PWA and the user returns, ResizeObserver
+    // callbacks may not re-fire even though the rendering context was
+    // invalidated.  Force a height re-sync whenever the page becomes
+    // visible again.
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        // Allow a frame for the browser to finalise layout after resume.
+        requestAnimationFrame(() => {
+          for (const iframe of observers.keys()) {
+            syncHeight(iframe);
+          }
+        });
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    // pageshow with persisted=true fires on bfcache restore (iOS PWA
+    // app-switcher) — another path where heights can go stale.
+    function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted) {
+        requestAnimationFrame(() => {
+          for (const iframe of observers.keys()) {
+            syncHeight(iframe);
+          }
+        });
+      }
+    }
+    window.addEventListener("pageshow", onPageShow);
+
     return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pageshow", onPageShow as EventListener);
       mo.disconnect();
       for (const [iframe, ro] of observers) {
         ro.disconnect();
