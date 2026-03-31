@@ -60,12 +60,11 @@ export async function POST(
 
     let url: URL;
     if (isPdf) {
-      // PDF lambda uses path routing: base path for both, /summaries, /embeddings
+      // PDF lambda uses path routing: /summaries or /embeddings
       const path = action === "vectors" ? "/embeddings" : "/summaries";
       url = new URL(path, apiUrl);
       url.searchParams.set("book_id", bookId);
       if (force) url.searchParams.set("force", "true");
-      if (force) url.searchParams.set("force_embeddings", "true");
     } else {
       // EPUB lambda uses query param routing: ?action=summaries|vectors
       url = new URL(apiUrl);
