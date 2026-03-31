@@ -264,17 +264,25 @@ export function BookCard({
         onOpenChange={setEditOpen}
       />
       <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
-        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="line-clamp-2">{title}</DialogTitle>
+        <DialogContent className="flex max-h-[80vh] flex-col sm:max-w-xl">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="line-clamp-2 pr-6">{title}</DialogTitle>
+            {authorDisplay && (
+              <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                <User className="h-3.5 w-3.5 shrink-0" />
+                <span>{authorDisplay}</span>
+              </p>
+            )}
           </DialogHeader>
-          {summaryLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <Markdown content={summaryText ?? ""} />
-          )}
+          <div className="-mx-6 min-h-0 overflow-y-auto px-6 pb-1">
+            {summaryLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <Markdown content={summaryText ?? ""} />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
