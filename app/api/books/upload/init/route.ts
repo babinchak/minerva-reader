@@ -5,8 +5,6 @@ import {
   countBooksUploadedThisWeek,
   getTier,
   isFreeBetaMode,
-  estimateUploadCostDollars,
-  canMakeRequest,
   countInFlightProcessing,
   MAX_CONCURRENT_PROCESSING,
 } from "@/lib/credits";
@@ -91,22 +89,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Estimate cost and check affordability
-  const estimatedDollars = estimateUploadCostDollars(fileSize);
-  if (!isFreeBetaMode()) {
-    const canAfford = await canMakeRequest(user.id, estimatedDollars);
-    if (!canAfford) {
-      return NextResponse.json(
-        {
-          error: "Insufficient balance",
-          message: `This book will cost approximately $${estimatedDollars.toFixed(2)} to process. Please top up your balance or upgrade your plan.`,
-          estimatedCostDollars: estimatedDollars,
-        },
-        { status: 402 },
-      );
-    }
-  }
-
   const bookId = crypto.randomUUID();
   const storagePath = `books/${user.id}/${bookId}.${meta.extension}`;
 
@@ -132,6 +114,5 @@ export async function POST(request: NextRequest) {
     token: signed.token,
     signed_url: signed.signedUrl,
     content_type: meta.mimeType,
-    estimated_cost_dollars: estimatedDollars,
   });
 }

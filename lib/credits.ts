@@ -281,14 +281,6 @@ export async function countBooksUploadedThisWeek(userId: string): Promise<number
   return count ?? 0;
 }
 
-/**
- * Estimate processing cost in dollars for a book upload based on file size.
- */
-export function estimateUploadCostDollars(fileSizeBytes: number): number {
-  const fileSizeMB = fileSizeBytes / (1024 * 1024);
-  const baseDollarsPerMB = Number(process.env.UPLOAD_COST_DOLLARS_PER_MB) || 0.05;
-  return fileSizeMB * baseDollarsPerMB * 1.3;
-}
 
 /**
  * Count books currently being processed (started but not completed/failed) for a user.
