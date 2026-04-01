@@ -237,6 +237,7 @@ export async function POST(req: NextRequest) {
                       model,
                       inputTokens: capturedInputTokens ?? undefined,
                       outputTokens: capturedOutputTokens ?? undefined,
+                      cachedInputTokens: capturedCachedInputTokens ?? undefined,
                       referenceId: chatId,
                     });
               controller.enqueue(

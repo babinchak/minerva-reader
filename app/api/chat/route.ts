@@ -163,6 +163,7 @@ export async function POST(req: NextRequest) {
                 model,
                 inputTokens,
                 outputTokens,
+                cachedInputTokens,
                 referenceId: chatId,
               });
               if (result.success) {

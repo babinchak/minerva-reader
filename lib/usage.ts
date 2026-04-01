@@ -65,6 +65,7 @@ export interface RecordUsageParams {
   model?: string;
   inputTokens?: number;
   outputTokens?: number;
+  cachedInputTokens?: number;
   referenceId?: string;
   /** For uploads: book title for display */
   bookTitle?: string;
@@ -89,6 +90,7 @@ export async function recordUsage(params: RecordUsageParams): Promise<RecordUsag
     model,
     inputTokens,
     outputTokens,
+    cachedInputTokens,
     referenceId,
   } = params;
 
@@ -105,6 +107,7 @@ export async function recordUsage(params: RecordUsageParams): Promise<RecordUsag
       model: model ?? null,
       input_tokens: inputTokens ?? null,
       output_tokens: outputTokens ?? null,
+      cached_input_tokens: cachedInputTokens ?? null,
       reference_id: referenceId ?? null,
       included: false,
     });
@@ -165,6 +168,7 @@ export async function recordUsage(params: RecordUsageParams): Promise<RecordUsag
     model: model ?? null,
     input_tokens: inputTokens ?? null,
     output_tokens: outputTokens ?? null,
+    cached_input_tokens: cachedInputTokens ?? null,
     reference_id: referenceId ?? null,
     included: !isOnDemand,
   });

@@ -64,12 +64,14 @@ export async function POST(
       const path = action === "vectors" ? "/embeddings" : "/summaries";
       url = new URL(path, apiUrl);
       url.searchParams.set("book_id", bookId);
+      url.searchParams.set("admin", "true");
       if (force) url.searchParams.set("force", "true");
     } else {
       // EPUB lambda uses query param routing: ?action=summaries|vectors
       url = new URL(apiUrl);
       url.searchParams.set("book_id", bookId);
       url.searchParams.set("action", action);
+      url.searchParams.set("admin", "true");
       if (force) url.searchParams.set("force", "true");
     }
 
