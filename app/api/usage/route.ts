@@ -61,7 +61,17 @@ export async function GET(req: NextRequest) {
           .from("books")
           .select("id, title")
           .in("id", chatBookIds);
-        for (const b of chatBooks ?? []) bookTitleMap.set(b.id, b.title ?? "Book");
+        for (const b of chatBooks ?? []) bookTitleMap.set(b.id, b.title ?? "");
+        // Override with custom_title / file_name from user_books (same logic as library cards)
+        const { data: chatUserBooks } = await serviceSupabase
+          .from("user_books")
+          .select("book_id, custom_title, file_name")
+          .eq("user_id", user.id)
+          .in("book_id", chatBookIds);
+        for (const ub of chatUserBooks ?? []) {
+          const display = ub.custom_title || bookTitleMap.get(ub.book_id) || ub.file_name || "Book";
+          bookTitleMap.set(ub.book_id, display);
+        }
       }
       for (const c of chatsData ?? []) {
         chatTitleMap.set(c.id, c.title ?? "Chat");
@@ -111,11 +121,24 @@ export async function GET(req: NextRequest) {
     }
 
     const bookIds = Array.from(uploadByBook.keys());
-    const { data: uploadBooks } =
-      bookIds.length > 0
-        ? await serviceSupabase.from("books").select("id, title").in("id", bookIds)
-        : { data: [] };
-    const bookMap = new Map((uploadBooks ?? []).map((b) => [b.id, b.title ?? "Book"]));
+    const bookMap = new Map<string, string>();
+    if (bookIds.length > 0) {
+      const { data: uploadBooks } = await serviceSupabase
+        .from("books")
+        .select("id, title")
+        .in("id", bookIds);
+      for (const b of uploadBooks ?? []) bookMap.set(b.id, b.title ?? "");
+      // Override with custom_title / file_name from user_books (same logic as library cards)
+      const { data: userBooks } = await serviceSupabase
+        .from("user_books")
+        .select("book_id, custom_title, file_name")
+        .eq("user_id", user.id)
+        .in("book_id", bookIds);
+      for (const ub of userBooks ?? []) {
+        const display = ub.custom_title ?? bookMap.get(ub.book_id) ?? ub.file_name ?? "Book";
+        bookMap.set(ub.book_id, display);
+      }
+    }
 
     const mergedUploads: UsageRecordDisplay[] = Array.from(uploadByBook.entries()).map(
       ([bookId, { costDollars, date }]) => ({
@@ -124,7 +147,7 @@ export async function GET(req: NextRequest) {
         usageType: "upload" as const,
         costDollars,
         referenceId: bookId,
-        title: bookMap.get(bookId) ?? "Book upload",
+        title: bookMap.get(bookId) || "Book upload",
       })
     );
 
