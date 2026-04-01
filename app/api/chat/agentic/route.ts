@@ -248,7 +248,6 @@ export async function POST(req: NextRequest) {
                     outputTokens: capturedOutputTokens,
                     costCents: result.success ? result.costCents : costCents,
                     model,
-                    included: result.success ? result.included : true,
                     chatMode: "agentic",
                   })}\n\n`
                 )

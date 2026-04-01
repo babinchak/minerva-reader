@@ -1,5 +1,6 @@
 /**
  * Usage system: tier resolution, balance checks (cents-based).
+ * Balance is derived: allowance_cents - SUM(usage_records.cost_cents since reset).
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
@@ -17,13 +18,13 @@ export const ALLOWANCE_CENTS_PAID_MONTHLY =
   Number(process.env.ALLOWANCE_CENTS_PAID) || 2000;
 
 export interface UserCredits {
-  balanceCents: number;
   tier: UserTier;
   allowanceCents: number;
   allowanceResetAt: Date | null;
+  spentCents: number;
+  remainingCents: number;
   onDemandLimitType: OnDemandLimitType;
   onDemandLimitCents: number;
-  onDemandCentsThisPeriod: number;
 }
 
 /** Model env vars per tier. Map to actual OpenAI model IDs. */
@@ -87,7 +88,22 @@ export function getModelForTier(tier: UserTier): string {
 }
 
 /**
- * Get user credits. Creates row and applies allowance if needed.
+ * Get total spend in cents for a user since a given date.
+ */
+async function getSpendSince(userId: string, since: Date): Promise<number> {
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("usage_records")
+    .select("cost_cents")
+    .eq("user_id", userId)
+    .gte("created_at", since.toISOString());
+
+  if (!data || data.length === 0) return 0;
+  return data.reduce((sum, r) => sum + (r.cost_cents ?? 0), 0);
+}
+
+/**
+ * Get user credits with derived balance. Creates row and applies allowance reset if needed.
  */
 export async function getCredits(userId: string): Promise<UserCredits | null> {
   const supabase = createServiceClient();
@@ -95,7 +111,7 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
 
   const { data, error } = await supabase
     .from("user_credits")
-    .select("balance_cents, tier, allowance_cents, allowance_reset_at, on_demand_limit_type, on_demand_limit_cents, on_demand_cents_this_period")
+    .select("tier, allowance_cents, allowance_reset_at, on_demand_limit_type, on_demand_limit_cents")
     .eq("user_id", userId)
     .single();
 
@@ -103,24 +119,42 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
 
   const tier = (data.tier as UserTier) || "free";
   const allowanceCents = data.allowance_cents ?? allowanceCentsForTier(tier);
+  const resetAt = data.allowance_reset_at ? new Date(data.allowance_reset_at) : null;
+
+  // Derive balance from usage_records since last reset
+  const periodStart = getPeriodStart(tier, resetAt);
+  const spentCents = await getSpendSince(userId, periodStart);
+  const remainingCents = allowanceCents - spentCents;
 
   return {
-    balanceCents: data.balance_cents ?? 0,
     tier,
     allowanceCents,
-    allowanceResetAt: data.allowance_reset_at
-      ? new Date(data.allowance_reset_at)
-      : null,
+    allowanceResetAt: resetAt,
+    spentCents,
+    remainingCents,
     onDemandLimitType: (data.on_demand_limit_type as OnDemandLimitType) || "disabled",
     onDemandLimitCents: data.on_demand_limit_cents ?? 1000,
-    onDemandCentsThisPeriod: data.on_demand_cents_this_period ?? 0,
   };
 }
 
 /**
- * Ensure user has a user_credits row. Apply allowance if reset is due.
+ * Get the start of the current billing period.
+ * For free tier: reset - 1 day. For paid tier: reset - 1 month.
+ */
+function getPeriodStart(tier: UserTier, resetAt: Date | null): Date {
+  if (!resetAt) return new Date(0); // no reset date = count everything
+  const start = new Date(resetAt);
+  if (tier === "paid") {
+    start.setMonth(start.getMonth() - 1);
+  } else {
+    start.setDate(start.getDate() - 1);
+  }
+  return start;
+}
+
+/**
+ * Ensure user has a user_credits row. Apply allowance reset if due.
  * Free tier resets daily, paid tier resets monthly.
- * On reset, balance is set to (not added to) the allowance amount.
  */
 export async function ensureUserCredits(userId: string): Promise<void> {
   const supabase = createServiceClient();
@@ -138,10 +172,8 @@ export async function ensureUserCredits(userId: string): Promise<void> {
   if (!existing) {
     const resetAt = nextResetDate("free", now);
 
-    // Insert only - avoid overwriting tier=paid from a concurrent webhook (upsert would overwrite)
     const { error: insertError } = await supabase.from("user_credits").insert({
       user_id: userId,
-      balance_cents: allowanceCents,
       tier: "free",
       allowance_cents: allowanceCents,
       allowance_reset_at: resetAt.toISOString(),
@@ -149,7 +181,6 @@ export async function ensureUserCredits(userId: string): Promise<void> {
     });
 
     if (insertError) {
-      // 23505 = unique_violation - row exists (e.g. from concurrent webhook)
       if (insertError.code === "23505" || insertError.message?.includes("duplicate")) return;
       throw insertError;
     }
@@ -166,32 +197,19 @@ export async function ensureUserCredits(userId: string): Promise<void> {
     await supabase
       .from("user_credits")
       .update({
-        balance_cents: allowanceCentsNow,
         allowance_cents: allowanceCentsNow,
         allowance_reset_at: nextResetDate(tier, now).toISOString(),
-        on_demand_cents_this_period: 0,
         updated_at: now.toISOString(),
       })
       .eq("user_id", userId);
   }
 }
 
-export type UsageMode = "included" | "on_demand";
-
 /**
- * Get current usage mode: included (balance > 0) or on_demand (balance <= 0).
- */
-export async function getUsageMode(userId: string): Promise<UsageMode | null> {
-  const credits = await getCredits(userId);
-  if (!credits) return null;
-  return credits.balanceCents > 0 ? "included" : "on_demand";
-}
-
-/**
- * Check if user can make a request.
+ * Check if user can make a request costing estimatedCostCents.
  * - Free beta mode: always allow.
- * - Included mode (balance > 0): always allow.
- * - On-demand mode (balance <= 0): use canAffordCents with estimated cost.
+ * - Has remaining allowance: allow.
+ * - On-demand enabled: check limit.
  */
 export async function canMakeRequest(
   userId: string,
@@ -200,27 +218,16 @@ export async function canMakeRequest(
   if (isFreeBetaMode()) return true;
   const credits = await getCredits(userId);
   if (!credits) return false;
-  if (credits.balanceCents > 0) return true; // included mode - no cost check
-  return canAffordCents(userId, estimatedCostCents); // on-demand - check limit
-}
+  if (credits.remainingCents > 0) return true;
 
-/**
- * Check if user can afford `costCents` (balance_cents + on-demand if enabled).
- */
-export async function canAffordCents(userId: string, costCents: number): Promise<boolean> {
-  const credits = await getCredits(userId);
-  if (!credits) return false;
-  if (credits.balanceCents >= costCents) return true;
+  // On-demand check
   if (credits.onDemandLimitType === "disabled") return false;
-
-  const shortfall = costCents - credits.balanceCents;
-  const wouldBeOnDemand = credits.onDemandCentsThisPeriod + shortfall;
-
   if (credits.onDemandLimitType === "unlimited") return true;
-  if (credits.onDemandLimitType === "fixed") {
-    return wouldBeOnDemand <= credits.onDemandLimitCents;
-  }
-  return false;
+
+  // Fixed limit: overage so far + this request's overage
+  const overageSoFar = Math.max(0, -credits.remainingCents);
+  const wouldBeOverage = overageSoFar + estimatedCostCents;
+  return wouldBeOverage <= credits.onDemandLimitCents;
 }
 
 /**
@@ -274,11 +281,8 @@ export async function countBooksUploadedThisWeek(userId: string): Promise<number
   return count ?? 0;
 }
 
-
 /**
  * Estimate processing cost in cents for a book upload based on file size.
- * Derived from empirical data: ~3-5 cents per MB for summaries + embeddings.
- * Padded 30% to avoid under-estimates.
  */
 export function estimateUploadCostCents(fileSizeBytes: number): number {
   const fileSizeMB = fileSizeBytes / (1024 * 1024);
@@ -293,7 +297,6 @@ export function estimateUploadCostCents(fileSizeBytes: number): number {
 export async function countInFlightProcessing(userId: string): Promise<number> {
   const supabase = createServiceClient();
 
-  // Step 1: get book IDs uploaded by this user (recent only — no need to scan all history)
   const hourAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   const { data: userBooks } = await supabase
     .from("books")
@@ -304,13 +307,11 @@ export async function countInFlightProcessing(userId: string): Promise<number> {
   const bookIds = (userBooks ?? []).map((b) => b.id);
   if (bookIds.length === 0) return 0;
 
-  // Step 2: get processing events for those books
   const { data: events } = await supabase
     .from("processing_events")
     .select("book_id, status, created_at")
     .in("book_id", bookIds);
 
-  // Group by book_id, check if latest event is 'started'
   const byBook = new Map<string, { status: string; created_at: string }>();
   for (const e of events ?? []) {
     const existing = byBook.get(e.book_id);

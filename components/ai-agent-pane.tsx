@@ -384,7 +384,6 @@ export function AIAgentPanel({
     outputTokens?: number | null;
     costCents: number;
     model?: string;
-    included: boolean;
     chatMode?: string;
   };
 
@@ -483,7 +482,6 @@ export function AIAgentPanel({
                   outputTokens: parsed.outputTokens,
                   costCents: parsed.costCents ?? 0,
                   model: parsed.model,
-                  included: parsed.included ?? true,
                   chatMode: parsed.chatMode,
                 };
               } else if (parsed.content) {
@@ -642,7 +640,7 @@ export function AIAgentPanel({
   // Credits/tier info. Fetch for both logged-in and anonymous (freeBetaMode).
   const [creditsInfo, setCreditsInfo] = useState<{
     tier: string;
-    balanceCents: number;
+    remainingCents: number;
     allowanceCents: number;
     freeBetaMode?: boolean;
   } | null>(null);
@@ -656,7 +654,7 @@ export function AIAgentPanel({
         d
           ? {
               tier: d.tier,
-              balanceCents: d.balanceCents ?? 0,
+              remainingCents: d.remainingCents ?? 0,
               allowanceCents: d.allowanceCents ?? 0,
               freeBetaMode: d.freeBetaMode ?? false,
             }
@@ -934,7 +932,6 @@ export function AIAgentPanel({
       outputTokens?: number | null;
       costCents: number;
       model?: string;
-      included: boolean;
       chatMode?: string;
     },
     toolCalls?: MessageToolCall[]
@@ -948,7 +945,7 @@ export function AIAgentPanel({
       input_tokens: usage?.inputTokens ?? null,
       output_tokens: usage?.outputTokens ?? null,
       model: usage?.model ?? null,
-      usage_included: usage?.included ?? true,
+
       chat_mode: usage?.chatMode ?? null,
       tool_calls: toolCalls && toolCalls.length > 0 ? toolCalls : null,
     });

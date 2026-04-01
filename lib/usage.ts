@@ -1,10 +1,9 @@
 /**
  * Cost-based usage tracking.
- * All costs stored in cents. User sees: included (no cost) or on-demand (cost).
+ * All costs stored in cents. Balance is derived: allowance - SUM(cost since reset).
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
-import { reportOverageUsageToStripe } from "@/lib/stripe-usage";
 
 export type UsageType = "chat" | "chat_agentic" | "summary_book" | "summary_chapter" | "embedding" | "upload";
 
@@ -67,22 +66,13 @@ export interface RecordUsageParams {
   outputTokens?: number;
   cachedInputTokens?: number;
   referenceId?: string;
-  /** For uploads: book title for display */
-  bookTitle?: string;
-}
-
-export interface RecordUsageResult {
-  success: boolean;
-  included: boolean;
-  costCents: number;
 }
 
 /**
- * Record usage and deduct from allowance/on-demand.
- * Returns result with success, included (from allowance vs on-demand), and costCents.
- * In free beta mode: no deduction, returns costCents for display (nothing shown as included).
+ * Record a usage event. Just inserts a row — no balance deduction.
+ * Balance is derived at read time from allowance - SUM(cost since reset).
  */
-export async function recordUsage(params: RecordUsageParams): Promise<RecordUsageResult> {
+export async function recordUsage(params: RecordUsageParams): Promise<{ success: boolean; costCents: number }> {
   const {
     userId,
     costCents,
@@ -94,75 +84,12 @@ export async function recordUsage(params: RecordUsageParams): Promise<RecordUsag
     referenceId,
   } = params;
 
-  if (costCents <= 0) return { success: true, included: true, costCents: 0 };
+  if (costCents <= 0) return { success: true, costCents: 0 };
 
   const supabase = createServiceClient();
 
-  // Anonymous usage: just record it, no balance deduction
-  if (!userId) {
-    await supabase.from("usage_records").insert({
-      user_id: null,
-      cost_cents: costCents,
-      usage_type: usageType,
-      model: model ?? null,
-      input_tokens: inputTokens ?? null,
-      output_tokens: outputTokens ?? null,
-      cached_input_tokens: cachedInputTokens ?? null,
-      reference_id: referenceId ?? null,
-      included: false,
-    });
-    return { success: true, included: false, costCents };
-  }
-
-  const { isFreeBetaMode } = await import("@/lib/credits");
-  if (isFreeBetaMode()) {
-    return { success: true, included: false, costCents };
-  }
-
-  const { ensureUserCredits } = await import("@/lib/credits");
-  await ensureUserCredits(userId);
-
-  const { data: row } = await supabase
-    .from("user_credits")
-    .select("balance_cents, allowance_cents, on_demand_limit_type, on_demand_limit_cents, on_demand_cents_this_period")
-    .eq("user_id", userId)
-    .single();
-
-  if (!row) return { success: false, included: true, costCents };
-
-  const balanceCents = row.balance_cents ?? 0;
-  const limitType = (row.on_demand_limit_type as string) || "disabled";
-  const limitCents = row.on_demand_limit_cents ?? 1000;
-  const onDemandSoFar = row.on_demand_cents_this_period ?? 0;
-
-  const newBalanceCents = balanceCents - costCents;
-  const isOnDemand = newBalanceCents < 0;
-
-  if (isOnDemand) {
-    if (limitType === "disabled") return { success: false, included: true, costCents };
-    if (limitType === "fixed") {
-      const wouldBeTotal = onDemandSoFar + (-newBalanceCents);
-      if (wouldBeTotal > limitCents) return { success: false, included: false, costCents };
-    }
-  }
-
-  const updateData: Record<string, unknown> = {
-    balance_cents: newBalanceCents,
-    updated_at: new Date().toISOString(),
-  };
-  if (isOnDemand) {
-    updateData.on_demand_cents_this_period = onDemandSoFar + (-newBalanceCents);
-  }
-
-  const { error: updateError } = await supabase
-    .from("user_credits")
-    .update(updateData)
-    .eq("user_id", userId);
-
-  if (updateError) return { success: false, included: true, costCents };
-
-  await supabase.from("usage_records").insert({
-    user_id: userId,
+  const { error } = await supabase.from("usage_records").insert({
+    user_id: userId ?? null,
     cost_cents: costCents,
     usage_type: usageType,
     model: model ?? null,
@@ -170,25 +97,12 @@ export async function recordUsage(params: RecordUsageParams): Promise<RecordUsag
     output_tokens: outputTokens ?? null,
     cached_input_tokens: cachedInputTokens ?? null,
     reference_id: referenceId ?? null,
-    included: !isOnDemand,
   });
 
-  if (isOnDemand) {
-    const onDemandCents = -newBalanceCents;
-    reportOverageUsageToStripe(userId, onDemandCents).catch(() => {});
+  if (error) {
+    console.error("[usage] failed to insert usage_record:", error);
+    return { success: false, costCents };
   }
 
-  return { success: true, included: !isOnDemand, costCents };
+  return { success: true, costCents };
 }
-
-/*
- * Backend integration for summaries and embeddings:
- *
- * 1. Book upload (total cost): After summaries + embeddings are done, call:
- *    recordUsage({ userId, costCents: totalCents, usageType: "upload", referenceId: bookId })
- *    This deducts from allowance and inserts into usage_records for the usage UI.
- *
- * 2. Or record per-step: Call recordUsage for each summary_book, summary_chapter, embedding
- *    with the cost for that step. referenceId = bookId for all.
- *    The usage UI aggregates all usage_records per book for display.
- */

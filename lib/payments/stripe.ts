@@ -158,7 +158,7 @@ export async function handleStripeWebhook(
               user_id: userId,
               tier: "paid",
               allowance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
-              balance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
+
               stripe_subscription_id: sub.id,
               stripe_subscription_item_overage: overageItemId,
               allowance_reset_at: resetAt,
@@ -196,7 +196,6 @@ export async function handleStripeWebhook(
             user_id: userId,
             tier: "paid",
             allowance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
-            balance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
             stripe_subscription_id: sub.id,
             stripe_subscription_item_overage: overageItemId,
             allowance_reset_at: resetAt,
@@ -274,10 +273,10 @@ export async function handleStripeWebhook(
           await supabase
             .from("user_credits")
             .update({
-              balance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
+
               allowance_cents: ALLOWANCE_CENTS_PAID_MONTHLY,
               allowance_reset_at: resetAt,
-              on_demand_cents_this_period: 0,
+
               updated_at: new Date().toISOString(),
             })
             .eq("user_id", userId);

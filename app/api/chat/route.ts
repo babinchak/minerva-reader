@@ -175,7 +175,6 @@ export async function POST(req: NextRequest) {
                       outputTokens,
                       costCents: result.costCents,
                       model,
-                      included: result.included,
                       chatMode: "fast",
                     })}\n\n`
                   )

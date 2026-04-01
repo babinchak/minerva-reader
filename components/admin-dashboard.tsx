@@ -66,11 +66,11 @@ type BillingData = {
   usage: {
     today: { totalCents: number; requests: number; byType: Record<string, { count: number; totalCents: number }> };
     week: { totalCents: number; requests: number };
-    month: { totalCents: number; requests: number; onDemandCents: number };
+    month: { totalCents: number; requests: number };
   };
   tiers: {
     free: { count: number };
-    paid: { count: number; onDemandCentsThisPeriod: number };
+    paid: { count: number };
   };
 };
 

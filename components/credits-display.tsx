@@ -7,8 +7,8 @@ import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
 interface CreditsInfo {
   tier: string;
-  balanceCents: number;
   allowanceCents: number;
+  remainingCents: number;
   booksUploadedThisWeek: number;
   booksUploadLimit: number;
 }
@@ -36,7 +36,7 @@ export function CreditsDisplay() {
   if (!info || info.tier === "anonymous") return null;
 
   const pct = info.allowanceCents > 0
-    ? Math.max(0, Math.round((info.balanceCents / info.allowanceCents) * 100))
+    ? Math.max(0, Math.round((info.remainingCents / info.allowanceCents) * 100))
     : 0;
 
   return (

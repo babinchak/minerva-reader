@@ -31,7 +31,6 @@ type User = {
   bookCount: number;
   chatCount: number;
   tier: string;
-  balanceCents: number;
   allowanceCents: number;
   allowanceResetAt: string | null;
 };
@@ -46,7 +45,7 @@ const SORT_OPTIONS: { value: SortType; label: string; icon: React.ReactNode }[] 
   { value: "bookCount", label: "Books", icon: <BookOpen className="h-4 w-4" /> },
   { value: "chatCount", label: "Chats", icon: <MessageSquare className="h-4 w-4" /> },
   { value: "email", label: "Email", icon: <ArrowDownAZ className="h-4 w-4" /> },
-  { value: "balance", label: "Balance", icon: <Gauge className="h-4 w-4" /> },
+  { value: "balance", label: "Allowance", icon: <Gauge className="h-4 w-4" /> },
 ];
 
 const ACTIVITY_FILTER_OPTIONS: { value: ActivityFilter; label: string }[] = [
@@ -174,9 +173,7 @@ export function AdminUsersList() {
         return asc ? a.chatCount - b.chatCount : b.chatCount - a.chatCount;
       }
       if (sort === "balance") {
-        const pa = a.allowanceCents > 0 ? a.balanceCents / a.allowanceCents : 0;
-        const pb = b.allowanceCents > 0 ? b.balanceCents / b.allowanceCents : 0;
-        return asc ? pa - pb : pb - pa;
+        return asc ? a.allowanceCents - b.allowanceCents : b.allowanceCents - a.allowanceCents;
       }
       if (sort === "signUp") {
         const da = new Date(a.createdAt).getTime();
@@ -287,7 +284,7 @@ export function AdminUsersList() {
           <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-4 px-4 py-2.5 bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wider">
             <span>User</span>
             <span className="w-16 text-center">Tier</span>
-            <span className="w-24 text-center">Balance</span>
+            <span className="w-24 text-center">Allowance</span>
             <span className="w-20 text-center">Books</span>
             <span className="w-20 text-center">Chats</span>
             <span className="w-28 text-right">Signed up</span>
@@ -295,9 +292,7 @@ export function AdminUsersList() {
           </div>
           {visibleUsers.map((u) => {
             const inactive = isUserInactive(u);
-            const balancePct = u.allowanceCents > 0
-              ? Math.max(0, Math.round((u.balanceCents / u.allowanceCents) * 100))
-              : 0;
+            const allowanceDollars = `$${(u.allowanceCents / 100).toFixed(2)}`;
             return (
               <div
                 key={u.id}
@@ -315,7 +310,7 @@ export function AdminUsersList() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground sm:hidden mt-0.5">
-                    {u.tier} · {balancePct}% remaining · {u.bookCount} books · {u.chatCount} chats
+                    {u.tier} · {allowanceDollars} allowance · {u.bookCount} books · {u.chatCount} chats
                   </p>
                 </div>
                 <span className="hidden sm:flex w-16 items-center justify-center">
@@ -327,11 +322,8 @@ export function AdminUsersList() {
                     {u.tier}
                   </span>
                 </span>
-                <span className="hidden sm:flex w-24 items-center justify-center gap-1.5 text-sm">
-                  <Gauge className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className={balancePct <= 10 ? "text-red-600 dark:text-red-400 font-medium" : ""}>
-                    {balancePct}%
-                  </span>
+                <span className="hidden sm:flex w-24 items-center justify-center text-sm text-muted-foreground">
+                  {allowanceDollars}
                 </span>
                 <span className="hidden sm:flex w-20 items-center justify-center gap-1 text-sm">
                   <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />

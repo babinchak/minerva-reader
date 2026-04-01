@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import {
   DollarSign,
-  Gauge,
   Loader2,
   RefreshCw,
   Users,
@@ -17,8 +16,6 @@ type TierCategoryCounts = { count: number; totalCents: number };
 
 type UsagePeriod = {
   totalCents: number;
-  includedCents: number;
-  onDemandCents: number;
   requests: number;
   byType: Record<string, { count: number; totalCents: number }>;
   byTierCategory: Record<string, Record<string, TierCategoryCounts>>;
@@ -27,18 +24,16 @@ type UsagePeriod = {
 type BillingUser = {
   userId: string;
   tier: string;
-  balanceCents: number;
   allowanceCents: number;
   allowanceResetAt: string | null;
   onDemandLimitType: string;
-  onDemandCentsThisPeriod: number;
 };
 
 type BillingData = {
   usage: { today: UsagePeriod; week: UsagePeriod; month: UsagePeriod };
   tiers: {
-    free: { count: number; totalBalanceCents: number; totalAllowanceCents: number };
-    paid: { count: number; totalBalanceCents: number; totalAllowanceCents: number; onDemandCentsThisPeriod: number };
+    free: { count: number; totalAllowanceCents: number };
+    paid: { count: number; totalAllowanceCents: number };
   };
   users: BillingUser[];
 };
@@ -72,11 +67,6 @@ function PeriodCard({ label, period }: { label: string; period: UsagePeriod }) {
       <div className="text-2xl font-bold text-foreground">{dollars(period.totalCents)}</div>
       <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
         <span>{period.requests} requests</span>
-        {period.onDemandCents > 0 && (
-          <span className="text-orange-600 dark:text-orange-400">
-            {dollars(period.onDemandCents)} on-demand
-          </span>
-        )}
       </div>
       {Object.keys(period.byType).length > 0 && (
         <div className="mt-3 space-y-1">
@@ -243,12 +233,10 @@ export function AdminBilling() {
 
   const emailMap = new Map(authUsers.map((u) => [u.id, u.email]));
 
-  // Sort users: paid first, then by balance % ascending (lowest first = most attention needed)
+  // Sort users: paid first, then by allowance descending
   const sortedUsers = [...billing.users].sort((a, b) => {
     if (a.tier !== b.tier) return a.tier === "paid" ? -1 : 1;
-    const pctA = a.allowanceCents > 0 ? a.balanceCents / a.allowanceCents : 0;
-    const pctB = b.allowanceCents > 0 ? b.balanceCents / b.allowanceCents : 0;
-    return pctA - pctB;
+    return b.allowanceCents - a.allowanceCents;
   });
 
   return (
@@ -332,7 +320,7 @@ export function AdminBilling() {
             </div>
             <div className="text-2xl font-bold text-foreground">{billing.tiers.free.count}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Aggregate balance: {dollars(billing.tiers.free.totalBalanceCents)} / {dollars(billing.tiers.free.totalAllowanceCents)}
+              Total allowance: {dollars(billing.tiers.free.totalAllowanceCents)}
             </p>
           </div>
           <div className="rounded-lg border border-border bg-card p-4">
@@ -342,13 +330,8 @@ export function AdminBilling() {
             </div>
             <div className="text-2xl font-bold text-foreground">{billing.tiers.paid.count}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Aggregate balance: {dollars(billing.tiers.paid.totalBalanceCents)} / {dollars(billing.tiers.paid.totalAllowanceCents)}
+              Total allowance: {dollars(billing.tiers.paid.totalAllowanceCents)}
             </p>
-            {billing.tiers.paid.onDemandCentsThisPeriod > 0 && (
-              <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
-                On-demand this period: {dollars(billing.tiers.paid.onDemandCentsThisPeriod)}
-              </p>
-            )}
           </div>
         </div>
       </div>
@@ -362,17 +345,13 @@ export function AdminBilling() {
           <p className="text-sm text-muted-foreground py-4">No users with billing data yet.</p>
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
-            <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-2.5 bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-4 py-2.5 bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wider">
               <span>User</span>
               <span className="w-16 text-center">Tier</span>
-              <span className="w-32 text-center">Balance</span>
               <span className="w-24 text-center">On-demand</span>
               <span className="w-32 text-right">Resets</span>
             </div>
             {sortedUsers.map((u) => {
-              const pct = u.allowanceCents > 0
-                ? Math.max(0, Math.round((u.balanceCents / u.allowanceCents) * 100))
-                : 0;
               const email = emailMap.get(u.userId) ?? u.userId.slice(0, 8);
               const resetLabel = u.allowanceResetAt
                 ? new Date(u.allowanceResetAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
@@ -381,12 +360,12 @@ export function AdminBilling() {
               return (
                 <div
                   key={u.userId}
-                  className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto_auto] gap-1 sm:gap-4 items-center px-4 py-3 border-t border-border first:border-t-0 hover:bg-muted/30 transition-colors"
+                  className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-1 sm:gap-4 items-center px-4 py-3 border-t border-border first:border-t-0 hover:bg-muted/30 transition-colors"
                 >
                   <div className="min-w-0">
                     <span className="truncate text-sm font-medium block">{email}</span>
                     <p className="text-xs text-muted-foreground sm:hidden mt-0.5">
-                      {u.tier} · {pct}% · resets {resetLabel}
+                      {u.tier} · resets {resetLabel}
                     </p>
                   </div>
                   <span className="hidden sm:flex w-16 items-center justify-center">
@@ -398,28 +377,8 @@ export function AdminBilling() {
                       {u.tier}
                     </span>
                   </span>
-                  <span className="hidden sm:flex w-32 items-center gap-2">
-                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          pct <= 10 ? "bg-red-500" : pct <= 30 ? "bg-orange-500" : "bg-green-500"
-                        }`}
-                        style={{ width: `${Math.min(100, pct)}%` }}
-                      />
-                    </div>
-                    <span className={`text-xs font-medium w-10 text-right ${
-                      pct <= 10 ? "text-red-600 dark:text-red-400" : ""
-                    }`}>
-                      {pct}%
-                    </span>
-                  </span>
                   <span className="hidden sm:block w-24 text-center text-xs text-muted-foreground">
                     {u.onDemandLimitType === "disabled" ? "off" : u.onDemandLimitType}
-                    {u.onDemandCentsThisPeriod > 0 && (
-                      <span className="text-orange-600 dark:text-orange-400 ml-1">
-                        {dollars(u.onDemandCentsThisPeriod)}
-                      </span>
-                    )}
                   </span>
                   <span className="hidden sm:block w-32 text-right text-xs text-muted-foreground">
                     {resetLabel}

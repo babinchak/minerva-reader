@@ -14,14 +14,14 @@ type OnDemandLimitType = "disabled" | "fixed" | "unlimited";
 interface CreditsInfo {
   tier: string;
   freeBetaMode?: boolean;
-  balanceCents: number;
   allowanceCents: number;
+  spentCents: number;
+  remainingCents: number;
   allowanceResetAt: string | null;
   booksUploadedThisWeek: number;
   booksUploadLimit: number;
   onDemandLimitType: OnDemandLimitType;
   onDemandLimitCents: number;
-  onDemandCentsThisPeriod: number;
 }
 
 interface UsageRecordDisplay {
@@ -32,8 +32,7 @@ interface UsageRecordDisplay {
   inputTokens?: number;
   outputTokens?: number;
   tokens?: number;
-  included: boolean;
-  costCents?: number;
+  costCents: number;
   referenceId?: string;
   title?: string;
   bookTitle?: string;
@@ -146,10 +145,9 @@ export function UsageContent() {
   const freeBetaMode = info.freeBetaMode ?? false;
 
   const allowanceCents = info.allowanceCents ?? 0;
-  const balanceCents = info.balanceCents ?? 0;
-  const includedUsedCents = Math.max(0, allowanceCents - balanceCents);
+  const spentCents = info.spentCents ?? 0;
   const usagePct = allowanceCents > 0
-    ? Math.min(100, Math.round((includedUsedCents / allowanceCents) * 100))
+    ? Math.min(100, Math.round((spentCents / allowanceCents) * 100))
     : 0;
 
   return (
@@ -170,18 +168,20 @@ export function UsageContent() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5" />
-              {isPaid ? "Included in Pro" : "Included usage"}
+              {isPaid ? "Included in Pro" : "Usage"}
             </CardTitle>
             <CardDescription>
               {info.allowanceResetAt
                 ? `Resets ${new Date(info.allowanceResetAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
-                : `$${(allowanceCents / 100).toFixed(2)}/month allowance`}
+                : `$${(allowanceCents / 100).toFixed(2)}/${isPaid ? "month" : "day"} allowance`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Usage</span>
+                <span className="text-muted-foreground">
+                  ${(spentCents / 100).toFixed(2)} / ${(allowanceCents / 100).toFixed(2)}
+                </span>
                 <span className="font-medium text-foreground">
                   {usagePct}% used
                 </span>
@@ -222,19 +222,19 @@ export function UsageContent() {
               On-demand usage
             </CardTitle>
             <CardDescription>
-              When included usage runs out, you can keep using and pay for extra. Billed in arrears at the end of each billing period.
+              When included usage runs out, you can keep using and pay for extra.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {(() => {
-              const onDemandCents = info.onDemandCentsThisPeriod ?? 0;
+              const overageCents = Math.max(0, spentCents - allowanceCents);
               const savedLimitCents = info.onDemandLimitType === "fixed" ? info.onDemandLimitCents : 0;
               return (
                 <>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">This period</span>
                     <span className="font-medium text-foreground">
-                      ${(onDemandCents / 100).toFixed(2)}
+                      ${(overageCents / 100).toFixed(2)}
                       {savedLimitCents > 0 && (
                         <span className="text-muted-foreground font-normal"> / ${(savedLimitCents / 100).toFixed(2)}</span>
                       )}
@@ -303,7 +303,7 @@ export function UsageContent() {
                 Recent messages
               </CardTitle>
               <CardDescription>
-                Chat messages with model, tokens, and cost (included or on-demand).
+                Chat messages with model, tokens, and cost.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -348,16 +348,8 @@ export function UsageContent() {
                               <td className="py-2 px-2 text-right text-muted-foreground">
                                 {r.tokens != null ? r.tokens.toLocaleString() : "—"}
                               </td>
-                              <td className="py-2 px-2 text-right font-medium">
-                                {r.included ? (
-                                  <span className="text-green-600 dark:text-green-500">Included</span>
-                                ) : (
-                                  <span className="text-foreground">
-                                    {r.costCents != null && r.costCents > 0
-                                      ? `$${(r.costCents / 100).toFixed(2)}`
-                                      : "—"}
-                                  </span>
-                                )}
+                              <td className="py-2 px-2 text-right font-medium text-foreground">
+                                {r.costCents > 0 ? `$${(r.costCents / 100).toFixed(2)}` : "—"}
                               </td>
                             </tr>
                           ))}
@@ -391,7 +383,7 @@ export function UsageContent() {
                 if (uploadRecords.length === 0) {
                   return (
                     <p className="text-sm text-muted-foreground py-4">
-                      No book uploads yet. Usage will appear here after you upload books (your backend records the cost).
+                      No book uploads yet. Usage will appear here after you upload books.
                     </p>
                   );
                 }
@@ -414,16 +406,8 @@ export function UsageContent() {
                             <td className="py-2 px-2 text-muted-foreground">
                               {r.title ?? "—"}
                             </td>
-                            <td className="py-2 px-2 text-right font-medium">
-                              {r.included ? (
-                                <span className="text-green-600 dark:text-green-500">Included</span>
-                              ) : (
-                                <span className="text-foreground">
-                                  {r.costCents != null && r.costCents > 0
-                                    ? `$${(r.costCents / 100).toFixed(2)}`
-                                    : "—"}
-                                </span>
-                              )}
+                            <td className="py-2 px-2 text-right font-medium text-foreground">
+                              {r.costCents > 0 ? `$${(r.costCents / 100).toFixed(2)}` : "—"}
                             </td>
                           </tr>
                         ))}

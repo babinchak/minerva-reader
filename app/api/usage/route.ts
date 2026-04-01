@@ -1,6 +1,5 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { isFreeBetaMode } from "@/lib/credits";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +11,7 @@ export interface UsageRecordDisplay {
   inputTokens?: number;
   outputTokens?: number;
   tokens?: number;
-  included: boolean;
-  costCents?: number;
+  costCents: number;
   referenceId?: string;
   /** For chat: chat title. For upload: book title */
   title?: string;
@@ -37,10 +35,10 @@ export async function GET(req: NextRequest) {
 
     const serviceSupabase = createServiceClient();
 
-    // Chat usage from usage_records (billing survives chat deletion / private mode)
+    // Chat usage from usage_records
     const { data: chatUsageRows } = await serviceSupabase
       .from("usage_records")
-      .select("id, cost_cents, usage_type, model, input_tokens, output_tokens, reference_id, included, created_at")
+      .select("id, cost_cents, usage_type, model, input_tokens, output_tokens, reference_id, created_at")
       .eq("user_id", user.id)
       .in("usage_type", ["chat", "chat_agentic"])
       .order("created_at", { ascending: false })
@@ -71,9 +69,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const freeBetaChat = isFreeBetaMode();
     const chatRecords: UsageRecordDisplay[] = (chatUsageRows ?? []).map((r) => {
-      const costCents = r.cost_cents ?? 0;
       const tokens = (r.input_tokens ?? 0) + (r.output_tokens ?? 0);
       return {
         id: r.id,
@@ -83,8 +79,7 @@ export async function GET(req: NextRequest) {
         inputTokens: r.input_tokens ?? undefined,
         outputTokens: r.output_tokens ?? undefined,
         tokens: tokens > 0 ? tokens : undefined,
-        included: freeBetaChat ? false : (r.included ?? true),
-        costCents: freeBetaChat ? costCents : (r.included ? undefined : costCents),
+        costCents: r.cost_cents ?? 0,
         referenceId: r.reference_id ?? undefined,
         title: r.reference_id ? chatTitleMap.get(r.reference_id) ?? "Deleted chat" : undefined,
         bookTitle: r.reference_id ? chatBookMap.get(r.reference_id) : undefined,
@@ -92,32 +87,29 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Upload/processing usage from usage_records (single source of truth)
+    // Upload/processing usage from usage_records
     const { data: uploadUsageRows } = await serviceSupabase
       .from("usage_records")
-      .select("id, cost_cents, usage_type, model, reference_id, included, created_at")
+      .select("id, cost_cents, usage_type, model, reference_id, created_at")
       .eq("user_id", user.id)
       .in("usage_type", ["upload", "summary_book", "summary_chapter", "embedding"])
       .order("created_at", { ascending: false })
       .limit(200);
 
     // Aggregate per-step records into per-book totals
-    const uploadByBook = new Map<string, { costCents: number; included: boolean; date: string }>();
+    const uploadByBook = new Map<string, { costCents: number; date: string }>();
     for (const r of uploadUsageRows ?? []) {
       const bookId = r.reference_id ?? r.id;
       const costCents = r.cost_cents ?? 0;
-      const included = r.included ?? true;
       const existing = uploadByBook.get(bookId);
       if (existing) {
         existing.costCents += costCents;
-        existing.included = existing.included && included;
         if (r.created_at > existing.date) existing.date = r.created_at;
       } else {
-        uploadByBook.set(bookId, { costCents, included, date: r.created_at });
+        uploadByBook.set(bookId, { costCents, date: r.created_at });
       }
     }
 
-    const freeBeta = isFreeBetaMode();
     const bookIds = Array.from(uploadByBook.keys());
     const { data: uploadBooks } =
       bookIds.length > 0
@@ -126,12 +118,11 @@ export async function GET(req: NextRequest) {
     const bookMap = new Map((uploadBooks ?? []).map((b) => [b.id, b.title ?? "Book"]));
 
     const mergedUploads: UsageRecordDisplay[] = Array.from(uploadByBook.entries()).map(
-      ([bookId, { costCents, included, date }]) => ({
+      ([bookId, { costCents, date }]) => ({
         id: `upload-${bookId}`,
         date,
         usageType: "upload" as const,
-        included: freeBeta ? false : included,
-        costCents: freeBeta ? costCents : (included ? undefined : costCents),
+        costCents,
         referenceId: bookId,
         title: bookMap.get(bookId) ?? "Book upload",
       })
