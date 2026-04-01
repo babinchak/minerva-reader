@@ -44,13 +44,15 @@ type AuthUser = {
   email: string | null;
 };
 
+const USAGE_TYPE_ORDER = ["chat", "chat_agentic", "summary_chapter", "summary_book", "embedding", "upload"];
+
 const USAGE_TYPE_LABELS: Record<string, { label: string; icon: React.ElementType }> = {
   chat: { label: "Quick chat", icon: MessageSquare },
   chat_agentic: { label: "Deep chat", icon: Zap },
-  upload: { label: "Upload", icon: BookOpen },
-  summary_book: { label: "Book summary", icon: BookOpen },
   summary_chapter: { label: "Chapter summary", icon: BookOpen },
+  summary_book: { label: "Book summary", icon: BookOpen },
   embedding: { label: "Embedding", icon: BookOpen },
+  upload: { label: "Upload", icon: BookOpen },
 };
 
 function dollars(amount: number): string {
@@ -71,7 +73,7 @@ function PeriodCard({ label, period }: { label: string; period: UsagePeriod }) {
       {Object.keys(period.byType).length > 0 && (
         <div className="mt-3 space-y-1">
           {Object.entries(period.byType)
-            .sort(([, a], [, b]) => b.totalDollars - a.totalDollars)
+            .sort(([a], [b]) => (USAGE_TYPE_ORDER.indexOf(a) === -1 ? 99 : USAGE_TYPE_ORDER.indexOf(a)) - (USAGE_TYPE_ORDER.indexOf(b) === -1 ? 99 : USAGE_TYPE_ORDER.indexOf(b)))
             .map(([type, data]) => {
               const meta = USAGE_TYPE_LABELS[type] ?? { label: type, icon: DollarSign };
               const Icon = meta.icon;
