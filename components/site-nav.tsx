@@ -12,17 +12,19 @@ import { cn } from "@/lib/utils";
 interface SiteNavProps {
   rightSlot: React.ReactNode;
   showAdmin?: boolean;
+  isLoggedIn?: boolean;
 }
 
-const navLinks = [
+const allNavLinks = [
   { href: "/", label: "Home", icon: Home },
   { href: "/browse", label: "Browse", icon: Library },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/settings", label: "Settings", icon: Settings, requiresAuth: true },
 ] as const;
 
 const adminLink = { href: "/admin", label: "Admin", icon: Shield } as const;
 
-export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
+export function SiteNav({ rightSlot, showAdmin, isLoggedIn }: SiteNavProps) {
+  const navLinks = allNavLinks.filter((l) => !l.requiresAuth || isLoggedIn);
   const isMobile = useIsMobile();
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -66,28 +68,20 @@ export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
               <MinervaLogo size={28} className="shrink-0" />
               Minerva Reader
             </Link>
-            <Link
-              href="/browse"
-              className={cn(
-                "transition-colors",
-                pathname.startsWith("/browse")
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Browse
-            </Link>
-            <Link
-              href="/settings"
-              className={cn(
-                "transition-colors",
-                pathname.startsWith("/settings")
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Settings
-            </Link>
+            {navLinks.filter((l) => l.href !== "/").map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  "transition-colors",
+                  pathname.startsWith(href)
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {label}
+              </Link>
+            ))}
             {showAdmin && (
               <Link
                 href="/admin"
