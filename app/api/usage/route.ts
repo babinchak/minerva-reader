@@ -135,7 +135,7 @@ export async function GET(req: NextRequest) {
         .eq("user_id", user.id)
         .in("book_id", bookIds);
       for (const ub of userBooks ?? []) {
-        const display = ub.custom_title ?? bookMap.get(ub.book_id) ?? ub.file_name ?? "Book";
+        const display = ub.custom_title || bookMap.get(ub.book_id) || ub.file_name || "Book";
         bookMap.set(ub.book_id, display);
       }
     }
