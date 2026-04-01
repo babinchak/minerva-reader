@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
         usageType: "upload" as const,
         costDollars,
         referenceId: bookId,
-        title: bookMap.get(bookId) || "Book upload",
+        title: bookMap.get(bookId) || "Deleted book",
       })
     );
 
