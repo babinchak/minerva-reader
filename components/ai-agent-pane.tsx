@@ -382,7 +382,7 @@ export function AIAgentPanel({
   type StreamUsage = {
     inputTokens?: number | null;
     outputTokens?: number | null;
-    costCents: number;
+    costDollars: number;
     model?: string;
     chatMode?: string;
   };
@@ -480,7 +480,7 @@ export function AIAgentPanel({
                 streamUsage = {
                   inputTokens: parsed.inputTokens,
                   outputTokens: parsed.outputTokens,
-                  costCents: parsed.costCents ?? 0,
+                  costDollars: parsed.costDollars ?? 0,
                   model: parsed.model,
                   chatMode: parsed.chatMode,
                 };
@@ -640,8 +640,8 @@ export function AIAgentPanel({
   // Credits/tier info. Fetch for both logged-in and anonymous (freeBetaMode).
   const [creditsInfo, setCreditsInfo] = useState<{
     tier: string;
-    remainingCents: number;
-    allowanceCents: number;
+    remainingDollars: number;
+    allowanceDollars: number;
     freeBetaMode?: boolean;
   } | null>(null);
 
@@ -654,8 +654,8 @@ export function AIAgentPanel({
         d
           ? {
               tier: d.tier,
-              remainingCents: d.remainingCents ?? 0,
-              allowanceCents: d.allowanceCents ?? 0,
+              remainingDollars: d.remainingDollars ?? 0,
+              allowanceDollars: d.allowanceDollars ?? 0,
               freeBetaMode: d.freeBetaMode ?? false,
             }
           : null
@@ -930,7 +930,7 @@ export function AIAgentPanel({
     usage?: {
       inputTokens?: number | null;
       outputTokens?: number | null;
-      costCents: number;
+      costDollars: number;
       model?: string;
       chatMode?: string;
     },
@@ -941,7 +941,7 @@ export function AIAgentPanel({
       role: "assistant",
       content,
       message_index: messageIndex,
-      cost_cents: usage?.costCents ?? null,
+      cost_dollars: usage?.costDollars ?? null,
       input_tokens: usage?.inputTokens ?? null,
       output_tokens: usage?.outputTokens ?? null,
       model: usage?.model ?? null,

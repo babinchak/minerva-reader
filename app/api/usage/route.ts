@@ -11,7 +11,7 @@ export interface UsageRecordDisplay {
   inputTokens?: number;
   outputTokens?: number;
   tokens?: number;
-  costCents: number;
+  costDollars: number;
   referenceId?: string;
   /** For chat: chat title. For upload: book title */
   title?: string;
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     // Chat usage from usage_records
     const { data: chatUsageRows } = await serviceSupabase
       .from("usage_records")
-      .select("id, cost_cents, usage_type, model, input_tokens, output_tokens, reference_id, created_at")
+      .select("id, cost_dollars, usage_type, model, input_tokens, output_tokens, reference_id, created_at")
       .eq("user_id", user.id)
       .in("usage_type", ["chat", "chat_agentic"])
       .order("created_at", { ascending: false })
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
         inputTokens: r.input_tokens ?? undefined,
         outputTokens: r.output_tokens ?? undefined,
         tokens: tokens > 0 ? tokens : undefined,
-        costCents: r.cost_cents ?? 0,
+        costDollars: r.cost_dollars ?? 0,
         referenceId: r.reference_id ?? undefined,
         title: r.reference_id ? chatTitleMap.get(r.reference_id) ?? "Deleted chat" : undefined,
         bookTitle: r.reference_id ? chatBookMap.get(r.reference_id) : undefined,
@@ -90,23 +90,23 @@ export async function GET(req: NextRequest) {
     // Upload/processing usage from usage_records
     const { data: uploadUsageRows } = await serviceSupabase
       .from("usage_records")
-      .select("id, cost_cents, usage_type, model, reference_id, created_at")
+      .select("id, cost_dollars, usage_type, model, reference_id, created_at")
       .eq("user_id", user.id)
       .in("usage_type", ["upload", "summary_book", "summary_chapter", "embedding"])
       .order("created_at", { ascending: false })
       .limit(200);
 
     // Aggregate per-step records into per-book totals
-    const uploadByBook = new Map<string, { costCents: number; date: string }>();
+    const uploadByBook = new Map<string, { costDollars: number; date: string }>();
     for (const r of uploadUsageRows ?? []) {
       const bookId = r.reference_id ?? r.id;
-      const costCents = r.cost_cents ?? 0;
+      const costDollars = r.cost_dollars ?? 0;
       const existing = uploadByBook.get(bookId);
       if (existing) {
-        existing.costCents += costCents;
+        existing.costDollars += costDollars;
         if (r.created_at > existing.date) existing.date = r.created_at;
       } else {
-        uploadByBook.set(bookId, { costCents, date: r.created_at });
+        uploadByBook.set(bookId, { costDollars, date: r.created_at });
       }
     }
 
@@ -118,11 +118,11 @@ export async function GET(req: NextRequest) {
     const bookMap = new Map((uploadBooks ?? []).map((b) => [b.id, b.title ?? "Book"]));
 
     const mergedUploads: UsageRecordDisplay[] = Array.from(uploadByBook.entries()).map(
-      ([bookId, { costCents, date }]) => ({
+      ([bookId, { costDollars, date }]) => ({
         id: `upload-${bookId}`,
         date,
         usageType: "upload" as const,
-        costCents,
+        costDollars,
         referenceId: bookId,
         title: bookMap.get(bookId) ?? "Book upload",
       })

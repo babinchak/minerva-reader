@@ -43,7 +43,7 @@ export async function GET() {
     // Get billing data per user
     const { data: userCredits } = await serviceSupabase
       .from("user_credits")
-      .select("user_id, tier, allowance_cents, allowance_reset_at");
+      .select("user_id, tier, allowance_dollars, allowance_reset_at");
 
     // Aggregate counts
     const bookCountMap = new Map<string, number>();
@@ -65,11 +65,11 @@ export async function GET() {
     }
 
     // Billing data map
-    const creditsMap = new Map<string, { tier: string; allowanceCents: number; allowanceResetAt: string | null }>();
+    const creditsMap = new Map<string, { tier: string; allowanceDollars: number; allowanceResetAt: string | null }>();
     for (const row of userCredits ?? []) {
       creditsMap.set(row.user_id, {
         tier: row.tier ?? "free",
-        allowanceCents: row.allowance_cents ?? 0,
+        allowanceDollars: row.allowance_dollars ?? 0,
         allowanceResetAt: row.allowance_reset_at ?? null,
       });
     }
@@ -85,7 +85,7 @@ export async function GET() {
         bookCount: bookCountMap.get(u.id) ?? 0,
         chatCount: chatCountMap.get(u.id) ?? 0,
         tier: credits?.tier ?? "free",
-        allowanceCents: credits?.allowanceCents ?? 0,
+        allowanceDollars: credits?.allowanceDollars ?? 0,
         allowanceResetAt: credits?.allowanceResetAt ?? null,
       };
     });

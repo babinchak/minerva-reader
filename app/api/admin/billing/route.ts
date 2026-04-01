@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 type UsageRow = {
-  cost_cents: number;
+  cost_dollars: number;
   usage_type: string;
   user_id: string | null;
 };
@@ -44,22 +44,22 @@ export async function GET() {
     ] = await Promise.all([
       serviceSupabase
         .from("usage_records")
-        .select("cost_cents, usage_type, user_id")
+        .select("cost_dollars, usage_type, user_id")
         .gte("created_at", todayStart.toISOString()),
 
       serviceSupabase
         .from("usage_records")
-        .select("cost_cents, usage_type, user_id")
+        .select("cost_dollars, usage_type, user_id")
         .gte("created_at", weekAgo.toISOString()),
 
       serviceSupabase
         .from("usage_records")
-        .select("cost_cents, usage_type, user_id")
+        .select("cost_dollars, usage_type, user_id")
         .gte("created_at", monthAgo.toISOString()),
 
       serviceSupabase
         .from("user_credits")
-        .select("user_id, tier, allowance_cents, allowance_reset_at, on_demand_limit_type"),
+        .select("user_id, tier, allowance_dollars, allowance_reset_at, on_demand_limit_type"),
     ]);
 
     // Build tier lookup from user_credits
@@ -75,29 +75,29 @@ export async function GET() {
 
     function aggregateUsage(rows: UsageRow[] | null) {
       const data = rows ?? [];
-      let totalCents = 0;
-      const byType: Record<string, { count: number; totalCents: number }> = {};
+      let totalDollars = 0;
+      const byType: Record<string, { count: number; totalDollars: number }> = {};
 
-      const byTierCategory: Record<string, Record<string, { count: number; totalCents: number }>> = {
-        anonymous: { chat: { count: 0, totalCents: 0 }, books: { count: 0, totalCents: 0 } },
-        free: { chat: { count: 0, totalCents: 0 }, books: { count: 0, totalCents: 0 } },
-        paid: { chat: { count: 0, totalCents: 0 }, books: { count: 0, totalCents: 0 } },
+      const byTierCategory: Record<string, Record<string, { count: number; totalDollars: number }>> = {
+        anonymous: { chat: { count: 0, totalDollars: 0 }, books: { count: 0, totalDollars: 0 } },
+        free: { chat: { count: 0, totalDollars: 0 }, books: { count: 0, totalDollars: 0 } },
+        paid: { chat: { count: 0, totalDollars: 0 }, books: { count: 0, totalDollars: 0 } },
       };
 
       for (const r of data) {
-        totalCents += r.cost_cents;
+        totalDollars += r.cost_dollars;
 
-        if (!byType[r.usage_type]) byType[r.usage_type] = { count: 0, totalCents: 0 };
+        if (!byType[r.usage_type]) byType[r.usage_type] = { count: 0, totalDollars: 0 };
         byType[r.usage_type].count++;
-        byType[r.usage_type].totalCents += r.cost_cents;
+        byType[r.usage_type].totalDollars += r.cost_dollars;
 
         const tier = getTier(r.user_id);
         const cat = categorize(r.usage_type);
         byTierCategory[tier][cat].count += 1;
-        byTierCategory[tier][cat].totalCents += r.cost_cents;
+        byTierCategory[tier][cat].totalDollars += r.cost_dollars;
       }
 
-      return { totalCents, requests: data.length, byType, byTierCategory };
+      return { totalDollars, requests: data.length, byType, byTierCategory };
     }
 
     const usageToday = aggregateUsage(usageTodayResult.data as UsageRow[] | null);
@@ -107,16 +107,16 @@ export async function GET() {
     const credits = userCreditsResult.data ?? [];
     let freeUsers = 0;
     let paidUsers = 0;
-    let totalAllowanceCentsFree = 0;
-    let totalAllowanceCentsPaid = 0;
+    let totalAllowanceDollarsFree = 0;
+    let totalAllowanceDollarsPaid = 0;
 
     for (const c of credits) {
       if (c.tier === "paid") {
         paidUsers++;
-        totalAllowanceCentsPaid += c.allowance_cents ?? 0;
+        totalAllowanceDollarsPaid += c.allowance_dollars ?? 0;
       } else {
         freeUsers++;
-        totalAllowanceCentsFree += c.allowance_cents ?? 0;
+        totalAllowanceDollarsFree += c.allowance_dollars ?? 0;
       }
     }
 
@@ -127,13 +127,13 @@ export async function GET() {
         month: usageMonth,
       },
       tiers: {
-        free: { count: freeUsers, totalAllowanceCents: totalAllowanceCentsFree },
-        paid: { count: paidUsers, totalAllowanceCents: totalAllowanceCentsPaid },
+        free: { count: freeUsers, totalAllowanceDollars: totalAllowanceDollarsFree },
+        paid: { count: paidUsers, totalAllowanceDollars: totalAllowanceDollarsPaid },
       },
       users: credits.map((c) => ({
         userId: c.user_id,
         tier: c.tier,
-        allowanceCents: c.allowance_cents ?? 0,
+        allowanceDollars: c.allowance_dollars ?? 0,
         allowanceResetAt: c.allowance_reset_at,
         onDemandLimitType: c.on_demand_limit_type ?? "disabled",
       })),

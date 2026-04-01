@@ -31,7 +31,7 @@ type User = {
   bookCount: number;
   chatCount: number;
   tier: string;
-  allowanceCents: number;
+  allowanceDollars: number;
   allowanceResetAt: string | null;
 };
 
@@ -173,7 +173,7 @@ export function AdminUsersList() {
         return asc ? a.chatCount - b.chatCount : b.chatCount - a.chatCount;
       }
       if (sort === "balance") {
-        return asc ? a.allowanceCents - b.allowanceCents : b.allowanceCents - a.allowanceCents;
+        return asc ? a.allowanceDollars - b.allowanceDollars : b.allowanceDollars - a.allowanceDollars;
       }
       if (sort === "signUp") {
         const da = new Date(a.createdAt).getTime();
@@ -292,7 +292,7 @@ export function AdminUsersList() {
           </div>
           {visibleUsers.map((u) => {
             const inactive = isUserInactive(u);
-            const allowanceDollars = `$${(u.allowanceCents / 100).toFixed(2)}`;
+            const allowanceDisplay = `$${u.allowanceDollars.toFixed(2)}`;
             return (
               <div
                 key={u.id}
@@ -310,7 +310,7 @@ export function AdminUsersList() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground sm:hidden mt-0.5">
-                    {u.tier} · {allowanceDollars} allowance · {u.bookCount} books · {u.chatCount} chats
+                    {u.tier} · {allowanceDisplay} allowance · {u.bookCount} books · {u.chatCount} chats
                   </p>
                 </div>
                 <span className="hidden sm:flex w-16 items-center justify-center">
@@ -323,7 +323,7 @@ export function AdminUsersList() {
                   </span>
                 </span>
                 <span className="hidden sm:flex w-24 items-center justify-center text-sm text-muted-foreground">
-                  {allowanceDollars}
+                  {allowanceDisplay}
                 </span>
                 <span className="hidden sm:flex w-20 items-center justify-center gap-1 text-sm">
                   <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />

@@ -12,19 +12,19 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type TierCategoryCounts = { count: number; totalCents: number };
+type TierCategoryCounts = { count: number; totalDollars: number };
 
 type UsagePeriod = {
-  totalCents: number;
+  totalDollars: number;
   requests: number;
-  byType: Record<string, { count: number; totalCents: number }>;
+  byType: Record<string, { count: number; totalDollars: number }>;
   byTierCategory: Record<string, Record<string, TierCategoryCounts>>;
 };
 
 type BillingUser = {
   userId: string;
   tier: string;
-  allowanceCents: number;
+  allowanceDollars: number;
   allowanceResetAt: string | null;
   onDemandLimitType: string;
 };
@@ -32,8 +32,8 @@ type BillingUser = {
 type BillingData = {
   usage: { today: UsagePeriod; week: UsagePeriod; month: UsagePeriod };
   tiers: {
-    free: { count: number; totalAllowanceCents: number };
-    paid: { count: number; totalAllowanceCents: number };
+    free: { count: number; totalAllowanceDollars: number };
+    paid: { count: number; totalAllowanceDollars: number };
   };
   users: BillingUser[];
 };
@@ -53,8 +53,8 @@ const USAGE_TYPE_LABELS: Record<string, { label: string; icon: React.ElementType
   embedding: { label: "Embedding", icon: BookOpen },
 };
 
-function dollars(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+function dollars(amount: number): string {
+  return `$${amount.toFixed(2)}`;
 }
 
 function PeriodCard({ label, period }: { label: string; period: UsagePeriod }) {
@@ -64,14 +64,14 @@ function PeriodCard({ label, period }: { label: string; period: UsagePeriod }) {
         <DollarSign className="h-4 w-4" />
         <span className="text-xs">{label}</span>
       </div>
-      <div className="text-2xl font-bold text-foreground">{dollars(period.totalCents)}</div>
+      <div className="text-2xl font-bold text-foreground">{dollars(period.totalDollars)}</div>
       <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
         <span>{period.requests} requests</span>
       </div>
       {Object.keys(period.byType).length > 0 && (
         <div className="mt-3 space-y-1">
           {Object.entries(period.byType)
-            .sort(([, a], [, b]) => b.totalCents - a.totalCents)
+            .sort(([, a], [, b]) => b.totalDollars - a.totalDollars)
             .map(([type, data]) => {
               const meta = USAGE_TYPE_LABELS[type] ?? { label: type, icon: DollarSign };
               const Icon = meta.icon;
@@ -82,7 +82,7 @@ function PeriodCard({ label, period }: { label: string; period: UsagePeriod }) {
                     {meta.label}
                   </span>
                   <span className="font-medium">
-                    {dollars(data.totalCents)} <span className="text-muted-foreground font-normal">({data.count})</span>
+                    {dollars(data.totalDollars)} <span className="text-muted-foreground font-normal">({data.count})</span>
                   </span>
                 </div>
               );
@@ -112,7 +112,7 @@ function TierCostCard({
   const periodTotals = periods.map(([, p]) => {
     let total = 0;
     for (const cat of categories) {
-      total += p.byTierCategory?.[tier]?.[cat]?.totalCents ?? 0;
+      total += p.byTierCategory?.[tier]?.[cat]?.totalDollars ?? 0;
     }
     return total;
   });
@@ -139,14 +139,14 @@ function TierCostCard({
                 <div className="flex gap-4 pl-2">
                   {categories.map((cat) => {
                     const d = period.byTierCategory?.[tier]?.[cat];
-                    const cents = d?.totalCents ?? 0;
+                    const amount = d?.totalDollars ?? 0;
                     const count = d?.count ?? 0;
                     return (
                       <div key={cat} className="flex items-center gap-1.5 text-xs">
                         <span className="text-muted-foreground">{categoryLabels[cat]}:</span>
-                        {cents > 0 ? (
+                        {amount > 0 ? (
                           <span className="tabular-nums">
-                            <span className="font-medium">{dollars(cents)}</span>
+                            <span className="font-medium">{dollars(amount)}</span>
                             <span className="text-muted-foreground ml-0.5">({count})</span>
                           </span>
                         ) : (
@@ -236,7 +236,7 @@ export function AdminBilling() {
   // Sort users: paid first, then by allowance descending
   const sortedUsers = [...billing.users].sort((a, b) => {
     if (a.tier !== b.tier) return a.tier === "paid" ? -1 : 1;
-    return b.allowanceCents - a.allowanceCents;
+    return b.allowanceDollars - a.allowanceDollars;
   });
 
   return (
@@ -320,7 +320,7 @@ export function AdminBilling() {
             </div>
             <div className="text-2xl font-bold text-foreground">{billing.tiers.free.count}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Total allowance: {dollars(billing.tiers.free.totalAllowanceCents)}
+              Total allowance: {dollars(billing.tiers.free.totalAllowanceDollars)}
             </p>
           </div>
           <div className="rounded-lg border border-border bg-card p-4">
@@ -330,7 +330,7 @@ export function AdminBilling() {
             </div>
             <div className="text-2xl font-bold text-foreground">{billing.tiers.paid.count}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Total allowance: {dollars(billing.tiers.paid.totalAllowanceCents)}
+              Total allowance: {dollars(billing.tiers.paid.totalAllowanceDollars)}
             </p>
           </div>
         </div>

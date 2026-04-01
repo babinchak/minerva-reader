@@ -14,14 +14,14 @@ type OnDemandLimitType = "disabled" | "fixed" | "unlimited";
 interface CreditsInfo {
   tier: string;
   freeBetaMode?: boolean;
-  allowanceCents: number;
-  spentCents: number;
-  remainingCents: number;
+  allowanceDollars: number;
+  spentDollars: number;
+  remainingDollars: number;
   allowanceResetAt: string | null;
   booksUploadedThisWeek: number;
   booksUploadLimit: number;
   onDemandLimitType: OnDemandLimitType;
-  onDemandLimitCents: number;
+  onDemandLimitDollars: number;
 }
 
 interface UsageRecordDisplay {
@@ -32,7 +32,7 @@ interface UsageRecordDisplay {
   inputTokens?: number;
   outputTokens?: number;
   tokens?: number;
-  costCents: number;
+  costDollars: number;
   referenceId?: string;
   title?: string;
   bookTitle?: string;
@@ -44,7 +44,7 @@ export function UsageContent() {
   const [usageRecords, setUsageRecords] = useState<UsageRecordDisplay[]>([]);
   const [loading, setLoading] = useState<"pro" | "limit" | null>(null);
   const [limitType, setLimitType] = useState<OnDemandLimitType>("disabled");
-  const [limitCents, setLimitCents] = useState<string>("10");
+  const [limitDollars, setLimitDollars] = useState<string>("10");
 
   const fetchCredits = useCallback(() => {
     fetch(`/api/credits?t=${Date.now()}`, { cache: "no-store" })
@@ -79,8 +79,8 @@ export function UsageContent() {
 
   useEffect(() => {
     if (info?.onDemandLimitType) setLimitType(info.onDemandLimitType);
-    if (info?.onDemandLimitCents != null) setLimitCents(String(info.onDemandLimitCents / 100));
-  }, [info?.onDemandLimitType, info?.onDemandLimitCents]);
+    if (info?.onDemandLimitDollars != null) setLimitDollars(String(info.onDemandLimitDollars));
+  }, [info?.onDemandLimitType, info?.onDemandLimitDollars]);
 
   const handleSaveOnDemandLimit = async () => {
     if (!info || info.tier !== "paid") return;
@@ -91,7 +91,7 @@ export function UsageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           limitType,
-          limitCents: limitType === "fixed" ? Math.round(parseFloat(limitCents || "0") * 100) : undefined,
+          limitDollars: limitType === "fixed" ? parseFloat(limitDollars || "0") : undefined,
         }),
       });
       if (res.ok) {
@@ -144,10 +144,10 @@ export function UsageContent() {
   const isPaid = info.tier === "paid";
   const freeBetaMode = info.freeBetaMode ?? false;
 
-  const allowanceCents = info.allowanceCents ?? 0;
-  const spentCents = info.spentCents ?? 0;
-  const usagePct = allowanceCents > 0
-    ? Math.min(100, Math.round((spentCents / allowanceCents) * 100))
+  const allowanceDollars = info.allowanceDollars ?? 0;
+  const spentDollars = info.spentDollars ?? 0;
+  const usagePct = allowanceDollars > 0
+    ? Math.min(100, Math.round((spentDollars / allowanceDollars) * 100))
     : 0;
 
   return (
@@ -173,14 +173,14 @@ export function UsageContent() {
             <CardDescription>
               {info.allowanceResetAt
                 ? `Resets ${new Date(info.allowanceResetAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
-                : `$${(allowanceCents / 100).toFixed(2)}/${isPaid ? "month" : "day"} allowance`}
+                : `$${allowanceDollars.toFixed(2)}/${isPaid ? "month" : "day"} allowance`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
-                  ${(spentCents / 100).toFixed(2)} / ${(allowanceCents / 100).toFixed(2)}
+                  ${spentDollars.toFixed(2)} / ${allowanceDollars.toFixed(2)}
                 </span>
                 <span className="font-medium text-foreground">
                   {usagePct}% used
@@ -227,16 +227,16 @@ export function UsageContent() {
           </CardHeader>
           <CardContent className="space-y-4">
             {(() => {
-              const overageCents = Math.max(0, spentCents - allowanceCents);
-              const savedLimitCents = info.onDemandLimitType === "fixed" ? info.onDemandLimitCents : 0;
+              const overageDollars = Math.max(0, spentDollars - allowanceDollars);
+              const savedLimitDollars = info.onDemandLimitType === "fixed" ? info.onDemandLimitDollars : 0;
               return (
                 <>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">This period</span>
                     <span className="font-medium text-foreground">
-                      ${(overageCents / 100).toFixed(2)}
-                      {savedLimitCents > 0 && (
-                        <span className="text-muted-foreground font-normal"> / ${(savedLimitCents / 100).toFixed(2)}</span>
+                      ${overageDollars.toFixed(2)}
+                      {savedLimitDollars > 0 && (
+                        <span className="text-muted-foreground font-normal"> / ${savedLimitDollars.toFixed(2)}</span>
                       )}
                     </span>
                   </div>
@@ -265,8 +265,8 @@ export function UsageContent() {
                           type="number"
                           min={0}
                           step={1}
-                          value={limitCents}
-                          onChange={(e) => setLimitCents(e.target.value)}
+                          value={limitDollars}
+                          onChange={(e) => setLimitDollars(e.target.value)}
                           className="w-24"
                         />
                         <span className="text-muted-foreground text-sm">/ month max</span>
@@ -349,7 +349,7 @@ export function UsageContent() {
                                 {r.tokens != null ? r.tokens.toLocaleString() : "—"}
                               </td>
                               <td className="py-2 px-2 text-right font-medium text-foreground">
-                                {r.costCents > 0 ? `$${(r.costCents / 100).toFixed(2)}` : "—"}
+                                {r.costDollars > 0 ? `$${r.costDollars.toFixed(2)}` : "—"}
                               </td>
                             </tr>
                           ))}
@@ -407,7 +407,7 @@ export function UsageContent() {
                               {r.title ?? "—"}
                             </td>
                             <td className="py-2 px-2 text-right font-medium text-foreground">
-                              {r.costCents > 0 ? `$${(r.costCents / 100).toFixed(2)}` : "—"}
+                              {r.costDollars > 0 ? `$${r.costDollars.toFixed(2)}` : "—"}
                             </td>
                           </tr>
                         ))}

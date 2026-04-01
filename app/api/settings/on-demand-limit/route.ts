@@ -15,7 +15,7 @@ export async function PATCH(req: NextRequest) {
 
     const body = (await req.json()) as {
       limitType?: OnDemandLimitType;
-      limitCents?: number;
+      limitDollars?: number;
     };
 
     const limitType = body.limitType as OnDemandLimitType | undefined;
@@ -27,15 +27,15 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const limitCents = body.limitCents;
-    if (limitType === "fixed" && (typeof limitCents !== "number" || limitCents < 0)) {
+    const limitDollars = body.limitDollars;
+    if (limitType === "fixed" && (typeof limitDollars !== "number" || limitDollars < 0)) {
       return NextResponse.json(
-        { error: "limitCents required for fixed limit (number >= 0)" },
+        { error: "limitDollars required for fixed limit (number >= 0)" },
         { status: 400 }
       );
     }
 
-    const ok = await updateOnDemandLimit(user.id, limitType, limitCents);
+    const ok = await updateOnDemandLimit(user.id, limitType, limitDollars);
     if (!ok) {
       return NextResponse.json(
         { error: "On-demand limit is only available for Pro subscribers." },

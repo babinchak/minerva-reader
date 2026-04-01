@@ -6,7 +6,7 @@ import {
   getModelForTier,
   canMakeRequest,
 } from "@/lib/credits";
-import { recordUsage, costCentsFromTokens } from "@/lib/usage";
+import { recordUsage, costDollarsFromTokens } from "@/lib/usage";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     // Included mode: allow. On-demand mode: check can afford ~$0.50 for fast request.
     if (user) {
-      const canAfford = await canMakeRequest(user.id, 50);
+      const canAfford = await canMakeRequest(user.id, 0.50);
       if (!canAfford) {
         return new Response(
           JSON.stringify({
@@ -154,11 +154,11 @@ export async function POST(req: NextRequest) {
             const inputTokens = usage.prompt_tokens ?? 0;
             const outputTokens = usage.completion_tokens ?? 0;
             const cachedInputTokens = (usage as { prompt_tokens_details?: { cached_tokens?: number } }).prompt_tokens_details?.cached_tokens ?? 0;
-            const costCents = costCentsFromTokens(model, inputTokens, outputTokens, false, cachedInputTokens);
-            if (costCents > 0) {
+            const costDollars = costDollarsFromTokens(model, inputTokens, outputTokens, false, cachedInputTokens);
+            if (costDollars > 0) {
               const result = await recordUsage({
                 userId: user?.id ?? null,
-                costCents,
+                costDollars,
                 usageType: "chat",
                 model,
                 inputTokens,
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
                       type: "usage",
                       inputTokens,
                       outputTokens,
-                      costCents: result.costCents,
+                      costDollars: result.costDollars,
                       model,
                       chatMode: "fast",
                     })}\n\n`

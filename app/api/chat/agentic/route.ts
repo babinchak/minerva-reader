@@ -7,10 +7,10 @@ import {
   getTier,
   getModelForTier,
   canMakeRequest,
-  AGENTIC_ESTIMATED_CENTS,
+  AGENTIC_ESTIMATED_DOLLARS,
   isFreeBetaMode,
 } from "@/lib/credits";
-import { recordUsage, costCentsFromTokens } from "@/lib/usage";
+import { recordUsage, costDollarsFromTokens } from "@/lib/usage";
 
 const MARKDOWN_SYSTEM_PROMPT =
   "You are a helpful reading assistant. Respond using GitHub-flavored Markdown (GFM).\n" +
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
 
     // Logged-in: check usage budget
     if (user) {
-      const canAfford = await canMakeRequest(user.id, AGENTIC_ESTIMATED_CENTS);
+      const canAfford = await canMakeRequest(user.id, AGENTIC_ESTIMATED_DOLLARS);
       if (!canAfford) {
         return NextResponse.json(
           {
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
     });
 
     const model = getModelForTier(tier);
-    const estimatedCents = AGENTIC_ESTIMATED_CENTS;
+    const estimatedDollars = AGENTIC_ESTIMATED_DOLLARS;
     const graph = createAgentGraph(bookId ?? null, user?.id ?? null, {
       vectorsReady,
       model,
@@ -226,13 +226,13 @@ export async function POST(req: NextRequest) {
           let lastChunk = "";
           for await (const chunk of streamAgentToSSE(graph, initialState)) {
             if (chunk.includes("[DONE]")) {
-              const costCents =
+              const costDollars =
                 capturedInputTokens != null && capturedOutputTokens != null
-                  ? costCentsFromTokens(model, capturedInputTokens, capturedOutputTokens, true, capturedCachedInputTokens ?? 0)
-                  : estimatedCents;
+                  ? costDollarsFromTokens(model, capturedInputTokens, capturedOutputTokens, true, capturedCachedInputTokens ?? 0)
+                  : estimatedDollars;
               const result = await recordUsage({
                       userId: user?.id ?? null,
-                      costCents,
+                      costDollars,
                       usageType: "chat_agentic",
                       model,
                       inputTokens: capturedInputTokens ?? undefined,
@@ -246,7 +246,7 @@ export async function POST(req: NextRequest) {
                     type: "usage",
                     inputTokens: capturedInputTokens,
                     outputTokens: capturedOutputTokens,
-                    costCents: result.success ? result.costCents : costCents,
+                    costDollars: result.success ? result.costDollars : costDollars,
                     model,
                     chatMode: "agentic",
                   })}\n\n`

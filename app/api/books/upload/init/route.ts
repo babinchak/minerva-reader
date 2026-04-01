@@ -5,7 +5,7 @@ import {
   countBooksUploadedThisWeek,
   getTier,
   isFreeBetaMode,
-  estimateUploadCostCents,
+  estimateUploadCostDollars,
   canMakeRequest,
   countInFlightProcessing,
   MAX_CONCURRENT_PROCESSING,
@@ -92,15 +92,15 @@ export async function POST(request: NextRequest) {
   }
 
   // Estimate cost and check affordability
-  const estimatedCents = estimateUploadCostCents(fileSize);
+  const estimatedDollars = estimateUploadCostDollars(fileSize);
   if (!isFreeBetaMode()) {
-    const canAfford = await canMakeRequest(user.id, estimatedCents);
+    const canAfford = await canMakeRequest(user.id, estimatedDollars);
     if (!canAfford) {
       return NextResponse.json(
         {
           error: "Insufficient balance",
-          message: `This book will cost approximately $${(estimatedCents / 100).toFixed(2)} to process. Please top up your balance or upgrade your plan.`,
-          estimatedCostCents: estimatedCents,
+          message: `This book will cost approximately $${estimatedDollars.toFixed(2)} to process. Please top up your balance or upgrade your plan.`,
+          estimatedCostDollars: estimatedDollars,
         },
         { status: 402 },
       );
@@ -132,6 +132,6 @@ export async function POST(request: NextRequest) {
     token: signed.token,
     signed_url: signed.signedUrl,
     content_type: meta.mimeType,
-    estimated_cost_cents: estimatedCents,
+    estimated_cost_dollars: estimatedDollars,
   });
 }

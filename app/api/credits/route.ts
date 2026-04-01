@@ -18,13 +18,13 @@ export async function GET() {
       return NextResponse.json({
         tier: freeBeta ? "paid" : "anonymous",
         freeBetaMode: freeBeta,
-        allowanceCents: 0,
-        spentCents: 0,
-        remainingCents: 0,
+        allowanceDollars: 0,
+        spentDollars: 0,
+        remainingDollars: 0,
         booksUploadedThisWeek: 0,
         allowanceResetAt: null,
         onDemandLimitType: "disabled",
-        onDemandLimitCents: 1000,
+        onDemandLimitDollars: 10,
       });
     }
 
@@ -37,14 +37,14 @@ export async function GET() {
       {
         tier,
         freeBetaMode: isFreeBetaMode(),
-        allowanceCents: credits?.allowanceCents ?? 0,
-        spentCents: credits?.spentCents ?? 0,
-        remainingCents: credits?.remainingCents ?? 0,
+        allowanceDollars: credits?.allowanceDollars ?? 0,
+        spentDollars: credits?.spentDollars ?? 0,
+        remainingDollars: credits?.remainingDollars ?? 0,
         allowanceResetAt: credits?.allowanceResetAt?.toISOString() ?? null,
         booksUploadedThisWeek,
         booksUploadLimit: tier === "free" ? 3 : 999999,
         onDemandLimitType: credits?.onDemandLimitType ?? "disabled",
-        onDemandLimitCents: credits?.onDemandLimitCents ?? 1000,
+        onDemandLimitDollars: credits?.onDemandLimitDollars ?? 10,
       },
       {
         headers: {

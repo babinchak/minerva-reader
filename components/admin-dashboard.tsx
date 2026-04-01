@@ -64,9 +64,9 @@ type NeedsAttention = {
 
 type BillingData = {
   usage: {
-    today: { totalCents: number; requests: number; byType: Record<string, { count: number; totalCents: number }> };
-    week: { totalCents: number; requests: number };
-    month: { totalCents: number; requests: number };
+    today: { totalDollars: number; requests: number; byType: Record<string, { count: number; totalDollars: number }> };
+    week: { totalDollars: number; requests: number };
+    month: { totalDollars: number; requests: number };
   };
   tiers: {
     free: { count: number };
@@ -310,20 +310,20 @@ export function AdminDashboard() {
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
             <MetricCard
               label="Spend Today"
-              value={`$${(billing.usage.today.totalCents / 100).toFixed(2)}`}
+              value={`$${(billing.usage.today.totalDollars).toFixed(2)}`}
               icon={DollarSign}
               detail={`${billing.usage.today.requests} requests`}
               href="/admin/billing"
             />
             <MetricCard
               label="Spend (7d)"
-              value={`$${(billing.usage.week.totalCents / 100).toFixed(2)}`}
+              value={`$${(billing.usage.week.totalDollars).toFixed(2)}`}
               icon={DollarSign}
               detail={`${billing.usage.week.requests} requests`}
             />
             <MetricCard
               label="Spend (30d)"
-              value={`$${(billing.usage.month.totalCents / 100).toFixed(2)}`}
+              value={`$${(billing.usage.month.totalDollars).toFixed(2)}`}
               icon={Gauge}
               detail={`${billing.usage.month.requests} requests`}
             />
