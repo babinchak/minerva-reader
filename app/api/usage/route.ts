@@ -1,4 +1,5 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getCredits, getPeriodStart } from "@/lib/credits";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ export interface UsageRecordDisplay {
   outputTokens?: number;
   tokens?: number;
   costDollars: number;
+  /** True when the cost was covered by the user's included allowance */
+  included?: boolean;
   referenceId?: string;
   /** For chat: chat title. For upload: book title */
   title?: string;
@@ -34,6 +37,31 @@ export async function GET(req: NextRequest) {
     const offset = Math.max(0, parseInt(searchParams.get("offset") ?? "0", 10));
 
     const serviceSupabase = createServiceClient();
+
+    // Build inclusion map: walk through all usage records chronologically,
+    // subtracting from allowance — records within allowance are "included".
+    const credits = await getCredits(user.id);
+    const includedIds = new Set<string>();
+    if (credits) {
+      const periodStart = getPeriodStart(credits.tier as "free" | "paid", credits.allowanceResetAt);
+      const { data: allRecords } = await serviceSupabase
+        .from("usage_records")
+        .select("id, cost_dollars, created_at")
+        .eq("user_id", user.id)
+        .gte("created_at", periodStart.toISOString())
+        .order("created_at", { ascending: true });
+
+      let balance = credits.allowanceDollars;
+      for (const r of allRecords ?? []) {
+        const cost = r.cost_dollars ?? 0;
+        if (balance >= cost) {
+          includedIds.add(r.id);
+          balance -= cost;
+        } else {
+          balance = 0;
+        }
+      }
+    }
 
     // Chat usage from usage_records
     const { data: chatUsageRows } = await serviceSupabase
@@ -90,6 +118,7 @@ export async function GET(req: NextRequest) {
         outputTokens: r.output_tokens ?? undefined,
         tokens: tokens > 0 ? tokens : undefined,
         costDollars: r.cost_dollars ?? 0,
+        included: includedIds.has(r.id),
         referenceId: r.reference_id ?? undefined,
         title: r.reference_id ? chatTitleMap.get(r.reference_id) ?? "Deleted chat" : undefined,
         bookTitle: r.reference_id ? chatBookMap.get(r.reference_id) : undefined,
@@ -107,16 +136,18 @@ export async function GET(req: NextRequest) {
       .limit(200);
 
     // Aggregate per-step records into per-book totals
-    const uploadByBook = new Map<string, { costDollars: number; date: string }>();
+    const uploadByBook = new Map<string, { costDollars: number; date: string; allIncluded: boolean }>();
     for (const r of uploadUsageRows ?? []) {
       const bookId = r.reference_id ?? r.id;
       const costDollars = r.cost_dollars ?? 0;
+      const isIncluded = includedIds.has(r.id);
       const existing = uploadByBook.get(bookId);
       if (existing) {
         existing.costDollars += costDollars;
+        if (!isIncluded) existing.allIncluded = false;
         if (r.created_at > existing.date) existing.date = r.created_at;
       } else {
-        uploadByBook.set(bookId, { costDollars, date: r.created_at });
+        uploadByBook.set(bookId, { costDollars, date: r.created_at, allIncluded: isIncluded });
       }
     }
 
@@ -141,11 +172,12 @@ export async function GET(req: NextRequest) {
     }
 
     const mergedUploads: UsageRecordDisplay[] = Array.from(uploadByBook.entries()).map(
-      ([bookId, { costDollars, date }]) => ({
+      ([bookId, { costDollars, date, allIncluded }]) => ({
         id: `upload-${bookId}`,
         date,
         usageType: "upload" as const,
         costDollars,
+        included: allIncluded,
         referenceId: bookId,
         title: bookMap.get(bookId) || "Deleted book",
       })

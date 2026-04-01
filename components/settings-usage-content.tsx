@@ -33,6 +33,7 @@ interface UsageRecordDisplay {
   outputTokens?: number;
   tokens?: number;
   costDollars: number;
+  included?: boolean;
   referenceId?: string;
   title?: string;
   bookTitle?: string;
@@ -349,7 +350,7 @@ export function UsageContent() {
                                 {r.tokens != null ? r.tokens.toLocaleString() : "—"}
                               </td>
                               <td className="py-2 px-2 text-right font-medium text-foreground">
-                                {r.costDollars > 0 ? `$${r.costDollars.toFixed(2)}` : "—"}
+                                {r.included ? <span className="text-muted-foreground font-normal">Included</span> : r.costDollars > 0 ? `$${r.costDollars.toFixed(2)}` : "—"}
                               </td>
                             </tr>
                           ))}
@@ -407,7 +408,7 @@ export function UsageContent() {
                               {r.title ?? "—"}
                             </td>
                             <td className="py-2 px-2 text-right font-medium text-foreground">
-                              {r.costDollars > 0 ? `$${r.costDollars.toFixed(2)}` : "—"}
+                              {r.included ? <span className="text-muted-foreground font-normal">Included</span> : r.costDollars > 0 ? `$${r.costDollars.toFixed(2)}` : "—"}
                             </td>
                           </tr>
                         ))}

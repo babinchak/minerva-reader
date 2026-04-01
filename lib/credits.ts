@@ -141,7 +141,7 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
  * Get the start of the current billing period.
  * For free tier: reset - 1 day. For paid tier: reset - 1 month.
  */
-function getPeriodStart(tier: UserTier, resetAt: Date | null): Date {
+export function getPeriodStart(tier: UserTier, resetAt: Date | null): Date {
   if (!resetAt) return new Date(0); // no reset date = count everything
   const start = new Date(resetAt);
   if (tier === "paid") {
