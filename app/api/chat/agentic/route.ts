@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
 
     // Logged-in: check usage budget
     if (user) {
-      const canAfford = await canMakeRequest(user.id, AGENTIC_ESTIMATED_DOLLARS);
+      const canAfford = await canMakeRequest(user.id, AGENTIC_ESTIMATED_DOLLARS, user.email);
       if (!canAfford) {
         return NextResponse.json(
           {

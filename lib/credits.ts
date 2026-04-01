@@ -4,6 +4,7 @@
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
+import { isAdminEmail } from "@/lib/admin";
 
 export type UserTier = "anonymous" | "free" | "paid";
 
@@ -213,9 +214,11 @@ export async function ensureUserCredits(userId: string): Promise<void> {
  */
 export async function canMakeRequest(
   userId: string,
-  estimatedCostDollars: number
+  estimatedCostDollars: number,
+  userEmail?: string | null
 ): Promise<boolean> {
   if (isFreeBetaMode()) return true;
+  if (isAdminEmail(userEmail)) return true;
   const credits = await getCredits(userId);
   if (!credits) return false;
   if (credits.remainingDollars > 0) return true;

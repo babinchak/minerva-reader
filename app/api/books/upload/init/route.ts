@@ -8,6 +8,7 @@ import {
   countInFlightProcessing,
   MAX_CONCURRENT_PROCESSING,
 } from "@/lib/credits";
+import { isAdminEmail } from "@/lib/admin";
 import { NextRequest, NextResponse } from "next/server";
 
 /** Sanity cap; large files must not pass through the serverless request body. */
@@ -62,8 +63,9 @@ export async function POST(request: NextRequest) {
   );
   if (duplicateResponse) return duplicateResponse;
 
+  const admin = isAdminEmail(user.email);
   const tier = await getTier(user.id);
-  if (tier === "free" && !isFreeBetaMode()) {
+  if (!admin && tier === "free" && !isFreeBetaMode()) {
     const uploadedThisWeek = await countBooksUploadedThisWeek(user.id);
     if (uploadedThisWeek >= 3) {
       return NextResponse.json(
@@ -78,15 +80,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Check concurrent processing limit
-  const inFlight = await countInFlightProcessing(user.id);
-  if (inFlight >= MAX_CONCURRENT_PROCESSING) {
-    return NextResponse.json(
-      {
-        error: "Processing limit reached",
-        message: `You have ${inFlight} books currently being processed. Please wait for them to finish before uploading more.`,
-      },
-      { status: 429 },
-    );
+  if (!admin) {
+    const inFlight = await countInFlightProcessing(user.id);
+    if (inFlight >= MAX_CONCURRENT_PROCESSING) {
+      return NextResponse.json(
+        {
+          error: "Processing limit reached",
+          message: `You have ${inFlight} books currently being processed. Please wait for them to finish before uploading more.`,
+        },
+        { status: 429 },
+      );
+    }
   }
 
   const bookId = crypto.randomUUID();

@@ -6,6 +6,7 @@ import {
   countBooksUploadedThisWeek,
   isFreeBetaMode,
 } from "@/lib/credits";
+import { isAdminEmail } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,8 @@ export async function GET() {
       });
     }
 
-    const tier = await getTier(user.id);
+    const admin = isAdminEmail(user.email);
+    const tier = admin ? "paid" as const : await getTier(user.id);
     const credits = await getCredits(user.id);
     const booksUploadedThisWeek =
       tier === "free" ? await countBooksUploadedThisWeek(user.id) : 0;

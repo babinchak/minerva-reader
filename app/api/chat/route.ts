@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     // Included mode: allow. On-demand mode: check can afford ~$0.50 for fast request.
     if (user) {
-      const canAfford = await canMakeRequest(user.id, 0.50);
+      const canAfford = await canMakeRequest(user.id, 0.50, user.email);
       if (!canAfford) {
         return new Response(
           JSON.stringify({
