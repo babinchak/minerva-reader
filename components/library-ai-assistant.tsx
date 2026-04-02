@@ -19,6 +19,8 @@ interface LibraryAIAssistantProps {
   /** When true, force open the AI pane (e.g. from a collection AI button). */
   forceOpen?: boolean;
   onForceOpenConsumed?: () => void;
+  /** Custom label for the trigger button. Defaults to "Ask across library". */
+  buttonLabel?: string;
 }
 
 export function LibraryAIAssistant({
@@ -28,6 +30,7 @@ export function LibraryAIAssistant({
   onAiScopeChange,
   forceOpen,
   onForceOpenConsumed,
+  buttonLabel = "Ask across library",
 }: LibraryAIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -95,7 +98,7 @@ export function LibraryAIAssistant({
           className="gap-2"
         >
           <Sparkles className="h-4 w-4" />
-          Ask across library
+          {buttonLabel}
         </Button>
       )}
       {isOpen && (

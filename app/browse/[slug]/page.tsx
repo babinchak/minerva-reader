@@ -1,4 +1,4 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { ServerSiteNav } from "@/components/server-site-nav";
@@ -8,6 +8,7 @@ import { BookCard } from "@/components/book-card";
 import { SiteFooter } from "@/components/site-footer";
 import { MinervaLogo } from "@/components/minerva-logo";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
+import { CuratedCollectionAI } from "@/components/curated-collection-ai";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -39,6 +40,8 @@ export default async function BrowseCollectionPage({ params }: PageProps) {
   }
 
   const supabase = createServiceClient();
+  const userSupabase = await createClient();
+  const { data: { user } } = await userSupabase.auth.getUser();
 
   // Fetch collection by slug
   const { data: collection, error: collError } = await supabase
@@ -111,12 +114,20 @@ export default async function BrowseCollectionPage({ params }: PageProps) {
                   </p>
                 )}
               </div>
-              <Link
-                href="/"
-                className="inline-flex rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-              >
-                Library
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/"
+                  className="inline-flex rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+                >
+                  Library
+                </Link>
+                {user && books.length > 0 && (
+                  <CuratedCollectionAI
+                    collectionName={collection.name}
+                    bookIds={books.map((b) => b.id)}
+                  />
+                )}
+              </div>
             </div>
 
             {booksError ? (
@@ -141,6 +152,7 @@ export default async function BrowseCollectionPage({ params }: PageProps) {
                 <p className="text-sm text-muted-foreground">No books in this collection yet.</p>
               </div>
             )}
+
           </div>
         </div>
 

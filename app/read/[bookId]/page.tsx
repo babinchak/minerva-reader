@@ -51,8 +51,8 @@ export default async function ReadBookPage({ params }: PageProps) {
     userBook = data;
   }
 
-  // Access control: logged-in users need user_books; anonymous only for curated
-  if (user && !userBook) {
+  // Access control: logged-in users need user_books OR curated; anonymous only for curated
+  if (user && !userBook && !book.is_curated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
