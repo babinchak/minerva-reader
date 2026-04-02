@@ -80,6 +80,16 @@ const GROUP_META: Record<string, GroupMeta> = {
     explanation: "Books that have no generated summaries",
     severity: "warning",
   },
+  inconsistent_embeddings: {
+    label: "Embedding data inconsistency",
+    explanation: "Books marked as processed but with no actual embedding rows in the database",
+    severity: "error",
+  },
+  inconsistent_summaries: {
+    label: "Summary data inconsistency",
+    explanation: "Books marked as processed but with no actual summary rows in the database",
+    severity: "error",
+  },
 };
 
 // Order groups should appear in
@@ -92,6 +102,8 @@ const GROUP_ORDER = [
   "missing_storage",
   "no_embeddings",
   "no_summaries",
+  "inconsistent_embeddings",
+  "inconsistent_summaries",
   "empty_chat",
 ];
 

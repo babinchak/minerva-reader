@@ -46,37 +46,18 @@ export async function GET() {
     // Books processing status: books missing embeddings or summaries
     const { data: allBooks } = await serviceSupabase
       .from("books")
-      .select("id, title, book_type, created_at");
+      .select("id, title, book_type, created_at, vectors_processed_at, summaries_processed_at");
 
-    const bookIds = (allBooks ?? []).map((b) => b.id);
-
-    const [embResult, sumResult] = await Promise.all([
-      serviceSupabase
-        .from("embedding_sections")
-        .select("book_id")
-        .in("book_id", bookIds.length > 0 ? bookIds : ["__none__"]),
-      serviceSupabase
-        .from("summaries")
-        .select("book_id")
-        .in("book_id", bookIds.length > 0 ? bookIds : ["__none__"]),
-    ]);
-
-    const booksWithEmbeddings = new Set((embResult.data ?? []).map((r) => r.book_id));
-    const booksWithSummaries = new Set((sumResult.data ?? []).map((r) => r.book_id));
-
-    const processingStatus = (allBooks ?? []).map((b) => ({
-      id: b.id,
-      title: b.title,
-      bookType: b.book_type,
-      createdAt: b.created_at,
-      hasEmbeddings: booksWithEmbeddings.has(b.id),
-      hasSummaries: booksWithSummaries.has(b.id),
-    }));
-
-    // Only return books that are missing something
-    const needsAttention = processingStatus.filter(
-      (b) => !b.hasEmbeddings || !b.hasSummaries
-    );
+    const needsAttention = (allBooks ?? [])
+      .filter((b) => !b.vectors_processed_at || !b.summaries_processed_at)
+      .map((b) => ({
+        id: b.id,
+        title: b.title,
+        bookType: b.book_type,
+        createdAt: b.created_at,
+        hasEmbeddings: Boolean(b.vectors_processed_at),
+        hasSummaries: Boolean(b.summaries_processed_at),
+      }));
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const books = (recentBooks ?? []).map((b) => ({

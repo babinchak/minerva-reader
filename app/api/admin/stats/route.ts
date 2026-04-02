@@ -25,7 +25,7 @@ export async function GET() {
       summariesResult,
     ] = await Promise.all([
       serviceSupabase.auth.admin.listUsers({ perPage: 1 }),
-      serviceSupabase.from("books").select("id, user_books(count), book_type, is_curated", { count: "exact" }),
+      serviceSupabase.from("books").select("id, user_books(count), book_type, is_curated, vectors_processed_at", { count: "exact" }),
       serviceSupabase.from("chats").select("id", { count: "exact" }),
       serviceSupabase.from("embedding_sections").select("id", { count: "exact" }),
       serviceSupabase.from("user_books").select("id", { count: "exact" }),
@@ -49,15 +49,8 @@ export async function GET() {
       (b) => ((b as any).user_books?.[0]?.count ?? 0) === 0
     );
 
-    // Books with no embeddings
-    const bookIds = books.map((b) => b.id);
-    const { data: embeddedBookRows } = await serviceSupabase
-      .from("embedding_sections")
-      .select("book_id")
-      .in("book_id", bookIds.length > 0 ? bookIds : ["__none__"]);
-
-    const embeddedBookIds = new Set((embeddedBookRows ?? []).map((r) => r.book_id));
-    const booksWithoutEmbeddings = books.filter((b) => !embeddedBookIds.has(b.id));
+    // Books with no embeddings (based on vectors_processed_at timestamp)
+    const booksWithoutEmbeddings = books.filter((b) => !b.vectors_processed_at);
 
     // Book type breakdown
     const epubCount = books.filter((b) => b.book_type === "epub").length;

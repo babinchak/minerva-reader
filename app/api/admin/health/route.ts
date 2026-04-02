@@ -12,7 +12,9 @@ type Issue = {
     | "empty_chat"
     | "missing_storage"
     | "no_embeddings"
-    | "no_summaries";
+    | "no_summaries"
+    | "inconsistent_embeddings"
+    | "inconsistent_summaries";
   severity: "warning" | "error";
   description: string;
   resourceId: string;
@@ -34,24 +36,35 @@ export async function GET() {
 
     const issues: Issue[] = [];
 
-    // Fetch all core data in parallel
-    const [booksResult, embeddingsResult, chatsResult, userBooksResult, summariesResult] =
+    // Fetch core data in parallel
+    // Books query uses relationship counts to avoid row-limit issues on child tables
+    const [booksResult, chatsResult, userBooksResult] =
       await Promise.all([
         serviceSupabase
           .from("books")
-          .select("id, title, storage_path, book_type, user_books(count)"),
-        serviceSupabase.from("embedding_sections").select("id, book_id"),
+          .select("id, title, storage_path, book_type, vectors_processed_at, summaries_processed_at, user_books(count), embedding_sections(count), summaries(count)"),
         serviceSupabase.from("chats").select("id, book_id, chat_messages(count)"),
         serviceSupabase.from("user_books").select("id, book_id, user_id"),
-        serviceSupabase.from("summaries").select("id, book_id"),
       ]);
 
     const books = booksResult.data ?? [];
-    const bookIds = new Set(books.map((b) => b.id));
-    const embeddingSections = embeddingsResult.data ?? [];
+    const bookIdList = books.map((b) => b.id);
+    const bookIds = new Set(bookIdList);
     const chats = chatsResult.data ?? [];
     const userBooks = userBooksResult.data ?? [];
-    const summaries = summariesResult.data ?? [];
+
+    // Orphan detection: embedding/summary rows referencing books that no longer exist
+    const [orphanedEmbResult, orphanedSumResult] =
+      await Promise.all([
+        serviceSupabase
+          .from("embedding_sections")
+          .select("book_id")
+          .not("book_id", "in", `(${bookIdList.length > 0 ? bookIdList.join(",") : "__none__"})`),
+        serviceSupabase
+          .from("summaries")
+          .select("book_id")
+          .not("book_id", "in", `(${bookIdList.length > 0 ? bookIdList.join(",") : "__none__"})`),
+      ]);
 
     // 1. Orphaned books (0 users)
     for (const book of books) {
@@ -68,18 +81,14 @@ export async function GET() {
     }
 
     // 2. Orphaned embedding sections (reference deleted books)
-    const orphanedEmbeddingBookIds = new Set<string>();
-    for (const section of embeddingSections) {
-      if (!bookIds.has(section.book_id)) {
-        orphanedEmbeddingBookIds.add(section.book_id);
-      }
-    }
+    const orphanedEmbeddingBookIds = new Set(
+      (orphanedEmbResult.data ?? []).map((s) => s.book_id)
+    );
     for (const orphanedBookId of orphanedEmbeddingBookIds) {
-      const count = embeddingSections.filter((s) => s.book_id === orphanedBookId).length;
       issues.push({
         type: "orphaned_embedding",
         severity: "error",
-        description: `${count} embedding sections reference deleted book`,
+        description: `Embedding sections reference deleted book`,
         resourceId: orphanedBookId,
       });
     }
@@ -122,18 +131,14 @@ export async function GET() {
     }
 
     // 6. Orphaned summaries (reference deleted books)
-    const orphanedSummaryBookIds = new Set<string>();
-    for (const s of summaries) {
-      if (!bookIds.has(s.book_id)) {
-        orphanedSummaryBookIds.add(s.book_id);
-      }
-    }
+    const orphanedSummaryBookIds = new Set(
+      (orphanedSumResult.data ?? []).map((s) => s.book_id)
+    );
     for (const orphanedBookId of orphanedSummaryBookIds) {
-      const count = summaries.filter((s) => s.book_id === orphanedBookId).length;
       issues.push({
         type: "orphaned_summary",
         severity: "error",
-        description: `${count} summaries reference deleted book`,
+        description: `Summaries reference deleted book`,
         resourceId: orphanedBookId,
       });
     }
@@ -151,10 +156,9 @@ export async function GET() {
       }
     }
 
-    // 8. Books without any embeddings
-    const booksWithEmbeddings = new Set(embeddingSections.map((s) => s.book_id));
+    // 8. Books not yet processed (based on timestamp columns)
     for (const book of books) {
-      if (!booksWithEmbeddings.has(book.id)) {
+      if (!book.vectors_processed_at) {
         issues.push({
           type: "no_embeddings",
           severity: "warning",
@@ -163,16 +167,35 @@ export async function GET() {
           resourceName: book.title,
         });
       }
-    }
-
-    // 9. Books without any summaries
-    const booksWithSummaries = new Set(summaries.map((s) => s.book_id));
-    for (const book of books) {
-      if (!booksWithSummaries.has(book.id)) {
+      if (!book.summaries_processed_at) {
         issues.push({
           type: "no_summaries",
           severity: "warning",
           description: `"${book.title}"`,
+          resourceId: book.id,
+          resourceName: book.title,
+        });
+      }
+    }
+
+    // 9. Data inconsistencies: timestamp says processed but no actual rows exist
+    for (const book of books) {
+      const embeddingCount = (book as any).embedding_sections?.[0]?.count ?? 0;
+      const summaryCount = (book as any).summaries?.[0]?.count ?? 0;
+      if (book.vectors_processed_at && embeddingCount === 0) {
+        issues.push({
+          type: "inconsistent_embeddings",
+          severity: "error",
+          description: `"${book.title}" marked as processed but has no embedding rows`,
+          resourceId: book.id,
+          resourceName: book.title,
+        });
+      }
+      if (book.summaries_processed_at && summaryCount === 0) {
+        issues.push({
+          type: "inconsistent_summaries",
+          severity: "error",
+          description: `"${book.title}" marked as processed but has no summary rows`,
           resourceId: book.id,
           resourceName: book.title,
         });
