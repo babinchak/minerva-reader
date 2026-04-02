@@ -157,7 +157,7 @@ export function AdminBooksList() {
   const [detailBook, setDetailBook] = useState<Book | null>(null);
   const [detail, setDetail] = useState<BookDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [regenerating, setRegenerating] = useState<string | null>(null); // "summaries" | "vectors" | null
+  const [regenerating, setRegenerating] = useState<string | null>(null); // "summaries" | "vectors" | "processing" | null
   const [regenerateResult, setRegenerateResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const [togglingCurated, setTogglingCurated] = useState(false);
@@ -289,6 +289,30 @@ export function AdminBooksList() {
       }
     } catch (err) {
       setRegenerateResult({ type: "error", message: err instanceof Error ? err.message : "Regeneration failed" });
+    } finally {
+      setRegenerating(null);
+    }
+  };
+
+  const handleReprocess = async (bookId: string) => {
+    setRegenerating("processing");
+    setRegenerateResult(null);
+    try {
+      const res = await fetch(`/api/admin/books/${bookId}/reprocess`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setRegenerateResult({ type: "success", message: "Reprocessing triggered successfully." });
+      if (detailBook) {
+        const detailRes = await fetch(`/api/admin/books/${bookId}/detail`);
+        if (detailRes.ok) setDetail(await detailRes.json());
+      }
+    } catch (err) {
+      setRegenerateResult({ type: "error", message: err instanceof Error ? err.message : "Reprocessing failed" });
     } finally {
       setRegenerating(null);
     }
@@ -569,6 +593,17 @@ export function AdminBooksList() {
               <div>
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Actions</h4>
                 <div className="flex flex-wrap gap-2">
+                  {detail.book.bookType === "epub" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={regenerating !== null}
+                      onClick={() => handleReprocess(detail.book.id)}
+                    >
+                      {regenerating === "processing" && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                      Reprocess EPUB
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
