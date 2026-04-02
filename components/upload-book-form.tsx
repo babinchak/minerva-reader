@@ -26,8 +26,9 @@ type QueuedFile = {
 
 export function UploadBookForm({
   onSuccess,
+  abortRef: externalAbortRef,
   compact = false,
-}: { onSuccess?: () => void; compact?: boolean } = {}) {
+}: { onSuccess?: () => void; abortRef?: React.MutableRefObject<boolean>; compact?: boolean } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -45,7 +46,8 @@ export function UploadBookForm({
     booksUploadedThisWeek: number;
     booksUploadLimit: number;
   } | null>(null);
-  const abortRef = useRef(false);
+  const internalAbortRef = useRef(false);
+  const abortRef = externalAbortRef ?? internalAbortRef;
 
   const isPaid = !uploadLimit || uploadLimit.booksUploadLimit >= 999;
 
@@ -341,33 +343,35 @@ export function UploadBookForm({
         </div>
       )}
 
-      {pendingCount > 0 && (
+      {(pendingCount > 0 || uploading) && (
         <div className="flex gap-2">
-          <Button
-            type="submit"
-            disabled={uploading}
-            className="flex-1"
-          >
-            {uploading ? (
-              <>
+          {pendingCount > 0 && !uploading && (
+            <Button
+              type="submit"
+              className="flex-1"
+            >
+              <Upload />
+              Upload {pendingCount} {pendingCount === 1 ? 'Book' : 'Books'}
+            </Button>
+          )}
+          {uploading && (
+            <>
+              <Button
+                type="button"
+                disabled
+                className="flex-1"
+              >
                 <Loader2 className="animate-spin" />
                 Uploading...
-              </>
-            ) : (
-              <>
-                <Upload />
-                Upload {pendingCount} {pendingCount === 1 ? 'Book' : 'Books'}
-              </>
-            )}
-          </Button>
-          {uploading && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => { abortRef.current = true; }}
-            >
-              Stop
-            </Button>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { abortRef.current = true; }}
+              >
+                Stop
+              </Button>
+            </>
           )}
         </div>
       )}

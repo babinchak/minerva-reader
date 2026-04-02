@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
 export function UploadBookDialog() {
   const [open, setOpen] = useState(false);
+  const abortRef = useRef(false);
   const router = useRouter();
 
   const handleSuccess = () => {
@@ -24,22 +25,31 @@ export function UploadBookDialog() {
     window.dispatchEvent(new CustomEvent(CREDITS_REFRESH_EVENT));
   };
 
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      abortRef.current = true;
+    }
+    setOpen(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm">
           <Upload className="h-4 w-4" />
           Add book
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Add books</DialogTitle>
           <DialogDescription>
             Upload EPUB or PDF files to add them to your library.
           </DialogDescription>
         </DialogHeader>
-        <UploadBookForm onSuccess={handleSuccess} compact />
+        <div className="min-h-0 overflow-y-auto">
+          <UploadBookForm onSuccess={handleSuccess} abortRef={abortRef} compact />
+        </div>
       </DialogContent>
     </Dialog>
   );
