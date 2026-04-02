@@ -64,6 +64,14 @@ export async function DELETE(
 
     // Use service client to bypass RLS - we've already verified the user is authenticated
     const serviceSupabase = createServiceClient();
+
+    // Delete the user's chats for this book (chat_messages cascade automatically)
+    await serviceSupabase
+      .from("chats")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("book_id", bookId);
+
     const { error } = await serviceSupabase
       .from("user_books")
       .delete()

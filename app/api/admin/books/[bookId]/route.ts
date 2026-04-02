@@ -79,21 +79,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Book not found" }, { status: 404 });
     }
 
-    // 1. Delete chat_messages for chats referencing this book (then delete chats)
-    const { data: chats } = await serviceSupabase
-      .from("chats")
-      .select("id")
-      .eq("book_id", bookId);
-    const chatIds = (chats ?? []).map((c) => c.id);
-    if (chatIds.length > 0) {
-      await serviceSupabase.from("chat_messages").delete().in("chat_id", chatIds);
-      await serviceSupabase.from("chats").delete().eq("book_id", bookId);
-    }
-
-    // 2. Delete user_books
-    await serviceSupabase.from("user_books").delete().eq("book_id", bookId);
-
-    // 3. Null parent refs for summaries (self-reference), then delete summaries
+    // 1. Null parent refs for summaries (self-reference), then delete summaries
+    // (user_books, chats, chat_messages cascade from book deletion)
     const { data: summaryRows } = await serviceSupabase
       .from("summaries")
       .select("id")
@@ -108,10 +95,10 @@ export async function DELETE(
     }
     await serviceSupabase.from("summaries").delete().eq("book_id", bookId);
 
-    // 4. Delete embedding_sections (includes pgvector embeddings)
+    // 2. Delete embedding_sections
     await serviceSupabase.from("embedding_sections").delete().eq("book_id", bookId);
 
-    // 5. Delete storage files
+    // 3. Delete storage files
     const bucketName = book.book_type === "pdf" ? "pdfs" : "epubs";
     if (book.storage_path) {
       await serviceSupabase.storage.from(bucketName).remove([book.storage_path]);
@@ -122,7 +109,7 @@ export async function DELETE(
     const manifestPath = `books/${bookId}/manifest.json`;
     await serviceSupabase.storage.from("readium-manifests").remove([manifestPath]);
 
-    // 6. Delete the book row
+    // 4. Delete the book row (user_books, chats, chat_messages cascade automatically)
     const { error: deleteError } = await serviceSupabase.from("books").delete().eq("id", bookId);
 
     if (deleteError) {

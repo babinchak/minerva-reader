@@ -27,8 +27,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Chat not found" }, { status: 404 });
   }
 
-  // Delete messages first, then the chat
-  await serviceSupabase.from("chat_messages").delete().eq("chat_id", chatId);
+  // Delete the chat (chat_messages cascade automatically)
   await serviceSupabase.from("chats").delete().eq("id", chatId);
 
   return NextResponse.json({ success: true });
