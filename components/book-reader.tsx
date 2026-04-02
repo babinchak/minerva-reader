@@ -143,9 +143,11 @@ interface BookReaderProps {
   selfHref: string;
   initialReadingPosition?: Record<string, unknown> | null;
   isLoggedIn?: boolean;
+  demoMode?: boolean;
+  demoEntries?: import("@/lib/demo-chat-data").DemoChatEntry[];
 }
 
-export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLoggedIn = false }: BookReaderProps) {
+export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLoggedIn = false, demoMode, demoEntries }: BookReaderProps) {
   const [mounted, setMounted] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
   const isMobile = useIsMobile();
@@ -506,6 +508,8 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     onMobileNavRefToggleChrome={toggleChrome}
                     initialChatId={refChatId}
                     initialRefQuote={refQuote}
+                    demoMode={demoMode}
+                    demoEntries={demoEntries}
                   />
                 </div>
               </div>
@@ -550,6 +554,8 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     onNavigateToRef={handleNavigateToRef}
                     initialChatId={refChatId}
                     initialRefQuote={refQuote}
+                    demoMode={demoMode}
+                    demoEntries={demoEntries}
                   />
                 </div>
               </>

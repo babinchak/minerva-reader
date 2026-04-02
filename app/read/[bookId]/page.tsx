@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { BookReader } from "@/components/book-reader";
 import PdfReaderClient from "@/components/pdf-reader-client";
 import { EpubProcessingWait } from "@/components/epub-processing-wait";
+import { DEMO_DATA } from "@/lib/demo-chat-data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -72,6 +73,9 @@ export default async function ReadBookPage({ params }: PageProps) {
     supabase.from("user_books").update({ last_opened_at: now }).eq("user_id", user.id).eq("book_id", bookId).then();
   }
 
+  const isDemoMode = !user && !!book.is_curated;
+  const demoEntries = isDemoMode ? (DEMO_DATA[bookId] ?? undefined) : undefined;
+
   const bookType = book.book_type || "epub";
 
   if (bookType === "pdf") {
@@ -118,6 +122,8 @@ export default async function ReadBookPage({ params }: PageProps) {
         initialPage={userBook?.current_page ?? undefined}
         initialBookmarks={userBook?.bookmarks ?? undefined}
         isLoggedIn={!!user}
+        demoMode={isDemoMode}
+        demoEntries={demoEntries}
       />
     );
   }
@@ -169,6 +175,8 @@ export default async function ReadBookPage({ params }: PageProps) {
       selfHref={selfHref}
       initialReadingPosition={(userBook?.reading_position as Record<string, unknown> | null | undefined) ?? undefined}
       isLoggedIn={!!user}
+      demoMode={isDemoMode}
+      demoEntries={demoEntries}
     />
   );
 }

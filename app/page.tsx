@@ -1,7 +1,6 @@
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { SiteFooter } from "@/components/site-footer";
 import { AuthButton } from "@/components/auth-button";
-import { BookCard } from "@/components/book-card";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LibraryView } from "@/components/library-view";
 import { UpgradeCta } from "@/components/upgrade-cta";
@@ -9,7 +8,7 @@ import { HeroReplay } from "@/components/marketing/hero-replay";
 import { ServerSiteNav } from "@/components/server-site-nav";
 import { LibraryPageSkeleton } from "@/components/library-grid-skeleton";
 import { HomeContentSkeleton } from "@/components/home-content-skeleton";
-import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
+import { CollectionCard } from "@/components/collection-card";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
@@ -18,62 +17,43 @@ import { Suspense } from "react";
 import Image from "next/image";
 import { MinervaLogo } from "@/components/minerva-logo";
 
-function formatAuthorDisplay(author: string | null): string {
-  if (!author) return "";
-  return author
-    .split(AUTHOR_DELIMITER)
-    .map((name) => name.trim())
-    .filter(Boolean)
-    .join(", ");
-}
-
-async function SignedOutCuratedPreview() {
+async function SignedOutCollectionsPreview() {
   const supabase = createServiceClient();
-  const { data: books, error } = await supabase
-    .from("books")
-    .select("id, title, author, cover_path, book_type, created_at")
-    .eq("is_curated", true)
-    .order("title")
-    .limit(8);
+  const { data: collections, error } = await supabase
+    .from("curated_collections")
+    .select("id, name, description, slug, cover_image_path, sort_order, curated_collection_books(count)")
+    .order("sort_order")
+    .limit(3);
 
-  if (error) {
+  if (error || !collections?.length) {
     return (
       <section className="w-full max-w-7xl rounded-xl border border-dashed border-border bg-muted/20 px-6 py-10 text-center">
         <p className="text-sm text-muted-foreground">
-          Curated books are temporarily unavailable. You can still explore the full
-          collection from the browse page.
+          Curated collections are coming soon. Check back later or sign up to upload your own books.
         </p>
         <div className="mt-4">
           <Link
             href="/browse"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
           >
-            View curated library
+            Browse library
           </Link>
         </div>
       </section>
     );
   }
 
-  if (!books?.length) {
-    return null;
-  }
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const curatedBooks = books.map((book) => ({
-    id: book.id,
-    title: book.title ?? "",
-    authorDisplay: formatAuthorDisplay(book.author),
+  const cards = collections.map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    slug: c.slug,
     coverUrl:
-      book.cover_path && supabaseUrl
-        ? `${supabaseUrl}/storage/v1/object/public/covers/${book.cover_path}`
+      c.cover_image_path && supabaseUrl
+        ? `${supabaseUrl}/storage/v1/object/public/covers/${c.cover_image_path}`
         : null,
-    bookType:
-      book.book_type === "pdf"
-        ? "pdf" as const
-        : book.book_type === "epub"
-          ? "epub" as const
-          : null,
+    bookCount: (c as any).curated_collection_books?.[0]?.count ?? 0,
   }));
 
   return (
@@ -84,31 +64,30 @@ async function SignedOutCuratedPreview() {
             Start reading now
           </p>
           <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
-            Curated Library
+            Curated Collections
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            A small selection of public domain books you can open immediately, with
-            your own uploads waiting when you sign up.
+            Browse curated collections of public domain books you can read and explore
+            with AI. Sign up to upload your own.
           </p>
         </div>
         <Link
           href="/browse"
           className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
         >
-          View all curated books
+          Browse all collections
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-        {curatedBooks.map((book) => (
-          <BookCard
-            key={book.id}
-            id={book.id}
-            title={book.title}
-            authorDisplay={book.authorDisplay}
-            coverUrl={book.coverUrl}
-            bookType={book.bookType}
-            showRemove={false}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {cards.map((c) => (
+          <CollectionCard
+            key={c.id}
+            name={c.name}
+            description={c.description}
+            slug={c.slug}
+            coverUrl={c.coverUrl}
+            bookCount={c.bookCount}
           />
         ))}
       </div>
@@ -203,7 +182,7 @@ async function HomeContent({
         </div>
       </section>
 
-      <SignedOutCuratedPreview />
+      <SignedOutCollectionsPreview />
     </div>
   );
 }

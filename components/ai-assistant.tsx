@@ -4,7 +4,9 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIBottomDrawer } from "@/components/ai-bottom-drawer";
 import { AIAgentPanel } from "@/components/ai-agent-pane";
+import { DemoAIPanel } from "@/components/demo-ai-panel";
 import { useIsMobile } from "@/lib/use-media-query";
+import type { DemoChatEntry } from "@/lib/demo-chat-data";
 
 export interface AIAssistantProps {
   selectedText?: string;
@@ -49,6 +51,10 @@ export interface AIAssistantProps {
   initialChatId?: string | null;
   /** Quoted text from the navigable reference, used to scroll to the specific reference in the chat. */
   initialRefQuote?: string | null;
+  /** When true, render demo AI panel with canned responses instead of real AI. */
+  demoMode?: boolean;
+  /** Canned demo Q&A entries for demo mode. */
+  demoEntries?: DemoChatEntry[];
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -57,6 +63,27 @@ function clamp(n: number, min: number, max: number) {
 
 export function AIAssistant(props: AIAssistantProps) {
   const isMobile = useIsMobile();
+
+  // Demo mode: render DemoAIPanel instead of real AI
+  if (props.demoMode && props.demoEntries?.length && props.bookId) {
+    if (isMobile) {
+      return (
+        <AIBottomDrawer
+          bookId={props.bookId}
+          bookType={props.bookType}
+          minMode={props.mobileDrawerMinMode}
+          anchor={props.mobileDrawerAnchor}
+          hidden={props.hidden}
+          onNavigateToRef={props.onNavigateToRef}
+          onToggleChrome={props.onMobileNavRefToggleChrome}
+          demoMode
+          demoEntries={props.demoEntries}
+        />
+      );
+    }
+    return <DesktopDemoAssistant {...props} />;
+  }
+
   if (isMobile) {
   return (
     <AIBottomDrawer
@@ -77,6 +104,54 @@ export function AIAssistant(props: AIAssistantProps) {
   );
   }
   return <DesktopAIAssistant {...props} />;
+}
+
+function DesktopDemoAssistant({
+  bookId,
+  demoEntries,
+  onNavigateToRef,
+}: AIAssistantProps) {
+  const [isOpen, setIsOpen] = useState(true);
+  const [dockWidth, setDockWidth] = useState(384);
+  const resizingRef = useRef<{ startX: number; startW: number; pointerId: number } | null>(null);
+
+  const startResize = (e: React.PointerEvent) => {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    resizingRef.current = { startX: e.clientX, startW: dockWidth, pointerId: e.pointerId };
+  };
+  const moveResize = (e: React.PointerEvent) => {
+    const r = resizingRef.current;
+    if (!r || r.pointerId !== e.pointerId) return;
+    setDockWidth(clamp(r.startW + (r.startX - e.clientX), 280, 640));
+  };
+  const endResize = (e: React.PointerEvent) => {
+    if (resizingRef.current?.pointerId === e.pointerId) resizingRef.current = null;
+  };
+
+  return (
+    <div
+      className="relative h-full border-l border-border bg-background shadow-lg flex flex-col transition-[width] duration-200 ease-out"
+      style={{ width: isOpen ? `${dockWidth}px` : 0, minWidth: 0, overflow: "hidden", flexShrink: 0 }}
+    >
+      <div
+        className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
+        onPointerDown={startResize}
+        onPointerMove={moveResize}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+        aria-label="Resize AI panel"
+        role="separator"
+        aria-orientation="vertical"
+      />
+      <DemoAIPanel
+        bookId={bookId!}
+        demoEntries={demoEntries!}
+        onNavigateToRef={onNavigateToRef}
+        onClose={() => setIsOpen(false)}
+        className="h-full w-full flex flex-col min-w-0"
+      />
+    </div>
+  );
 }
 
 function DesktopAIAssistant({

@@ -48,6 +48,8 @@ interface PdfReaderProps {
   initialPage?: number;
   initialBookmarks?: number[];
   isLoggedIn?: boolean;
+  demoMode?: boolean;
+  demoEntries?: import("@/lib/demo-chat-data").DemoChatEntry[];
 }
 
 const MOBILE_PAGE_SIDE_MARGIN_PX = 2;
@@ -201,7 +203,7 @@ function isPdfDebugVerboseEnabled() {
   }
 }
 
-export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLoggedIn = false }: PdfReaderProps) {
+export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLoggedIn = false, demoMode, demoEntries }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2364,6 +2366,8 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
           onMobileNavRefToggleChrome={toggleChrome}
           initialChatId={refChatId}
           initialRefQuote={refQuote}
+          demoMode={demoMode}
+          demoEntries={demoEntries}
         />
       </div>
 

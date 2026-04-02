@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIAgentPanel, type AIAgentPanelProps } from "@/components/ai-agent-pane";
+import { DemoAIPanel } from "@/components/demo-ai-panel";
 import { hapticSnap } from "@/lib/haptic";
+import type { DemoChatEntry } from "@/lib/demo-chat-data";
 
 type MobileDrawerMode = "closed" | "quick" | "half" | "full";
 
@@ -49,8 +51,10 @@ export function AIBottomDrawer({
   hidden,
   onNavigateToRef,
   onToggleChrome,
+  demoMode,
+  demoEntries,
   ...panelProps
-}: AIBottomDrawerProps & { hidden?: boolean; onToggleChrome?: () => void }) {
+}: AIBottomDrawerProps & { hidden?: boolean; onToggleChrome?: () => void; demoMode?: boolean; demoEntries?: DemoChatEntry[] }) {
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
 
   const [mode, setMode] = useState<MobileDrawerMode>(() => {
@@ -320,6 +324,15 @@ export function AIBottomDrawer({
           )}
 
           {mode !== "closed" && (
+            demoMode && demoEntries?.length && panelProps.bookId ? (
+              <DemoAIPanel
+                bookId={panelProps.bookId}
+                demoEntries={demoEntries}
+                onNavigateToRef={handleNavigateToRef}
+                onClose={close}
+                className="flex-1 flex flex-col min-h-0"
+              />
+            ) : (
             <AIAgentPanel
               {...panelProps}
               selectedText={selectedText}
@@ -336,6 +349,7 @@ export function AIBottomDrawer({
               }}
               className="flex-1 flex flex-col min-h-0"
             />
+            )
           )}
 
           {anchor === "top" && (

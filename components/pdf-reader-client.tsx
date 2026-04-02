@@ -9,6 +9,8 @@ interface PdfReaderClientProps {
   initialPage?: number;
   initialBookmarks?: number[];
   isLoggedIn?: boolean;
+  demoMode?: boolean;
+  demoEntries?: import("@/lib/demo-chat-data").DemoChatEntry[];
 }
 
 export default function PdfReaderClient(props: PdfReaderClientProps) {
