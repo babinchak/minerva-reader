@@ -4,7 +4,6 @@ import { AuthButton } from "@/components/auth-button";
 import { BookCard } from "@/components/book-card";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LibraryView } from "@/components/library-view";
-import { FullPageLibraryDropZone } from "@/components/full-page-library-drop-zone";
 import { UpgradeCta } from "@/components/upgrade-cta";
 import { HeroReplay } from "@/components/marketing/hero-replay";
 import { ServerSiteNav } from "@/components/server-site-nav";
@@ -224,11 +223,9 @@ export default async function Home({
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const showLibraryDropZone = !!user && !!hasEnvVars;
 
   return (
     <main className="min-h-screen flex flex-col items-center text-foreground">
-      <FullPageLibraryDropZone enabled={showLibraryDropZone}>
         <div className="flex-1 w-full flex flex-col gap-4 items-center">
         {freeBetaMode && (
           <div className="w-full bg-primary/10 border-b border-primary/20 py-2 px-4 text-center text-sm text-foreground">
@@ -257,7 +254,6 @@ export default async function Home({
 
         <SiteFooter className="py-16" />
         </div>
-      </FullPageLibraryDropZone>
     </main>
   );
 }
