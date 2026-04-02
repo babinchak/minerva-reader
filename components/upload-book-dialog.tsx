@@ -22,7 +22,6 @@ export function UploadBookDialog() {
   const handleSuccess = () => {
     router.refresh();
     window.dispatchEvent(new CustomEvent(CREDITS_REFRESH_EVENT));
-    setOpen(false);
   };
 
   return (
@@ -33,11 +32,11 @@ export function UploadBookDialog() {
           Add book
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add book</DialogTitle>
+          <DialogTitle>Add books</DialogTitle>
           <DialogDescription>
-            Upload an EPUB or PDF file to add it to your library.
+            Upload EPUB or PDF files to add them to your library.
           </DialogDescription>
         </DialogHeader>
         <UploadBookForm onSuccess={handleSuccess} compact />
