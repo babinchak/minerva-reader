@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowUp,
   BookOpen,
+  Check,
   Loader2,
   Plus,
   Search,
@@ -52,7 +53,8 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
   const [allBooks, setAllBooks] = useState<AllBook[]>([]);
   const [allBooksLoading, setAllBooksLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [adding, setAdding] = useState<string | null>(null);
+  const [selectedBookIds, setSelectedBookIds] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState(false);
 
   // Remove confirmation
   const [confirmRemove, setConfirmRemove] = useState<CollectionBook | null>(null);
@@ -83,6 +85,7 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
   const openAddDialog = async () => {
     setAddOpen(true);
     setSearchQuery("");
+    setSelectedBookIds(new Set());
     setAllBooksLoading(true);
     try {
       const res = await fetch("/api/admin/books");
@@ -96,23 +99,34 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
     }
   };
 
-  const handleAddBook = async (bookId: string) => {
-    setAdding(bookId);
+  const toggleBookSelection = (bookId: string) => {
+    setSelectedBookIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(bookId)) next.delete(bookId);
+      else next.add(bookId);
+      return next;
+    });
+  };
+
+  const handleAddSelected = async () => {
+    if (selectedBookIds.size === 0) return;
+    setAdding(true);
     try {
       const res = await fetch(`/api/admin/curated-collections/${collectionId}/books`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookId }),
+        body: JSON.stringify({ bookIds: [...selectedBookIds] }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || `HTTP ${res.status}`);
       }
+      setAddOpen(false);
       fetchBooks();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add book");
+      setError(err instanceof Error ? err.message : "Failed to add books");
     } finally {
-      setAdding(null);
+      setAdding(false);
     }
   };
 
@@ -276,7 +290,7 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
           <DialogHeader>
             <DialogTitle>Add Books</DialogTitle>
             <DialogDescription>
-              Search and add books to this collection.
+              Select books to add to this collection.
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
@@ -307,44 +321,59 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
                 {searchQuery ? "No matching books found." : "All books are already in this collection."}
               </p>
             ) : (
-              filteredAllBooks.map((b) => (
-                <div
-                  key={b.id}
-                  className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-accent/50"
-                >
-                  {b.coverUrl ? (
-                    <img
-                      src={b.coverUrl}
-                      alt=""
-                      className="h-10 w-7 rounded object-cover border border-border"
-                    />
-                  ) : (
-                    <div className="flex h-10 w-7 items-center justify-center rounded border border-border bg-muted">
-                      <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground truncate">{b.title ?? "Untitled"}</p>
-                    {b.author && (
-                      <p className="text-xs text-muted-foreground truncate">{b.author}</p>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={adding === b.id}
-                    onClick={() => handleAddBook(b.id)}
+              filteredAllBooks.map((b) => {
+                const selected = selectedBookIds.has(b.id);
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-accent/50 ${
+                      selected ? "bg-accent/30 ring-1 ring-primary/20" : ""
+                    }`}
+                    onClick={() => toggleBookSelection(b.id)}
                   >
-                    {adding === b.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <div
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                        selected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-input bg-background"
+                      }`}
+                    >
+                      {selected && <Check className="h-3.5 w-3.5" />}
+                    </div>
+                    {b.coverUrl ? (
+                      <img
+                        src={b.coverUrl}
+                        alt=""
+                        className="h-10 w-7 rounded object-cover border border-border"
+                      />
                     ) : (
-                      <Plus className="h-3.5 w-3.5" />
+                      <div className="flex h-10 w-7 items-center justify-center rounded border border-border bg-muted">
+                        <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
                     )}
-                  </Button>
-                </div>
-              ))
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground truncate">{b.title ?? "Untitled"}</p>
+                      {b.author && (
+                        <p className="text-xs text-muted-foreground truncate">{b.author}</p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
+          {selectedBookIds.size > 0 && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSelectedBookIds(new Set())} disabled={adding}>
+                Clear
+              </Button>
+              <Button onClick={handleAddSelected} disabled={adding}>
+                {adding && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                Add {selectedBookIds.size} book{selectedBookIds.size !== 1 ? "s" : ""}
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
