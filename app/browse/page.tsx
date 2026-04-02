@@ -1,4 +1,4 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -7,6 +7,7 @@ import { hasEnvVars } from "@/lib/utils";
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { Suspense } from "react";
 import { CollectionCard } from "@/components/collection-card";
+import { BrowseCollectionsGrid } from "@/components/browse-collections-grid";
 import { SiteFooter } from "@/components/site-footer";
 import Link from "next/link";
 
@@ -26,6 +27,8 @@ export default async function BrowsePage() {
   }
 
   const supabase = createServiceClient();
+  const userSupabase = await createClient();
+  const { data: { user } } = await userSupabase.auth.getUser();
 
   const { data: collections, error } = await supabase
     .from("curated_collections")
@@ -33,6 +36,22 @@ export default async function BrowsePage() {
     .order("sort_order");
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const collectionIds = (collections ?? []).map((c) => c.id);
+
+  // Fetch book IDs per collection for AI (only when logged in)
+  let bookIdsByCollection: Record<string, string[]> = {};
+  if (user && collectionIds.length > 0) {
+    const { data: allRows } = await supabase
+      .from("curated_collection_books")
+      .select("curated_collection_id, book_id")
+      .in("curated_collection_id", collectionIds);
+    for (const row of allRows ?? []) {
+      const cid = row.curated_collection_id;
+      if (!bookIdsByCollection[cid]) bookIdsByCollection[cid] = [];
+      bookIdsByCollection[cid].push(row.book_id);
+    }
+  }
+
   const collectionCards = (collections ?? []).map((c) => ({
     id: c.id,
     name: c.name,
@@ -43,6 +62,7 @@ export default async function BrowsePage() {
         ? `${supabaseUrl}/storage/v1/object/public/covers/${c.cover_image_path}`
         : null,
     bookCount: (c as any).curated_collection_books?.[0]?.count ?? 0,
+    bookIds: bookIdsByCollection[c.id] ?? [],
   }));
 
   return (
@@ -86,18 +106,22 @@ export default async function BrowsePage() {
               </div>
 
               {collectionCards.length > 0 ? (
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {collectionCards.map((c) => (
-                    <CollectionCard
-                      key={c.id}
-                      name={c.name}
-                      description={c.description}
-                      slug={c.slug}
-                      coverUrl={c.coverUrl}
-                      bookCount={c.bookCount}
-                    />
-                  ))}
-                </div>
+                user ? (
+                  <BrowseCollectionsGrid collections={collectionCards} />
+                ) : (
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {collectionCards.map((c) => (
+                      <CollectionCard
+                        key={c.id}
+                        name={c.name}
+                        description={c.description}
+                        slug={c.slug}
+                        coverUrl={c.coverUrl}
+                        bookCount={c.bookCount}
+                      />
+                    ))}
+                  </div>
+                )
               ) : (
                 <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-12 text-center">
                   <p className="text-sm text-muted-foreground">
