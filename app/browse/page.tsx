@@ -94,7 +94,7 @@ export default async function BrowsePage() {
                     Curated Library
                   </h1>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Browse curated collections of public domain books you can read and explore with AI.
+                    Explore curated collections of public domain books you can read and discuss with AI.
                   </p>
                 </div>
                 <Link

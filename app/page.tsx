@@ -67,7 +67,7 @@ async function SignedOutCollectionsPreview() {
             Curated Collections
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Browse curated collections of public domain books you can read and explore
+            Explore curated collections of public domain books you can read and discuss
             with AI. Sign up to upload your own.
           </p>
         </div>
@@ -75,7 +75,7 @@ async function SignedOutCollectionsPreview() {
           href="/browse"
           className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
         >
-          Browse all collections
+          Explore all collections
         </Link>
       </div>
 
@@ -167,7 +167,7 @@ async function HomeContent({
                 href="/browse"
                 className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                Browse curated library
+                Explore curated library
               </Link>
               <Suspense>
                 <AuthButton />

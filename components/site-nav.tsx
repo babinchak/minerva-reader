@@ -17,7 +17,7 @@ interface SiteNavProps {
 
 const allNavLinks = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/browse", label: "Browse", icon: Library },
+  { href: "/browse", label: "Explore", icon: Library },
   { href: "/settings", label: "Settings", icon: Settings, requiresAuth: true },
 ] as const;
 
