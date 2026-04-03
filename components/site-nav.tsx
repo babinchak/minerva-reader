@@ -24,7 +24,7 @@ const allNavLinks = [
 const adminLink = { href: "/admin", label: "Admin", icon: Shield } as const;
 
 export function SiteNav({ rightSlot, showAdmin, isLoggedIn }: SiteNavProps) {
-  const navLinks = allNavLinks.filter((l) => !l.requiresAuth || isLoggedIn);
+  const navLinks = allNavLinks.filter((l) => !("requiresAuth" in l) || isLoggedIn);
   const isMobile = useIsMobile();
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
