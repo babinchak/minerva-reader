@@ -48,3 +48,5 @@ supabase-migration.sql
 reference-sql.mdc
 .vercel
 app/admin/activity/minerva-reader.code-workspace
+
+collections-curation/

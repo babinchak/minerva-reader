@@ -41,6 +41,7 @@ type AllBook = {
   author: string | null;
   bookType: string | null;
   coverUrl: string | null;
+  createdAt: string | null;
 };
 
 export function AdminCollectionDetail({ collectionId }: { collectionId: string }) {
@@ -55,6 +56,7 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBookIds, setSelectedBookIds] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
+  const [sortBy, setSortBy] = useState<"title" | "date">("title");
 
   // Remove confirmation
   const [confirmRemove, setConfirmRemove] = useState<CollectionBook | null>(null);
@@ -168,15 +170,22 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
 
   const existingBookIds = new Set(books.map((b) => b.bookId));
 
-  const filteredAllBooks = allBooks.filter((b) => {
-    if (existingBookIds.has(b.id)) return false;
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      (b.title ?? "").toLowerCase().includes(q) ||
-      (b.author ?? "").toLowerCase().includes(q)
-    );
-  });
+  const filteredAllBooks = allBooks
+    .filter((b) => {
+      if (existingBookIds.has(b.id)) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        (b.title ?? "").toLowerCase().includes(q) ||
+        (b.author ?? "").toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === "date") {
+        return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+      }
+      return (a.title ?? "").localeCompare(b.title ?? "");
+    });
 
   if (loading) {
     return (
@@ -293,23 +302,33 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
               Select books to add to this collection.
             </DialogDescription>
           </DialogHeader>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by title or author..."
-              className="pl-9"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => setSearchQuery("")}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by title or author..."
+                className="pl-9"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 h-9 text-xs"
+              onClick={() => setSortBy(sortBy === "title" ? "date" : "title")}
+            >
+              {sortBy === "title" ? "A-Z" : "Newest"}
+            </Button>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 -mx-6 px-6 space-y-1">
             {allBooksLoading ? (
