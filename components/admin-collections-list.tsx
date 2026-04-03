@@ -50,6 +50,7 @@ export function AdminCollectionsList() {
   const [formSlug, setFormSlug] = useState("");
   const [formCoverPath, setFormCoverPath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [coverCacheBust, setCoverCacheBust] = useState(0);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -117,6 +118,7 @@ export function AdminCollectionsList() {
       }
       const data = (await res.json()) as { path: string };
       setFormCoverPath(data.path);
+      setCoverCacheBust(Date.now());
 
       // If editing, the API already updated the DB — refresh the list
       if (editingId) fetchCollections();
@@ -143,6 +145,7 @@ export function AdminCollectionsList() {
             name: formName.trim(),
             description: formDescription.trim() || null,
             slug: formSlug.trim() || undefined,
+            coverImagePath: formCoverPath,
           }),
         });
         if (!res.ok) {
@@ -281,7 +284,7 @@ export function AdminCollectionsList() {
 
               {c.coverUrl ? (
                 <img
-                  src={c.coverUrl}
+                  src={coverCacheBust ? `${c.coverUrl}?t=${coverCacheBust}` : c.coverUrl}
                   alt=""
                   className="h-10 w-16 rounded object-cover border border-border shrink-0"
                 />
@@ -384,7 +387,7 @@ export function AdminCollectionsList() {
               {formCoverPath ? (
                 <div className="mt-1 flex items-center gap-3">
                   <img
-                    src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/covers/${formCoverPath}`}
+                    src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/covers/${formCoverPath}${coverCacheBust ? `?t=${coverCacheBust}` : ""}`}
                     alt=""
                     className="h-16 w-24 rounded border border-border object-cover"
                   />
