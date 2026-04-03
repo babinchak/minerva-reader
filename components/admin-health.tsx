@@ -9,6 +9,7 @@ import {
   Copy,
   Check,
   Loader2,
+  Play,
   RefreshCw,
   XCircle,
 } from "lucide-react";
@@ -133,7 +134,132 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function IssueGroup({ type, issues }: { type: string; issues: Issue[] }) {
+function ReprocessButton({
+  bookId,
+  action,
+  onSuccess,
+}: {
+  bookId: string;
+  action: "summaries" | "vectors";
+  onSuccess?: () => void;
+}) {
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setState("loading");
+    try {
+      const res = await fetch(`/api/admin/books/${bookId}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, force: true }),
+      });
+      if (!res.ok) throw new Error();
+      setState("done");
+      onSuccess?.();
+    } catch {
+      setState("error");
+      setTimeout(() => setState("idle"), 2000);
+    }
+  };
+
+  if (state === "done") {
+    return (
+      <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+        <Check className="h-3.5 w-3.5" /> Triggered
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={state === "loading"}
+      className="shrink-0 rounded px-2 py-1 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors flex items-center gap-1"
+      title={action === "vectors" ? "Reprocess embeddings" : "Reprocess summaries"}
+    >
+      {state === "loading" ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : state === "error" ? (
+        <XCircle className="h-3 w-3 text-red-500" />
+      ) : (
+        <Play className="h-3 w-3" />
+      )}
+      {action === "vectors" ? "Embeddings" : "Summaries"}
+    </button>
+  );
+}
+
+function ReprocessAllButton({
+  issues,
+  action,
+  onAllTriggered,
+}: {
+  issues: Issue[];
+  action: "summaries" | "vectors";
+  onAllTriggered?: () => void;
+}) {
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [progress, setProgress] = useState(0);
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setState("loading");
+    setProgress(0);
+    let failed = 0;
+    for (let i = 0; i < issues.length; i++) {
+      try {
+        const res = await fetch(`/api/admin/books/${issues[i].resourceId}/regenerate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, force: true }),
+        });
+        if (!res.ok) failed++;
+      } catch {
+        failed++;
+      }
+      setProgress(i + 1);
+    }
+    setState(failed === 0 ? "done" : "error");
+    if (failed === 0) onAllTriggered?.();
+  };
+
+  if (state === "done") {
+    return (
+      <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+        <Check className="h-3.5 w-3.5" /> All triggered
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={state === "loading"}
+      className="shrink-0 rounded px-2.5 py-1 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+      title={`Reprocess all ${action === "vectors" ? "embeddings" : "summaries"}`}
+    >
+      {state === "loading" ? (
+        <>
+          <Loader2 className="h-3 w-3 animate-spin" />
+          {progress}/{issues.length}
+        </>
+      ) : state === "error" ? (
+        <>
+          <XCircle className="h-3 w-3 text-red-500" /> Some failed
+        </>
+      ) : (
+        <>
+          <Play className="h-3 w-3" /> Reprocess all
+        </>
+      )}
+    </button>
+  );
+}
+
+function IssueGroup({ type, issues, onRefresh }: { type: string; issues: Issue[]; onRefresh?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const meta = GROUP_META[type] ?? {
     label: type,
@@ -141,15 +267,20 @@ function IssueGroup({ type, issues }: { type: string; issues: Issue[] }) {
     severity: "warning" as const,
   };
   const isError = meta.severity === "error";
+  const reprocessAction = type === "no_embeddings" ? "vectors" as const
+    : type === "no_summaries" ? "summaries" as const
+    : null;
 
   return (
     <div className={`rounded-lg border overflow-hidden ${
       isError ? "border-red-500/30" : "border-orange-500/30"
     }`}>
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded(!expanded)}
-        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors ${
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(!expanded); } }}
+        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors cursor-pointer ${
           isError ? "bg-red-500/5" : "bg-orange-500/5"
         }`}
       >
@@ -171,12 +302,15 @@ function IssueGroup({ type, issues }: { type: string; issues: Issue[] }) {
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{meta.explanation}</p>
         </div>
+        {reprocessAction && (
+          <ReprocessAllButton issues={issues} action={reprocessAction} onAllTriggered={onRefresh} />
+        )}
         {expanded ? (
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         ) : (
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         )}
-      </button>
+      </div>
 
       {expanded && (
         <div className="border-t border-border">
@@ -188,7 +322,10 @@ function IssueGroup({ type, issues }: { type: string; issues: Issue[] }) {
               <div className="min-w-0 flex-1">
                 <p>{issue.description}</p>
               </div>
-              <div className="shrink-0 flex items-center gap-1">
+              <div className="shrink-0 flex items-center gap-1.5">
+                {reprocessAction && (
+                  <ReprocessButton bookId={issue.resourceId} action={reprocessAction} />
+                )}
                 <span className="text-xs text-muted-foreground font-mono">
                   {issue.resourceId.slice(0, 8)}...
                 </span>
@@ -309,7 +446,7 @@ export function AdminHealth() {
       {activeGroups.length > 0 && (
         <div className="space-y-3">
           {activeGroups.map((type) => (
-            <IssueGroup key={type} type={type} issues={groups[type]} />
+            <IssueGroup key={type} type={type} issues={groups[type]} onRefresh={fetchHealth} />
           ))}
         </div>
       )}
