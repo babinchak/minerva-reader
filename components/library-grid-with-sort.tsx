@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
+
 import { MinervaLogo } from "@/components/minerva-logo";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { BookCard } from "@/components/book-card";
+import { BookSearchInput } from "@/components/book-search-input";
 import { LibrarySortControls } from "@/components/library-sort-controls";
 import { UploadBookDialog } from "@/components/upload-book-dialog";
 import { LibraryAIAssistant } from "@/components/library-ai-assistant";
@@ -60,6 +61,7 @@ export function LibraryWithBooks({
   const [dir, setDir] = useState<LibrarySortDir>(initialDir);
   const [filter, setFilter] = useState<LibraryBookFilter>(initialFilter);
   const [viewMode, setViewMode] = useState<"library" | "collections">("library");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Collection dialog state
   const [createCollectionOpen, setCreateCollectionOpen] = useState(false);
@@ -102,10 +104,18 @@ export function LibraryWithBooks({
   }, [hasProcessing, router]);
 
   const visibleBooks = useMemo(() => {
-    const filteredBooks =
+    let filteredBooks =
       filter === "all"
         ? books
         : books.filter((book) => book.bookType === filter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      filteredBooks = filteredBooks.filter((book) => {
+        const title = (book.title ?? "").toLowerCase();
+        const author = (book.author ?? "").toLowerCase();
+        return title.includes(q) || author.includes(q);
+      });
+    }
     const asc = dir === "asc";
     if (sort === "dateAdded") {
       return [...filteredBooks].sort((a, b) => {
@@ -131,7 +141,7 @@ export function LibraryWithBooks({
       const cmp = ta.localeCompare(tb);
       return asc ? cmp : -cmp;
     });
-  }, [books, sort, dir, filter]);
+  }, [books, sort, dir, filter, searchQuery]);
 
   const handleOpenCollectionAI = async (collectionId: string, bookIds: string[]) => {
     const col = collections.find((c) => c.id === collectionId);
@@ -202,12 +212,6 @@ export function LibraryWithBooks({
             />
           )}
           <UploadBookDialog />
-          <Link
-            href="/browse"
-            className="inline-flex rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-          >
-            Explore
-          </Link>
           <LibraryAIAssistant
             bookIds={effectiveAIBookIds}
             collections={collections}
@@ -218,6 +222,14 @@ export function LibraryWithBooks({
           />
         </div>
       </div>
+
+      {viewMode === "library" && (
+        <BookSearchInput
+          value={searchQuery}
+          onChange={setSearchQuery}
+          className="max-w-sm"
+        />
+      )}
 
       {viewMode === "library" ? (
         <>

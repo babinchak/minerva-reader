@@ -4,10 +4,8 @@ import { ThemeSwitcher } from "@/components/theme-switcher";
 import { ServerSiteNav } from "@/components/server-site-nav";
 import { hasEnvVars } from "@/lib/utils";
 import { EnvVarWarning } from "@/components/env-var-warning";
-import { BookCard } from "@/components/book-card";
 import { SiteFooter } from "@/components/site-footer";
-import { MinervaLogo } from "@/components/minerva-logo";
-import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
+import { SearchableBookGrid } from "@/components/searchable-book-grid";
 import { CuratedCollectionAI } from "@/components/curated-collection-ai";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -15,11 +13,6 @@ import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-function formatAuthorDisplay(author: string | null): string {
-  if (!author) return "";
-  return author.split(AUTHOR_DELIMITER).map((a) => a.trim()).filter(Boolean).join(", ");
-}
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -114,43 +107,18 @@ export default async function BrowseCollectionPage({ params }: PageProps) {
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/"
-                  className="inline-flex rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                >
-                  Library
-                </Link>
-                {user && books.length > 0 && (
-                  <CuratedCollectionAI
-                    collectionName={collection.name}
-                    bookIds={books.map((b) => b.id)}
-                  />
-                )}
-              </div>
+              {user && books.length > 0 && (
+                <CuratedCollectionAI
+                  collectionName={collection.name}
+                  bookIds={books.map((b) => b.id)}
+                />
+              )}
             </div>
 
             {booksError ? (
               <p className="text-sm text-destructive">Error loading books: {booksError.message}</p>
-            ) : books.length > 0 ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {books.map((book) => (
-                  <BookCard
-                    key={book.id}
-                    id={book.id}
-                    title={book.title ?? ""}
-                    authorDisplay={formatAuthorDisplay(book.author)}
-                    coverUrl={book.coverUrl}
-                    bookType={book.bookType}
-                    showRemove={false}
-                  />
-                ))}
-              </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-8 flex flex-col items-center gap-4 text-center">
-                <MinervaLogo size={48} />
-                <p className="text-sm text-muted-foreground">No books in this collection yet.</p>
-              </div>
+              <SearchableBookGrid books={books} />
             )}
 
           </div>

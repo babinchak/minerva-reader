@@ -9,7 +9,7 @@ import { Suspense } from "react";
 import { CollectionCard } from "@/components/collection-card";
 import { BrowseCollectionsGrid } from "@/components/browse-collections-grid";
 import { SiteFooter } from "@/components/site-footer";
-import Link from "next/link";
+
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -97,12 +97,6 @@ export default async function BrowsePage() {
                     Explore curated collections of public domain books you can read and discuss with AI.
                   </p>
                 </div>
-                <Link
-                  href="/"
-                  className="inline-flex rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                >
-                  Library
-                </Link>
               </div>
 
               {collectionCards.length > 0 ? (

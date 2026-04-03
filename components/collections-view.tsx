@@ -21,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { BookSearchInput } from "@/components/book-search-input";
 import type { LibraryBook } from "@/components/library-grid-with-sort";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 
@@ -62,6 +63,7 @@ export function CollectionsView({
 }: CollectionsViewProps) {
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleDelete = async (id: string) => {
     setDeletingId(id);
@@ -96,9 +98,17 @@ export function CollectionsView({
   // Expanded view for a single collection — full grid with remove buttons
   if (expandedCollectionId) {
     const collection = collections.find((c) => c.id === expandedCollectionId);
-    const collectionBooks = collection
+    const allCollectionBooks = collection
       ? books.filter((b) => collection.bookIds.includes(b.id))
       : [];
+    const q = searchQuery.trim().toLowerCase();
+    const collectionBooks = q
+      ? allCollectionBooks.filter((book) => {
+          const title = (book.title ?? "").toLowerCase();
+          const author = (book.author ?? "").toLowerCase();
+          return title.includes(q) || author.includes(q);
+        })
+      : allCollectionBooks;
 
     return (
       <div className="space-y-4">
@@ -107,15 +117,20 @@ export function CollectionsView({
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => setExpandedCollectionId(null)}
+            onClick={() => { setExpandedCollectionId(null); setSearchQuery(""); }}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <h2 className="text-lg font-semibold">{collection?.name ?? "Collection"}</h2>
           <span className="text-sm text-muted-foreground">
-            {collectionBooks.length} book{collectionBooks.length !== 1 ? "s" : ""}
+            {allCollectionBooks.length} book{allCollectionBooks.length !== 1 ? "s" : ""}
           </span>
           <div className="ml-auto flex items-center gap-2">
+            <BookSearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              className="w-48"
+            />
             {collection && collection.bookIds.length > 0 && (
               <Button
                 variant="outline"

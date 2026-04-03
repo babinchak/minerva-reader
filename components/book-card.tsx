@@ -104,6 +104,7 @@ export function BookCard({
           <img
             src={coverUrl}
             alt={`Cover of ${title}`}
+            loading="lazy"
             className={`absolute inset-0 h-full w-full object-cover ${isBlocked ? "" : "transition-transform group-hover:scale-[1.02]"}`}
           />
         ) : (
