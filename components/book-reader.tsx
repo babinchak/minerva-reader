@@ -8,6 +8,7 @@ import {
   setTheme,
   setScroll,
   useAppDispatch,
+  useAppSelector,
   usePreferences,
   useEpubNavigator,
 } from "@edrlab/thorium-web/epub";
@@ -172,6 +173,9 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   // --- EPUB content loading overlay ---
   const [readerLoaded, setReaderLoaded] = useState(false);
 
+  // --- Thorium panel open (TOC / settings) — hides mobile toolbar overlay ---
+  const [thoriumPanelOpen, setThoriumPanelOpen] = useState(false);
+
   // --- Reading anchor (return-to-reading after ref navigation) ---
   const [readingAnchor, setReadingAnchor] = useState(false);
   // Refs populated by EpubReadingAnchor (inside Thorium context) so BookReader can trigger save/restore
@@ -262,7 +266,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
       setChromeVisible(true);
     }
   }, [isMobile, chromeVisible, selectionExists]);
-  const mobileTopToolbarVisible = chromeVisible && !selectionExists;
+  const mobileTopToolbarVisible = chromeVisible && !selectionExists && !thoriumPanelOpen;
 
   useEffect(() => {
     if (!isMobile) {
@@ -399,6 +403,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
       >
         <ThI18nProvider>
           <ThoriumThemeSync />
+          <EpubPanelOpenWatcher onChange={setThoriumPanelOpen} />
           <EpubMobileLayoutForce />
           <EpubMobileIframeHeightFix enabled={isMobile} />
           <EpubSelectionTouchGuard enabled={isMobile} />
@@ -500,7 +505,7 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
                     bookType="epub"
                     mobileDrawerMinMode="quick"
                     mobileDrawerAnchor={mobileDrawerAnchor}
-                    hidden={!chromeVisible}
+                    hidden={!chromeVisible || thoriumPanelOpen}
                     requestRun={aiRequest}
                     requestOpen={openAiRequest}
                     onOpenChange={setIsAiPaneOpen}
@@ -952,6 +957,19 @@ function EpubMobileIframeHeightFix({ enabled }: { enabled: boolean }) {
     };
   }, [enabled]);
 
+  return null;
+}
+
+/** Watches Thorium Redux state for open panels (TOC, settings) and reports to parent */
+function EpubPanelOpenWatcher({ onChange }: { onChange: (open: boolean) => void }) {
+  const actionsKeys = useAppSelector((state) => state.actions.keys);
+  const anyOpen = useMemo(
+    () => Object.values(actionsKeys).some((v) => v && "isOpen" in v && v.isOpen),
+    [actionsKeys],
+  );
+  useEffect(() => {
+    onChange(anyOpen);
+  }, [anyOpen, onChange]);
   return null;
 }
 
