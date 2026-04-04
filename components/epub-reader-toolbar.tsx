@@ -377,7 +377,7 @@ export function EpubReaderToolbar({
       </div>
 
       <div className="flex items-center justify-center gap-2 min-w-0 justify-self-center">
-        {!isMobile && totalPositions > 0 && (
+        {totalPositions > 0 && (
           <>
             <Input
               value={positionInput}
