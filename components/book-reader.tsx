@@ -654,9 +654,44 @@ function EpubSelectionTouchGuard({ enabled }: { enabled: boolean }) {
           if (hasExpandedSelection(targetDoc)) selectionActiveUntil = Date.now() + 1200;
         };
         const shouldSuppressSwipe = () => hasExpandedSelection(targetDoc) || Date.now() < selectionActiveUntil;
+
+        // Track touch origin to protect long-press selection from Readium's
+        // ColumnSnapper.  During a long-press the finger barely moves, but
+        // even 1-2 px of natural drift triggers ColumnSnapper.onTouchMove
+        // which calls deselect() and starts programmatic scrollLeft changes.
+        // That shifts the document mid-gesture so the selection anchor lands
+        // at a wrong (often fixed) position — sometimes on a previous page.
+        // We suppress touchmove from reaching ColumnSnapper until the finger
+        // moves far enough to be a genuine swipe.
+        const MOVE_THRESHOLD = 10; // px — same threshold used elsewhere for tap detection
+        let touchOrigin: { x: number; y: number } | null = null;
+        let touchIsSwipe = false;
+
         const suppressTouchGesture = (event: TouchEvent) => {
-          if (event.touches.length > 1) return;
-          if (!shouldSuppressSwipe()) return;
+          if (event.touches.length > 1) {
+            touchOrigin = null;
+            return;
+          }
+
+          if (event.type === "touchstart") {
+            const touch = event.touches[0];
+            touchOrigin = { x: touch.clientX, y: touch.clientY };
+            touchIsSwipe = false;
+          } else if (event.type === "touchmove" && touchOrigin && !touchIsSwipe) {
+            const touch = event.touches[0];
+            if (Math.hypot(touch.clientX - touchOrigin.x, touch.clientY - touchOrigin.y) > MOVE_THRESHOLD) {
+              touchIsSwipe = true;
+            }
+          } else if (event.type === "touchend" || event.type === "touchcancel") {
+            touchOrigin = null;
+          }
+
+          // Suppress when there's an active/recent selection (existing behaviour)
+          // OR when this is a touchmove during a potential long-press (finger
+          // hasn't moved enough to be a swipe).
+          const duringPotentialLongPress =
+            event.type === "touchmove" && touchOrigin && !touchIsSwipe;
+          if (!shouldSuppressSwipe() && !duringPotentialLongPress) return;
           event.stopPropagation();
         };
 
