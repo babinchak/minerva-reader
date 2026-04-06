@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { MinervaLogo } from "@/components/minerva-logo";
+import { FeedbackDialog } from "@/components/feedback-dialog";
 
 export function SiteFooter({ className }: { className?: string }) {
   return (
@@ -26,6 +27,11 @@ export function SiteFooter({ className }: { className?: string }) {
       >
         Terms of Service
       </Link>
+      <FeedbackDialog>
+        <button className="hover:text-foreground underline-offset-4 hover:underline">
+          Feedback
+        </button>
+      </FeedbackDialog>
     </footer>
   );
 }

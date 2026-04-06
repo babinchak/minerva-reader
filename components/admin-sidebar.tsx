@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, BookOpen, Users, BarChart3, HeartPulse, Activity, DollarSign, RefreshCw, Library } from "lucide-react";
+import { LayoutDashboard, BookOpen, Users, BarChart3, HeartPulse, Activity, DollarSign, RefreshCw, Library, MessageSquareText } from "lucide-react";
 import { MinervaLogo } from "@/components/minerva-logo";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ const ADMIN_NAV = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/billing", label: "Billing", icon: DollarSign },
   { href: "/admin/activity", label: "Activity", icon: Activity },
+  { href: "/admin/feedback", label: "Feedback", icon: MessageSquareText },
   { href: "/admin/stats", label: "Stats", icon: BarChart3 },
   { href: "/admin/health", label: "Health", icon: HeartPulse },
 ] as const;
