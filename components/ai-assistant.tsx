@@ -144,9 +144,7 @@ function DesktopDemoAssistant({
         aria-orientation="vertical"
       />
       <DemoAIPanel
-        bookId={bookId!}
         demoEntries={demoEntries!}
-        onNavigateToRef={onNavigateToRef}
         onClose={() => setIsOpen(false)}
         className="h-full w-full flex flex-col min-w-0"
       />

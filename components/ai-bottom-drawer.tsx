@@ -324,11 +324,9 @@ export function AIBottomDrawer({
           )}
 
           {mode !== "closed" && (
-            demoMode && demoEntries?.length && panelProps.bookId ? (
+            demoMode && demoEntries?.length ? (
               <DemoAIPanel
-                bookId={panelProps.bookId}
                 demoEntries={demoEntries}
-                onNavigateToRef={handleNavigateToRef}
                 onClose={close}
                 className="flex-1 flex flex-col min-h-0"
               />

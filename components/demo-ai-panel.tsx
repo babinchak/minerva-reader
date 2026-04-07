@@ -5,27 +5,19 @@ import { Send, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Markdown, type PassageRef } from "@/components/markdown";
+import { Markdown } from "@/components/markdown";
 import { ToolCallSteps } from "@/components/tool-call-steps";
 import type { DemoChatEntry } from "@/lib/demo-chat-data";
 import { cn } from "@/lib/utils";
 
 export interface DemoAIPanelProps {
-  bookId: string;
   demoEntries: DemoChatEntry[];
-  onNavigateToRef?: (ref: {
-    page?: number;
-    readingOrderIndex?: number;
-    quotedText?: string;
-  }) => void;
   onClose?: () => void;
   className?: string;
 }
 
 export function DemoAIPanel({
-  bookId,
   demoEntries,
-  onNavigateToRef,
   onClose,
   className,
 }: DemoAIPanelProps) {
@@ -118,17 +110,6 @@ export function DemoAIPanel({
       cancelRef.current = true;
     };
   }, []);
-
-  const handleRefClick = useCallback(
-    (ref: PassageRef) => {
-      onNavigateToRef?.({
-        page: ref.page,
-        readingOrderIndex: ref.readingOrderIndex,
-        quotedText: ref.quotedText,
-      });
-    },
-    [onNavigateToRef]
-  );
 
   // Which questions are still available (not yet played)
   const playedQuestions = new Set(playedEntries.map((e) => e.question));
@@ -239,8 +220,6 @@ export function DemoAIPanel({
                   <div className="w-full text-foreground select-text">
                     <Markdown
                       content={entry.streamedText}
-                      bookId={bookId}
-                      onRefClick={handleRefClick}
                     />
                   </div>
                 )}
