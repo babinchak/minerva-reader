@@ -2,6 +2,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { vectorSearch, getPassagesByRange, vectorSearchMulti, getPassagesByRangeMulti } from "@/lib/vector-search";
 import { textSearch, textSearchMulti } from "@/lib/text-search";
+import { createServiceClient } from "@/lib/supabase/server";
 import { webSearch } from "@/lib/tools/web-search";
 
 export interface AgentToolsOptions {
@@ -200,8 +201,10 @@ export function createLibraryAgentTools(
   };
 
   const vectorSearchTool = tool(
-    async ({ query, limit }: { query: string; limit?: number }) => {
-      const { results, error } = await vectorSearchMulti(bookIds, query, limit ?? 10);
+    async ({ query, limit, max_per_book }: { query: string; limit?: number; max_per_book?: number }) => {
+      const { results, error } = await vectorSearchMulti(bookIds, query, limit ?? 10, {
+        maxPerBook: max_per_book,
+      });
       if (error) {
         return JSON.stringify({ results: [], error });
       }
@@ -211,6 +214,7 @@ export function createLibraryAgentTools(
         if (firstWord) {
           const { results: textResults } = await textSearchMulti(bookIds, userId, firstWord, limit ?? 10, {
             matchContextChars: 200,
+            maxPerBook: max_per_book,
           });
           if (textResults.length > 0) {
             return JSON.stringify({
@@ -250,12 +254,14 @@ export function createLibraryAgentTools(
     {
       name: "vector_search",
       description:
-        "Semantic search across all books in the user's library. Returns full text chunks (~1200 chars each) with section_index. " +
+        "Semantic search across all books. Returns full text chunks (~1200 chars each) with section_index. " +
+        "Use max_per_book to ensure diverse results across books (recommended: 2-3 when exploring broadly). " +
         "If text is cut off at chunk boundaries or you need more context, " +
         "use get_passages with index ranges and book_id.",
       schema: z.object({
         query: z.string().describe("The semantic query to search for across the library."),
-        limit: z.number().optional().describe("Max results to return (default 10, max 50)."),
+        limit: z.number().optional().describe("Max total results to return (default 10, max 50)."),
+        max_per_book: z.number().optional().describe("Max results from any single book (default: no limit). Use 2-3 for broad cross-book exploration."),
       }),
     }
   );
@@ -304,9 +310,10 @@ export function createLibraryAgentTools(
   );
 
   const textSearchTool = tool(
-    async ({ query, limit }: { query: string; limit?: number }) => {
+    async ({ query, limit, max_per_book }: { query: string; limit?: number; max_per_book?: number }) => {
       const { results, error } = await textSearchMulti(bookIds, userId, query, limit ?? 10, {
         matchContextChars: 200,
+        maxPerBook: max_per_book,
       });
       if (error) {
         return JSON.stringify({ results: [], error });
@@ -330,12 +337,14 @@ export function createLibraryAgentTools(
     {
       name: "text_search",
       description:
-        "Exact/keyword text search across all books in the user's library. Use when you need to find specific words or short phrases. " +
+        "Exact/keyword text search across all books. Use when you need to find specific words or short phrases. " +
         "Use 1-3 words or a short key phrase per term. For multiple alternatives (OR search), separate with | (e.g. 'scarlet|velvet'). " +
+        "Use max_per_book to ensure diverse results across books. " +
         "Returns matching sections with book information.",
       schema: z.object({
         query: z.string().describe("Search term(s). Use | to search multiple alternatives (OR): e.g. 'scarlet|velvet'."),
-        limit: z.number().optional().describe("Max results to return (default 10, max 50)."),
+        limit: z.number().optional().describe("Max total results to return (default 10, max 50)."),
+        max_per_book: z.number().optional().describe("Max results from any single book (default: no limit). Use 2-3 for broad cross-book exploration."),
       }),
     }
   );
@@ -362,8 +371,37 @@ export function createLibraryAgentTools(
     }
   );
 
+  const listBooksTool = tool(
+    async () => {
+      const supabase = createServiceClient();
+      const { data, error } = await supabase
+        .from("books")
+        .select("id, title, author, book_type")
+        .in("id", bookIds);
+      if (error) {
+        return JSON.stringify({ books: [], error: error.message });
+      }
+      return JSON.stringify({
+        books: (data ?? []).map((b: any) => ({
+          book_id: b.id,
+          title: b.title,
+          author: b.author,
+          book_type: b.book_type,
+        })),
+        total: data?.length ?? 0,
+      });
+    },
+    {
+      name: "list_books",
+      description:
+        "List all books available in this collection/library. Returns title, author, and book_id for each book. " +
+        "Useful for understanding what books are available before searching, or when the user asks what's in their collection.",
+      schema: z.object({}),
+    }
+  );
+
   const tools = vectorsReady
-    ? [vectorSearchTool, getPassagesTool, textSearchTool, webSearchTool]
-    : [getPassagesTool, textSearchTool, webSearchTool];
+    ? [vectorSearchTool, getPassagesTool, textSearchTool, listBooksTool, webSearchTool]
+    : [getPassagesTool, textSearchTool, listBooksTool, webSearchTool];
   return tools as ReturnType<typeof tool>[];
 }

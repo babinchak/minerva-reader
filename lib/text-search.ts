@@ -168,12 +168,17 @@ export async function textSearch(
   return { results };
 }
 
+export interface MultiBookTextSearchOptions extends TextSearchOptions {
+  /** Max results from any single book. Ensures diversity across books. */
+  maxPerBook?: number;
+}
+
 export async function textSearchMulti(
   bookIds: string[],
   userId: string | null,
   query: string,
   limit = 10,
-  options?: TextSearchOptions
+  options?: MultiBookTextSearchOptions
 ): Promise<{ results: MultiBookTextSearchResult[]; error?: string }> {
   if (bookIds.length === 0) {
     return { results: [], error: "No books provided" };
@@ -239,8 +244,16 @@ export async function textSearchMulti(
   const escapedTerms = terms.map(escapeForRegex);
   const results: MultiBookTextSearchResult[] = [];
   const re = new RegExp(`\\b(${escapedTerms.join("|")})\\b`, "gi");
+  const perBookMax = options?.maxPerBook != null ? Math.max(1, options.maxPerBook) : null;
+  const perBookCount = new Map<string, number>();
 
   for (const row of data ?? []) {
+    // Enforce per-book limit
+    if (perBookMax != null) {
+      const count = perBookCount.get(row.book_id) ?? 0;
+      if (count >= perBookMax) continue;
+    }
+
     re.lastIndex = 0;
     let content = row.content_text ?? "";
     let startPos: string | null = row.start_position ?? null;
@@ -292,6 +305,7 @@ export async function textSearchMulti(
       book_author: book?.author ?? null,
       book_type: book?.book_type ?? null,
     });
+    perBookCount.set(row.book_id, (perBookCount.get(row.book_id) ?? 0) + 1);
     if (results.length >= maxResults) break;
   }
 

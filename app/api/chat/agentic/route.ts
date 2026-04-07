@@ -45,12 +45,17 @@ const LIBRARY_SYSTEM_PROMPT =
   "- Do NOT wrap the entire response in a single code block.\n" +
   "- Avoid raw HTML; prefer Markdown.\n" +
   "\nYou have access to tools that search across ALL books in the user's library:\n" +
-  "- vector_search: semantic search — returns full text chunks (~1200 chars) with section_index\n" +
+  "- list_books: see all available books (title, author, book_id). Call this if you need to know what's in the collection.\n" +
+  "- vector_search: semantic search — returns full text chunks (~1200 chars) with section_index. " +
+  "Supports `max_per_book` to cap results from any single book (use 2-3 when exploring broadly across books).\n" +
   "- get_passages: fetch merged text for chunk index ranges (include book_id)\n" +
-  "- text_search: keyword search across all books\n" +
+  "- text_search: keyword search across all books. Also supports `max_per_book`.\n" +
   "- web_search: search the web\n" +
   "vector_search returns full chunks which may be sufficient to quote from directly. " +
   "If text is cut off at a chunk boundary or you need more context, call get_passages with index ranges and book_id.\n" +
+  "\n## Searching across books\n" +
+  "When the user asks a broad question across books, use `max_per_book: 2` or `max_per_book: 3` to get diverse results from multiple books instead of all results from one dominant book. " +
+  "When the user asks about a specific book, omit max_per_book to get deeper results from that book.\n" +
   "\n## Important: Attribute results to their source book\n" +
   "Tool results include `book` (title and author) and `book_id` for each result. " +
   "ALWAYS mention which book a quote or finding comes from. " +

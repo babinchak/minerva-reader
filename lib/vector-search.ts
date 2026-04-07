@@ -92,11 +92,16 @@ export interface MultiBookVectorSearchResult extends VectorSearchResult {
   book_type: string | null;
 }
 
+export interface MultiBookVectorSearchOptions extends VectorSearchOptions {
+  /** Max results from any single book. Ensures diversity across books. */
+  maxPerBook?: number;
+}
+
 export async function vectorSearchMulti(
   bookIds: string[],
   query: string,
   limit = 10,
-  options?: VectorSearchOptions
+  options?: MultiBookVectorSearchOptions
 ): Promise<{ results: MultiBookVectorSearchResult[]; error?: string }> {
   const topK = Math.min(Math.max(1, limit), 50);
 
@@ -121,11 +126,15 @@ export async function vectorSearchMulti(
 
     const supabase = createServiceClient();
 
-    const { data, error } = await supabase.rpc("match_embedding_sections_multi", {
+    const rpcParams: Record<string, unknown> = {
       query_embedding: JSON.stringify(queryVector),
       match_book_ids: bookIds,
       match_count: topK,
-    });
+    };
+    if (options?.maxPerBook != null) {
+      rpcParams.max_per_book = Math.max(1, options.maxPerBook);
+    }
+    const { data, error } = await supabase.rpc("match_embedding_sections_multi", rpcParams);
 
     if (error) {
       console.error("[vector-search-multi] RPC error:", error);
