@@ -2023,7 +2023,7 @@ export function AIAgentPanel({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask about ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+                  placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask across ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                   disabled={isLoading}
                   className="flex-1 bg-muted/50 shadow-md border-border dark:bg-muted dark:border-muted-foreground/30 dark:shadow-none"
                 />
@@ -2183,7 +2183,7 @@ export function AIAgentPanel({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask about ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+                placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask across ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                 disabled={isLoading}
                 className="flex-1"
               />
