@@ -5,7 +5,7 @@ import { Send, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Markdown } from "@/components/markdown";
+import { Markdown, type PassageRef } from "@/components/markdown";
 import { ToolCallSteps } from "@/components/tool-call-steps";
 import type { DemoChatEntry } from "@/lib/demo-chat-data";
 import { cn } from "@/lib/utils";
@@ -109,6 +109,14 @@ export function DemoAIPanel({
     return () => {
       cancelRef.current = true;
     };
+  }, []);
+
+  const handleRefClick = useCallback((ref: PassageRef) => {
+    const bid = ref.bookId;
+    if (bid) {
+      const url = `/read/${bid}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(ref.quotedText ?? "")}`;
+      window.open(url, "_blank", "noreferrer");
+    }
   }, []);
 
   // Which questions are still available (not yet played)
@@ -220,6 +228,7 @@ export function DemoAIPanel({
                   <div className="w-full text-foreground select-text">
                     <Markdown
                       content={entry.streamedText}
+                      onRefClick={handleRefClick}
                     />
                   </div>
                 )}

@@ -8,7 +8,7 @@ import { HeroReplay } from "@/components/marketing/hero-replay";
 import { ServerSiteNav } from "@/components/server-site-nav";
 import { LibraryPageSkeleton } from "@/components/library-grid-skeleton";
 import { HomeContentSkeleton } from "@/components/home-content-skeleton";
-import { CollectionCard } from "@/components/collection-card";
+import { CollectionDemoSection } from "@/components/marketing/collection-demo-section";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
@@ -79,18 +79,7 @@ async function SignedOutCollectionsPreview() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {cards.map((c) => (
-          <CollectionCard
-            key={c.id}
-            name={c.name}
-            description={c.description}
-            slug={c.slug}
-            coverUrl={c.coverUrl}
-            bookCount={c.bookCount}
-          />
-        ))}
-      </div>
+      <CollectionDemoSection collections={cards} />
     </section>
   );
 }
