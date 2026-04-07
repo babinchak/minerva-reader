@@ -32,11 +32,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File must be under 5MB" }, { status: 400 });
     }
 
-    // Generate storage path
+    // Generate storage path — include timestamp to bust CDN cache on replace
     const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
     const filename = collectionId
-      ? `collections/${collectionId}.${ext}`
+      ? `collections/${collectionId}_${Date.now()}.${ext}`
       : `collections/${crypto.randomUUID()}.${ext}`;
+
+    // If replacing an existing cover, delete the old file from storage
+    if (collectionId) {
+      const { data: existing } = await serviceSupabase
+        .from("curated_collections")
+        .select("cover_image_path")
+        .eq("id", collectionId)
+        .single();
+
+      if (existing?.cover_image_path) {
+        await serviceSupabase.storage
+          .from("covers")
+          .remove([existing.cover_image_path]);
+      }
+    }
 
     const buffer = Buffer.from(await file.arrayBuffer());
 

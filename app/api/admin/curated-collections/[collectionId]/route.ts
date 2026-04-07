@@ -39,6 +39,21 @@ export async function PATCH(
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
 
+    // If cover is being removed, delete the old file from storage
+    if ("cover_image_path" in updates && updates["cover_image_path"] === null) {
+      const { data: existing } = await serviceSupabase
+        .from("curated_collections")
+        .select("cover_image_path")
+        .eq("id", collectionId)
+        .single();
+
+      if (existing?.cover_image_path) {
+        await serviceSupabase.storage
+          .from("covers")
+          .remove([existing.cover_image_path]);
+      }
+    }
+
     const { error: updateError } = await serviceSupabase
       .from("curated_collections")
       .update(updates)
