@@ -1915,7 +1915,7 @@ export function AIAgentPanel({
                   ) : (
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Sparkles className="h-3 w-3 text-blue-500" />
-                      Library search
+                      {aiScope?.type === "collection" ? aiScope.name : "Library search"}
                     </span>
                   )
                 ) : !userId && creditsInfo && !creditsInfo.freeBetaMode ? (
