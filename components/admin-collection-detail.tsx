@@ -81,6 +81,7 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
   const [demoDialogOpen, setDemoDialogOpen] = useState(false);
   const [editingDemo, setEditingDemo] = useState<DemoEntry | null>(null);
   const [demoForm, setDemoForm] = useState({ question: "", toolCalls: "[]", answer: "", books: "{}" });
+  const [detectingBooks, setDetectingBooks] = useState(false);
   const [demoSaving, setDemoSaving] = useState(false);
   const [confirmDeleteDemo, setConfirmDeleteDemo] = useState<DemoEntry | null>(null);
   const [demoDeleting, setDemoDeleting] = useState(false);
@@ -191,6 +192,42 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
       setError(err instanceof Error ? err.message : "Failed to delete demo");
     } finally {
       setDemoDeleting(false);
+    }
+  };
+
+  const handleDetectBooks = async () => {
+    const refIds = [...demoForm.answer.matchAll(/ref:([0-9a-f-]+)/g)].map((m) => m[1]!);
+    const unique = [...new Set(refIds)];
+    if (unique.length === 0) {
+      setError("No ref: links found in the answer");
+      return;
+    }
+    setDetectingBooks(true);
+    try {
+      const booksMap: Record<string, { bookId: string; bookLabel: string; bookType: string | null }> = {};
+      await Promise.all(
+        unique.map(async (sectionId) => {
+          try {
+            const res = await fetch(`/api/sections?sectionId=${encodeURIComponent(sectionId)}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.bookId) {
+              booksMap[sectionId] = {
+                bookId: data.bookId,
+                bookLabel: data.bookTitle ? `${data.bookTitle}${data.bookAuthor ? ` by ${data.bookAuthor}` : ""}` : "Unknown book",
+                bookType: data.bookType ?? null,
+              };
+            }
+          } catch {
+            // skip failed lookups
+          }
+        })
+      );
+      setDemoForm((f) => ({ ...f, books: JSON.stringify(booksMap, null, 2) }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to detect books");
+    } finally {
+      setDetectingBooks(false);
     }
   };
 
@@ -502,7 +539,20 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="demo-books">Books (JSON: sectionId → book info)</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="demo-books">Books (JSON: sectionId → book info)</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={detectingBooks || !demoForm.answer.trim()}
+                  onClick={handleDetectBooks}
+                >
+                  {detectingBooks && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                  Detect from answer
+                </Button>
+              </div>
               <Textarea
                 id="demo-books"
                 value={demoForm.books}
