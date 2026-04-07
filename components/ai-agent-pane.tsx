@@ -761,6 +761,16 @@ export function AIAgentPanel({
             };
           })
         );
+        // In library mode, hydrate sectionBookMap so book labels render for historical refs
+        if (!bookId) {
+          const allContent = data.map((m) => m.content).join("\n");
+          const refIds = [...allContent.matchAll(/ref:([0-9a-f-]+)/g)].map((m) => m[1]!);
+          const unique = [...new Set(refIds)];
+          if (unique.length > 0) {
+            // fetchSection populates sectionBookMap as a side effect
+            Promise.all(unique.map((id) => fetchSection(id)));
+          }
+        }
       } else {
         setMessages([]);
       }
@@ -813,7 +823,7 @@ export function AIAgentPanel({
       }
     };
     loadMessages();
-  }, [activeChatId, isLoading, supabase, scrollToLastUserMessage, initialChatId, initialRefQuote]);
+  }, [activeChatId, isLoading, supabase, scrollToLastUserMessage, initialChatId, initialRefQuote, bookId, fetchSection]);
 
   // Scroll to bottom when messages become visible (e.g. mobile drawer expanding).
   useEffect(() => {
