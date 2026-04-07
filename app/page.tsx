@@ -21,7 +21,7 @@ async function SignedOutCollectionsPreview() {
   const supabase = createServiceClient();
   const { data: collections, error } = await supabase
     .from("curated_collections")
-    .select("id, name, description, slug, cover_image_path, sort_order, curated_collection_books(count)")
+    .select("id, name, description, slug, cover_image_path, sort_order, curated_collection_books(count), collection_demos(id, question, tool_calls, answer, books, sort_order)")
     .order("sort_order")
     .limit(3);
 
@@ -54,6 +54,14 @@ async function SignedOutCollectionsPreview() {
         ? `${supabaseUrl}/storage/v1/object/public/covers/${c.cover_image_path}`
         : null,
     bookCount: (c as any).curated_collection_books?.[0]?.count ?? 0,
+    demos: (((c as any).collection_demos ?? []) as { id: string; question: string; tool_calls: any; answer: string; books: any; sort_order: number }[])
+      .sort((a: any, b: any) => a.sort_order - b.sort_order)
+      .map((d: any) => ({
+        question: d.question as string,
+        toolCalls: d.tool_calls as { toolName: string; args: Record<string, unknown> }[],
+        answer: d.answer as string,
+        books: (d.books ?? {}) as Record<string, { bookId: string; bookLabel: string; bookType: string | null }>,
+      })),
   }));
 
   return (

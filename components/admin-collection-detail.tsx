@@ -8,6 +8,8 @@ import {
   BookOpen,
   Check,
   Loader2,
+  MessageSquare,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -23,7 +25,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import Link from "next/link";
+
+type DemoEntry = {
+  id: string;
+  question: string;
+  tool_calls: { toolName: string; args: Record<string, unknown> }[];
+  answer: string;
+  books: Record<string, { bookId: string; bookLabel: string; bookType: string | null }>;
+  sort_order: number;
+};
 
 type CollectionBook = {
   bookId: string;
@@ -62,6 +75,16 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
   const [confirmRemove, setConfirmRemove] = useState<CollectionBook | null>(null);
   const [removing, setRemoving] = useState(false);
 
+  // Demos
+  const [demos, setDemos] = useState<DemoEntry[]>([]);
+  const [demosLoading, setDemosLoading] = useState(true);
+  const [demoDialogOpen, setDemoDialogOpen] = useState(false);
+  const [editingDemo, setEditingDemo] = useState<DemoEntry | null>(null);
+  const [demoForm, setDemoForm] = useState({ question: "", toolCalls: "[]", answer: "", books: "{}" });
+  const [demoSaving, setDemoSaving] = useState(false);
+  const [confirmDeleteDemo, setConfirmDeleteDemo] = useState<DemoEntry | null>(null);
+  const [demoDeleting, setDemoDeleting] = useState(false);
+
   const fetchBooks = async () => {
     setLoading(true);
     setError(null);
@@ -80,9 +103,96 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
     }
   };
 
+  const fetchDemos = async () => {
+    setDemosLoading(true);
+    try {
+      const res = await fetch(`/api/admin/curated-collections/${collectionId}/demos`);
+      if (res.ok) {
+        const data = (await res.json()) as { demos: DemoEntry[] };
+        setDemos(data.demos ?? []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setDemosLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchBooks();
+    fetchDemos();
   }, [collectionId]);
+
+  const openDemoDialog = (demo?: DemoEntry) => {
+    if (demo) {
+      setEditingDemo(demo);
+      setDemoForm({
+        question: demo.question,
+        toolCalls: JSON.stringify(demo.tool_calls, null, 2),
+        answer: demo.answer,
+        books: JSON.stringify(demo.books, null, 2),
+      });
+    } else {
+      setEditingDemo(null);
+      setDemoForm({ question: "", toolCalls: "[]", answer: "", books: "{}" });
+    }
+    setDemoDialogOpen(true);
+  };
+
+  const handleSaveDemo = async () => {
+    let toolCalls: unknown;
+    let booksJson: unknown;
+    try { toolCalls = JSON.parse(demoForm.toolCalls); } catch { setError("Invalid JSON in tool calls"); return; }
+    try { booksJson = JSON.parse(demoForm.books); } catch { setError("Invalid JSON in books"); return; }
+
+    setDemoSaving(true);
+    try {
+      const url = `/api/admin/curated-collections/${collectionId}/demos`;
+      const res = editingDemo
+        ? await fetch(url, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: editingDemo.id, question: demoForm.question, toolCalls, answer: demoForm.answer, books: booksJson }),
+          })
+        : await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question: demoForm.question, toolCalls, answer: demoForm.answer, books: booksJson }),
+          });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setDemoDialogOpen(false);
+      fetchDemos();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save demo");
+    } finally {
+      setDemoSaving(false);
+    }
+  };
+
+  const handleDeleteDemo = async () => {
+    if (!confirmDeleteDemo) return;
+    setDemoDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/curated-collections/${collectionId}/demos`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: confirmDeleteDemo.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setConfirmDeleteDemo(null);
+      fetchDemos();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete demo");
+    } finally {
+      setDemoDeleting(false);
+    }
+  };
 
   const openAddDialog = async () => {
     setAddOpen(true);
@@ -292,6 +402,147 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
           ))}
         </div>
       )}
+
+      {/* Demos Section */}
+      <div className="mt-10 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Demo Q&amp;As</h2>
+            <p className="text-sm text-muted-foreground">
+              Shown on the landing page for this collection.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => openDemoDialog()}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add Demo
+          </Button>
+        </div>
+
+        {demosLoading ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : demos.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border px-6 py-8 text-center text-sm text-muted-foreground">
+            No demos yet. Add a demo to show sample Q&amp;As on the landing page.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {demos.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center gap-3 rounded-md border border-border bg-card px-4 py-3"
+              >
+                <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground truncate">{d.question}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {d.answer.slice(0, 80)}...
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => openDemoDialog(d)}
+                  aria-label="Edit demo"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:text-destructive shrink-0"
+                  onClick={() => setConfirmDeleteDemo(d)}
+                  aria-label="Delete demo"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add/Edit Demo Dialog */}
+      <Dialog open={demoDialogOpen} onOpenChange={setDemoDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{editingDemo ? "Edit Demo" : "Add Demo"}</DialogTitle>
+            <DialogDescription>
+              Paste a Q&amp;A from the collection AI chat to use as a demo on the landing page.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-4 -mx-6 px-6 py-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="demo-question">Question</Label>
+              <Input
+                id="demo-question"
+                value={demoForm.question}
+                onChange={(e) => setDemoForm((f) => ({ ...f, question: e.target.value }))}
+                placeholder="e.g. How do leaders command respect?"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="demo-tool-calls">Tool Calls (JSON)</Label>
+              <Textarea
+                id="demo-tool-calls"
+                value={demoForm.toolCalls}
+                onChange={(e) => setDemoForm((f) => ({ ...f, toolCalls: e.target.value }))}
+                className="font-mono text-xs min-h-[80px]"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="demo-answer">Answer (Markdown)</Label>
+              <Textarea
+                id="demo-answer"
+                value={demoForm.answer}
+                onChange={(e) => setDemoForm((f) => ({ ...f, answer: e.target.value }))}
+                className="min-h-[200px] text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="demo-books">Books (JSON: sectionId → book info)</Label>
+              <Textarea
+                id="demo-books"
+                value={demoForm.books}
+                onChange={(e) => setDemoForm((f) => ({ ...f, books: e.target.value }))}
+                className="font-mono text-xs min-h-[80px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDemoDialogOpen(false)} disabled={demoSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveDemo} disabled={demoSaving || !demoForm.question.trim() || !demoForm.answer.trim()}>
+              {demoSaving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              {editingDemo ? "Save" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Demo Confirmation */}
+      <Dialog open={!!confirmDeleteDemo} onOpenChange={() => setConfirmDeleteDemo(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Demo</DialogTitle>
+            <DialogDescription>
+              Delete the demo &ldquo;{confirmDeleteDemo?.question ?? ""}&rdquo;?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteDemo(null)} disabled={demoDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteDemo} disabled={demoDeleting}>
+              {demoDeleting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Books Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

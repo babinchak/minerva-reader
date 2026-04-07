@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { CollectionCard } from "@/components/collection-card";
 import { DemoAIPanel } from "@/components/demo-ai-panel";
-import { DEMO_DATA } from "@/lib/demo-chat-data";
+
+export interface DemoChatEntry {
+  question: string;
+  toolCalls: { toolName: string; args: Record<string, unknown> }[];
+  answer: string;
+  books?: Record<string, { bookId: string; bookLabel: string; bookType: string | null }>;
+}
 
 interface CollectionInfo {
   id: string;
@@ -12,6 +18,7 @@ interface CollectionInfo {
   slug: string;
   coverUrl: string | null;
   bookCount: number;
+  demos: DemoChatEntry[];
 }
 
 export function CollectionDemoSection({
@@ -20,14 +27,14 @@ export function CollectionDemoSection({
   collections: CollectionInfo[];
 }) {
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
-  const activeEntries = activeSlug ? DEMO_DATA[activeSlug] : undefined;
+  const activeCollection = collections.find((c) => c.slug === activeSlug);
+  const activeEntries = activeCollection?.demos;
 
   return (
     <>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {collections.map((c) => {
-          const entries = DEMO_DATA[c.slug];
-          const hasDemo = entries && entries.length > 0;
+          const hasDemo = c.demos.length > 0;
 
           return (
             <div key={c.id} className="space-y-3">
@@ -43,7 +50,7 @@ export function CollectionDemoSection({
                   <p className="text-xs font-medium text-muted-foreground px-1">
                     Try asking Minerva:
                   </p>
-                  {entries.map((entry) => (
+                  {c.demos.map((entry) => (
                     <button
                       key={entry.question}
                       type="button"

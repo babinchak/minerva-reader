@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Markdown, type PassageRef } from "@/components/markdown";
+import { Markdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
 import { ToolCallSteps } from "@/components/tool-call-steps";
-import type { DemoChatEntry } from "@/lib/demo-chat-data";
+import type { DemoChatEntry } from "@/components/marketing/collection-demo-section";
 import { cn } from "@/lib/utils";
 
 export interface DemoAIPanelProps {
@@ -110,6 +110,19 @@ export function DemoAIPanel({
       cancelRef.current = true;
     };
   }, []);
+
+  // Build sectionBookMap from all demo entries' books fields
+  const sectionBookMap = useMemo(() => {
+    const map = new Map<string, SectionBookInfo>();
+    for (const entry of demoEntries) {
+      if (entry.books) {
+        for (const [sectionId, info] of Object.entries(entry.books)) {
+          map.set(sectionId, info);
+        }
+      }
+    }
+    return map.size > 0 ? map : undefined;
+  }, [demoEntries]);
 
   const handleRefClick = useCallback((ref: PassageRef) => {
     const bid = ref.bookId;
@@ -228,6 +241,7 @@ export function DemoAIPanel({
                   <div className="w-full text-foreground select-text">
                     <Markdown
                       content={entry.streamedText}
+                      sectionBookMap={sectionBookMap}
                       onRefClick={handleRefClick}
                     />
                   </div>

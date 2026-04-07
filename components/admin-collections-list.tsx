@@ -316,8 +316,7 @@ export function AdminCollectionsList() {
                   href={`/admin/collections/${c.id}`}
                   className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-background px-2.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
                 >
-                  <BookOpen className="h-3.5 w-3.5" />
-                  Books
+                  Manage
                 </Link>
                 <Button
                   variant="ghost"
