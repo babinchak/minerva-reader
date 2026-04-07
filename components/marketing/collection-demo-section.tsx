@@ -23,7 +23,7 @@ export function CollectionDemoSection({
   const activeEntries = activeSlug ? DEMO_DATA[activeSlug] : undefined;
 
   return (
-    <div className="space-y-6">
+    <>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {collections.map((c) => {
           const entries = DEMO_DATA[c.slug];
@@ -62,7 +62,7 @@ export function CollectionDemoSection({
 
       {/* Docked right-side AI pane — matches library AI assistant */}
       {activeSlug && activeEntries && activeEntries.length > 0 && (
-        <div className="fixed top-0 right-0 z-50 h-full w-[400px] border-l border-border bg-background shadow-lg flex flex-col">
+        <div className="!mt-0 fixed top-0 right-0 z-50 h-full w-[400px] border-l border-border bg-background shadow-lg flex flex-col">
           <DemoAIPanel
             demoEntries={activeEntries}
             onClose={() => setActiveSlug(null)}
@@ -70,6 +70,6 @@ export function CollectionDemoSection({
           />
         </div>
       )}
-    </div>
+    </>
   );
 }
