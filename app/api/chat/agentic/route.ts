@@ -197,6 +197,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Build book list for library mode system prompt (up to 200 books)
+    let bookListBlock = "";
+    if (isLibraryMode && validatedBookIds && validatedBookIds.length <= 200) {
+      const { data: booksMeta } = await serviceSupabase
+        .from("books")
+        .select("id, title, author")
+        .in("id", validatedBookIds);
+      if (booksMeta && booksMeta.length > 0) {
+        const lines = booksMeta.map((b: { id: string; title: string | null; author: string | null }) => {
+          const label = b.title && b.author ? `${b.title} by ${b.author}` : (b.title || "Unknown title");
+          return `- [${b.id}] ${label}`;
+        });
+        bookListBlock = `\n\n## Books in this collection (${booksMeta.length})\n${lines.join("\n")}`;
+      }
+    }
+
     const messages = rawMessages as IncomingMessage[];
     const langchainMessages = messages.map((m) => {
       if (m.role === "user") {
@@ -215,7 +231,7 @@ export async function POST(req: NextRequest) {
       model,
       bookIds: validatedBookIds,
     });
-    const systemPrompt = isLibraryMode ? LIBRARY_SYSTEM_PROMPT : MARKDOWN_SYSTEM_PROMPT;
+    const systemPrompt = (isLibraryMode ? LIBRARY_SYSTEM_PROMPT : MARKDOWN_SYSTEM_PROMPT) + bookListBlock;
     const initialState = {
       messages: [new SystemMessage(systemPrompt), ...langchainMessages],
     };

@@ -200,9 +200,18 @@ export function createLibraryAgentTools(
     return title || "Unknown book";
   };
 
+  // Validate and filter book_ids from LLM against the allowed set
+  const allowedBookIdSet = new Set(bookIds);
+  const resolveTargetBooks = (filterIds?: string[]) => {
+    if (!filterIds || filterIds.length === 0) return bookIds;
+    const valid = filterIds.filter((id) => allowedBookIdSet.has(id));
+    return valid.length > 0 ? valid : bookIds;
+  };
+
   const vectorSearchTool = tool(
-    async ({ query, limit, max_per_book }: { query: string; limit?: number; max_per_book?: number }) => {
-      const { results, error } = await vectorSearchMulti(bookIds, query, limit ?? 10, {
+    async ({ query, limit, max_per_book, book_ids }: { query: string; limit?: number; max_per_book?: number; book_ids?: string[] }) => {
+      const targetBooks = resolveTargetBooks(book_ids);
+      const { results, error } = await vectorSearchMulti(targetBooks, query, limit ?? 10, {
         maxPerBook: max_per_book,
       });
       if (error) {
@@ -212,7 +221,7 @@ export function createLibraryAgentTools(
         // Fallback to text search
         const firstWord = query.trim().split(/\s+/).find((w) => w.length > 2) ?? query.trim().split(/\s+/)[0] ?? query;
         if (firstWord) {
-          const { results: textResults } = await textSearchMulti(bookIds, userId, firstWord, limit ?? 10, {
+          const { results: textResults } = await textSearchMulti(targetBooks, userId, firstWord, limit ?? 10, {
             matchContextChars: 200,
             maxPerBook: max_per_book,
           });
@@ -254,14 +263,16 @@ export function createLibraryAgentTools(
     {
       name: "vector_search",
       description:
-        "Semantic search across all books. Returns full text chunks (~1200 chars each) with section_index. " +
+        "Semantic search across books. Returns full text chunks (~1200 chars each) with section_index. " +
         "Use max_per_book to ensure diverse results across books (recommended: 2-3 when exploring broadly). " +
+        "Use book_ids to search only specific books. " +
         "If text is cut off at chunk boundaries or you need more context, " +
         "use get_passages with index ranges and book_id.",
       schema: z.object({
         query: z.string().describe("The semantic query to search for across the library."),
         limit: z.number().optional().describe("Max total results to return (default 10, max 50)."),
         max_per_book: z.number().optional().describe("Max results from any single book (default: no limit). Use 2-3 for broad cross-book exploration."),
+        book_ids: z.array(z.string()).optional().describe("Only search these specific book IDs (default: all books in collection)."),
       }),
     }
   );
@@ -310,8 +321,9 @@ export function createLibraryAgentTools(
   );
 
   const textSearchTool = tool(
-    async ({ query, limit, max_per_book }: { query: string; limit?: number; max_per_book?: number }) => {
-      const { results, error } = await textSearchMulti(bookIds, userId, query, limit ?? 10, {
+    async ({ query, limit, max_per_book, book_ids }: { query: string; limit?: number; max_per_book?: number; book_ids?: string[] }) => {
+      const targetBooks = resolveTargetBooks(book_ids);
+      const { results, error } = await textSearchMulti(targetBooks, userId, query, limit ?? 10, {
         matchContextChars: 200,
         maxPerBook: max_per_book,
       });
@@ -337,14 +349,15 @@ export function createLibraryAgentTools(
     {
       name: "text_search",
       description:
-        "Exact/keyword text search across all books. Use when you need to find specific words or short phrases. " +
+        "Exact/keyword text search across books. Use when you need to find specific words or short phrases. " +
         "Use 1-3 words or a short key phrase per term. For multiple alternatives (OR search), separate with | (e.g. 'scarlet|velvet'). " +
-        "Use max_per_book to ensure diverse results across books. " +
+        "Use max_per_book to ensure diverse results across books. Use book_ids to search only specific books. " +
         "Returns matching sections with book information.",
       schema: z.object({
         query: z.string().describe("Search term(s). Use | to search multiple alternatives (OR): e.g. 'scarlet|velvet'."),
         limit: z.number().optional().describe("Max total results to return (default 10, max 50)."),
         max_per_book: z.number().optional().describe("Max results from any single book (default: no limit). Use 2-3 for broad cross-book exploration."),
+        book_ids: z.array(z.string()).optional().describe("Only search these specific book IDs (default: all books in collection)."),
       }),
     }
   );
