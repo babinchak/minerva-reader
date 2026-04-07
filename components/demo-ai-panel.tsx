@@ -70,8 +70,8 @@ export function DemoAIPanel({
             resolve();
             return;
           }
-          // Stream 1-3 chars at a time for natural feel
-          pos += 1 + Math.floor(Math.random() * 2);
+          // Stream 3-8 chars at a time for natural feel
+          pos += 3 + Math.floor(Math.random() * 6);
           if (pos >= text.length) {
             setPlayedEntries((prev) => {
               const updated = [...prev];
@@ -95,7 +95,7 @@ export function DemoAIPanel({
             });
           }
           scrollToBottom();
-        }, 15);
+        }, 10);
       });
 
       setIsStreaming(false);
