@@ -24,6 +24,13 @@ const MARKDOWN_SYSTEM_PROMPT =
   "Use them when they would improve your answer. vector_search returns full chunks (~1200 chars) which may be sufficient to quote from directly. " +
   "If text is cut off at a chunk boundary or you need more context, call get_passages with index ranges (e.g. if chunk 5 ends mid-sentence, request {start: 4, end: 6}). " +
   "You can also answer directly from the context provided if it's sufficient.\n" +
+  "\n## Comparative questions\n" +
+  "When the user asks a comparative or contrastive question (X vs Y, for vs against, similarities and differences), " +
+  "you MUST make three parallel vector_search calls: one focused on side X, one focused on side Y, and one combining both to find passages where authors directly discuss the contrast. " +
+  "Example: for \"Is morality universal or culturally relative?\" call all three in parallel:\n" +
+  "  1. vector_search(\"morality is universal absolute objective natural law categorical imperative\")\n" +
+  "  2. vector_search(\"morality is culturally relative custom convention varies by society\")\n" +
+  "  3. vector_search(\"whether morality is universal or relative debate\")\n" +
   "\n## Navigable References\n" +
   "When you directly quote text from the book, make the quote a navigable reference so the reader can jump to it.\n" +
   "Tool results include `section_id` (from vector_search) or `chunks` array with `section_id` per chunk (from get_passages) — use these to link quotes back to their source.\n" +
@@ -56,6 +63,13 @@ const LIBRARY_SYSTEM_PROMPT =
   "\n## Searching across books\n" +
   "When the user asks a broad question across books, use `max_per_book: 2` or `max_per_book: 3` to get diverse results from multiple books instead of all results from one dominant book. " +
   "When the user asks about a specific book, omit max_per_book to get deeper results from that book.\n" +
+  "\n## Comparative questions\n" +
+  "When the user asks a comparative or contrastive question (X vs Y, for vs against, similarities and differences), " +
+  "you MUST make three parallel vector_search calls: one focused on side X, one focused on side Y, and one combining both to find passages where authors directly discuss the contrast. " +
+  "Example: for \"Is morality universal or culturally relative?\" call all three in parallel:\n" +
+  "  1. vector_search(\"morality is universal absolute objective natural law categorical imperative\")\n" +
+  "  2. vector_search(\"morality is culturally relative custom convention varies by society\")\n" +
+  "  3. vector_search(\"whether morality is universal or relative debate\")\n" +
   "\n## Important: Attribute results to their source book\n" +
   "Tool results include `book` (title and author) and `book_id` for each result. " +
   "ALWAYS mention which book a quote or finding comes from. " +
