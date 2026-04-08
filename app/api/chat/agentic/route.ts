@@ -54,7 +54,7 @@ const LIBRARY_SYSTEM_PROMPT =
   "- Avoid raw HTML; prefer Markdown.\n" +
   "- Do NOT begin your response with a \"Short answer\" or summary line. Dive straight into the substance.\n" +
   "\nYou have access to tools that search across ALL books in the user's {scope}:\n" +
-  "- list_books: see all available books (title, author, book_id). Call this if you need to know what's in the collection.\n" +
+  "{list_books_hint}" +
   "- vector_search: semantic search — returns full text chunks (~1200 chars) with section_index. " +
   "Supports `max_per_book` to cap results from any single book (use 2-3 when exploring broadly across books).\n" +
   "- get_passages: fetch merged text for chunk index ranges (include book_id)\n" +
@@ -251,7 +251,10 @@ export async function POST(req: NextRequest) {
       model,
       bookIds: validatedBookIds,
     });
-    const systemPrompt = (isLibraryMode ? LIBRARY_SYSTEM_PROMPT.replace(/\{scope\}/g, scope) : MARKDOWN_SYSTEM_PROMPT) + bookListBlock;
+    const listBooksHint = isLibraryMode && !bookListBlock
+      ? "- list_books: see all available books (title, author, book_id). Call this first if you need to know what's in the {scope}.\n"
+      : "";
+    const systemPrompt = (isLibraryMode ? LIBRARY_SYSTEM_PROMPT.replace("{list_books_hint}", listBooksHint).replace(/\{scope\}/g, scope) : MARKDOWN_SYSTEM_PROMPT) + bookListBlock;
     const initialState = {
       messages: [new SystemMessage(systemPrompt), ...langchainMessages],
     };
