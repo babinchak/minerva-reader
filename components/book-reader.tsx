@@ -1565,6 +1565,10 @@ function highlightQuoteInDocument(
         console.log("[EPUB_NAV] Fallback scrollIntoView");
         markEl.scrollIntoView({ behavior: "smooth", block: "center" });
       }
+
+      // Notify Thorium's ColumnSnapper/ScrollSnapper of the new scroll position
+      // so it recalculates progress and updates the position indicator in the toolbar.
+      setTimeout(() => wnd.dispatchEvent(new Event("resize")), 100);
     });
   }
 
