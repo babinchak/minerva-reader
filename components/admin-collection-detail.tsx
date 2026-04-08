@@ -81,6 +81,8 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
   const [demoDialogOpen, setDemoDialogOpen] = useState(false);
   const [editingDemo, setEditingDemo] = useState<DemoEntry | null>(null);
   const [demoForm, setDemoForm] = useState({ question: "", toolCalls: "[]", answer: "", books: "{}" });
+  const [autofillId, setAutofillId] = useState("");
+  const [autofilling, setAutofilling] = useState(false);
   const [detectingBooks, setDetectingBooks] = useState(false);
   const [demoSaving, setDemoSaving] = useState(false);
   const [confirmDeleteDemo, setConfirmDeleteDemo] = useState<DemoEntry | null>(null);
@@ -137,7 +139,60 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
       setEditingDemo(null);
       setDemoForm({ question: "", toolCalls: "[]", answer: "", books: "{}" });
     }
+    setAutofillId("");
     setDemoDialogOpen(true);
+  };
+
+  const handleAutofill = async () => {
+    const id = autofillId.trim();
+    if (!id) return;
+    setAutofilling(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/chat-message?id=${encodeURIComponent(id)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const toolCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [];
+      setDemoForm({
+        question: data.question ?? "",
+        toolCalls: JSON.stringify(toolCalls, null, 2),
+        answer: data.answer ?? "",
+        books: "{}",
+      });
+      // Auto-detect books from the answer
+      const answer: string = data.answer ?? "";
+      const refIds = [...answer.matchAll(/ref:([0-9a-f-]+)/g)].map((m) => m[1]!);
+      const unique = [...new Set(refIds)];
+      if (unique.length > 0) {
+        setDetectingBooks(true);
+        const booksMap: Record<string, { bookId: string; bookLabel: string; bookType: string | null }> = {};
+        await Promise.all(
+          unique.map(async (sectionId) => {
+            try {
+              const sRes = await fetch(`/api/sections?sectionId=${encodeURIComponent(sectionId)}`);
+              if (!sRes.ok) return;
+              const sData = await sRes.json();
+              if (sData.bookId) {
+                booksMap[sectionId] = {
+                  bookId: sData.bookId,
+                  bookLabel: sData.bookTitle ? `${sData.bookTitle}${sData.bookAuthor ? ` by ${sData.bookAuthor}` : ""}` : "Unknown book",
+                  bookType: sData.bookType ?? null,
+                };
+              }
+            } catch { /* skip */ }
+          })
+        );
+        setDemoForm((f) => ({ ...f, books: JSON.stringify(booksMap, null, 2) }));
+        setDetectingBooks(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to autofill");
+    } finally {
+      setAutofilling(false);
+    }
   };
 
   const handleSaveDemo = async () => {
@@ -511,6 +566,29 @@ export function AdminCollectionDetail({ collectionId }: { collectionId: string }
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto min-h-0 space-y-4 -mx-6 px-6 py-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="demo-autofill">Autofill from message ID</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="demo-autofill"
+                  value={autofillId}
+                  onChange={(e) => setAutofillId(e.target.value)}
+                  placeholder="Paste a chat_messages id..."
+                  className="font-mono text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={autofilling || !autofillId.trim()}
+                  onClick={handleAutofill}
+                >
+                  {autofilling && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                  Fill
+                </Button>
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="demo-question">Question</Label>
               <Input
