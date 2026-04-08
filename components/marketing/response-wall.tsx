@@ -211,10 +211,10 @@ function ScrollRow({
 /* ------------------------------------------------------------------ */
 
 const CARD_CONTENT_HEIGHT = 420; // px – visible content window
-const SCROLL_PX_PER_FRAME = 0.5; // ~30px/sec at 60fps
-const PAUSE_AT_REF_MS = 3000; // pause 3s when a reference is centered
+const SCROLL_PX_PER_FRAME = 0.5; // ~30px/sec at 60fps base speed
+const SLOWDOWN_RANGE = 160; // px – start decelerating this far from a reference
+const MIN_SPEED_FACTOR = 0.04; // near-zero at the reference center (not a full stop)
 const PAUSE_AT_LOOP_MS = 1500; // pause before looping back to top
-const REF_DETECT_THRESHOLD = 15; // px tolerance for "centered" detection
 
 function CardPreview({
   card,
@@ -270,7 +270,6 @@ function CardPreview({
 
       let scrollPos = 0;
       let pauseUntil = 0;
-      const pausedPositions = new Set<number>();
 
       function tick() {
         if (cancelled) return;
@@ -278,25 +277,28 @@ function CardPreview({
         if (!pauseRef.current) {
           const now = Date.now();
           if (now >= pauseUntil) {
-            scrollPos += SCROLL_PX_PER_FRAME;
-
-            // Check if a navigable reference is centered in the visible window
+            // Smooth speed curve: decelerate near references, accelerate away
             const viewCenter = scrollPos + clientHeight / 2;
+            let speedFactor = 1;
+
             for (const pos of refPositions) {
-              if (
-                Math.abs(pos - viewCenter) < REF_DETECT_THRESHOLD &&
-                !pausedPositions.has(pos)
-              ) {
-                pauseUntil = now + PAUSE_AT_REF_MS;
-                pausedPositions.add(pos);
-                break;
+              const dist = Math.abs(pos - viewCenter);
+              if (dist < SLOWDOWN_RANGE) {
+                // Cosine ease: full speed at edges, near-zero at center
+                const t = dist / SLOWDOWN_RANGE; // 0 at ref center, 1 at range edge
+                const factor =
+                  MIN_SPEED_FACTOR +
+                  (1 - MIN_SPEED_FACTOR) *
+                    (1 - Math.cos(t * Math.PI)) / 2;
+                speedFactor = Math.min(speedFactor, factor);
               }
             }
+
+            scrollPos += SCROLL_PX_PER_FRAME * speedFactor;
 
             // Loop back to top
             if (scrollPos >= scrollHeight - clientHeight) {
               scrollPos = 0;
-              pausedPositions.clear();
               pauseUntil = now + PAUSE_AT_LOOP_MS;
             }
 
