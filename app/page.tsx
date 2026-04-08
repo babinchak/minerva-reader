@@ -22,8 +22,7 @@ async function SignedOutCollectionsPreview() {
   const { data: collections, error } = await supabase
     .from("curated_collections")
     .select("id, name, description, slug, cover_image_path, sort_order, curated_collection_books(count), collection_demos(id, question, tool_calls, answer, books, sort_order)")
-    .order("sort_order")
-    .limit(3);
+    .order("sort_order");
 
   if (error || !collections?.length) {
     return (

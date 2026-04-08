@@ -40,7 +40,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  query = query.limit(limit);
+  // When showing "All" (no collection filter), over-fetch so the random
+  // shuffle picks from a wider pool, giving better variety across collections.
+  const fetchLimit = collectionSlug ? limit : Math.min(limit * 4, 200);
+  query = query.limit(fetchLimit);
 
   const { data, error } = await query;
 
@@ -50,11 +53,13 @@ export async function GET(request: NextRequest) {
   }
 
   // Shuffle server-side so each batch is in a different order
-  const rows = data ?? [];
+  let rows = data ?? [];
   for (let i = rows.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [rows[i], rows[j]] = [rows[j], rows[i]];
   }
+  // Trim back to requested limit after shuffling
+  rows = rows.slice(0, limit);
 
   const demos = rows.map((d: any) => ({
     id: d.id as string,

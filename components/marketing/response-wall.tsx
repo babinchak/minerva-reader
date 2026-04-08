@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Markdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
 import { formatToolLabel } from "@/components/tool-call-steps";
-import { cn } from "@/lib/utils";
+
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -85,11 +85,9 @@ const BATCH_SIZE = 30;
 
 async function fetchDemoBatch(
   excludeIds: string[],
-  collectionSlug?: string | null,
 ): Promise<ApiDemo[]> {
   const params = new URLSearchParams({ limit: String(BATCH_SIZE) });
   if (excludeIds.length > 0) params.set("exclude", excludeIds.join(","));
-  if (collectionSlug) params.set("collection", collectionSlug);
   try {
     const res = await fetch(`/api/collection-demos?${params.toString()}`);
     if (!res.ok) return [];
@@ -109,8 +107,6 @@ export function ResponseWall({
 }: {
   collections: CollectionInfo[];
 }) {
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
-
   // Build initial seed cards from server data
   const seedCards: ResponseCard[] = useMemo(
     () =>
@@ -132,16 +128,6 @@ export function ResponseWall({
   const fetchingRef = useRef(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
-  // Unique collection names for filter pills (from seed data — stable)
-  const collectionList = useMemo(
-    () => collections.filter((c) => c.demos.length > 0),
-    [collections]
-  );
-
-  const filteredPool = activeFilter
-    ? cardPool.filter((c) => c.collectionSlug === activeFilter)
-    : cardPool;
-
   // Called by ScrollRow when it's approaching the end of its cards
   const handleNeedMore = useCallback(() => {
     if (fetchingRef.current) return;
@@ -153,7 +139,7 @@ export function ResponseWall({
       .filter((id) => !id.startsWith("seed-"))
       .slice(-20);
 
-    fetchDemoBatch(recentIds, activeFilter).then((demos) => {
+    fetchDemoBatch(recentIds).then((demos) => {
       if (demos.length > 0) {
         const newCards: ResponseCard[] = demos.map((d) => {
           // Generate a unique uid per fetch to avoid key collisions
@@ -179,58 +165,23 @@ export function ResponseWall({
       }
       fetchingRef.current = false;
     });
-  }, [cardPool, activeFilter]);
+  }, [cardPool]);
 
   if (seedCards.length === 0) return null;
 
   return (
     <section className="w-full space-y-4">
-      {/* Header + filter pills */}
-      <div className="space-y-3">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            AI-powered reading
-          </p>
-          <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
-            See Minerva in action
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Real AI responses across curated book collections. Every reference is
-            clickable.
-          </p>
-        </div>
-
-        {collectionList.length > 1 && (
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setActiveFilter(null)}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                !activeFilter
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-accent"
-              )}
-            >
-              All
-            </button>
-            {collectionList.map((c) => (
-              <button
-                key={c.slug}
-                onClick={() =>
-                  setActiveFilter(c.slug === activeFilter ? null : c.slug)
-                }
-                className={cn(
-                  "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                  activeFilter === c.slug
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-accent"
-                )}
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
-        )}
+      <div>
+        <p className="text-sm font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          AI-powered reading
+        </p>
+        <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
+          See Minerva in action
+        </h2>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground sm:text-base">
+          Real AI responses across curated book collections. Every reference is
+          clickable.
+        </p>
       </div>
 
       {/* Scrolling wall */}
@@ -239,7 +190,7 @@ export function ResponseWall({
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden sm:block sm:w-10 bg-gradient-to-l from-background to-transparent" />
         <div className="py-2">
           <ScrollRow
-            cards={filteredPool}
+            cards={cardPool}
             onNeedMore={handleNeedMore}
           />
         </div>
