@@ -214,13 +214,25 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
         if (!startPosition) return;
 
         const parts = startPosition.split("/");
-        const readingOrderIndex = parseInt(parts[0], 10);
+        let readingOrderIndex = parseInt(parts[0], 10);
         if (Number.isNaN(readingOrderIndex)) return;
 
         const quotedText = refQuote
           ?.replace(/^[""\u201C\u201D]+/, "")
           .replace(/[""\u201C\u201D]+$/, "")
           .trim();
+
+        // Use xhtml_breaks to resolve the correct XHTML file when the
+        // section spans multiple reading order entries.
+        const xhtmlBreaks = data.xhtmlBreaks as number[] | null;
+        if (xhtmlBreaks?.length && quotedText && data.contentText) {
+          const { resolveQuoteReadingOrder } = await import("@/lib/resolve-quote-page");
+          readingOrderIndex = resolveQuoteReadingOrder(
+            { startPosition, pageBreaks: data.pageBreaks ?? null, xhtmlBreaks, contentText: data.contentText },
+            readingOrderIndex,
+            quotedText
+          );
+        }
 
         // Wait for the epub to actually render before navigating.
         // Poll for the Thorium iframe to exist, then trigger navigation.

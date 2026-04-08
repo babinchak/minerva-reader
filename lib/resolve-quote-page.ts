@@ -132,6 +132,7 @@ function findQuoteIndex(normContent: string, normQuote: string): number {
 export interface SectionData {
   startPosition: string;
   pageBreaks: number[] | null;
+  xhtmlBreaks: number[] | null;
   contentText: string | null;
   bookType?: string | null;
 }
@@ -221,4 +222,47 @@ export function resolveQuotePosition(
   }
 
   return pos;
+}
+
+/**
+ * Resolve which reading order index (XHTML file) a quoted passage falls in,
+ * using xhtml_breaks character offsets.
+ *
+ * @param section  Section metadata with xhtmlBreaks and contentText
+ * @param startReadingOrder  The reading order index from start_position
+ * @param quotedText  The quoted text to locate within the section
+ * @returns The correct reading order index, or startReadingOrder if resolution fails
+ */
+export function resolveQuoteReadingOrder(
+  section: SectionData,
+  startReadingOrder: number,
+  quotedText: string | undefined
+): number {
+  if (!section.xhtmlBreaks?.length) return startReadingOrder;
+
+  const cleaned = quotedText
+    ?.replace(/^[""\u201C\u201D]+/, "")
+    .replace(/[""\u201C\u201D]+$/, "")
+    .trim();
+
+  if (!cleaned || !section.contentText) {
+    return startReadingOrder;
+  }
+
+  const rawContent = section.contentText;
+  const normContent = normalizeTypo(rawContent.toLowerCase()).replace(/\s+/g, " ");
+  const normQuote = normalizeTypo(cleaned.toLowerCase()).replace(/\s+/g, " ");
+  const normToRawMap = buildNormToRawMap(rawContent);
+
+  const idx = findQuoteIndex(normContent, normQuote);
+  if (idx < 0) return startReadingOrder;
+
+  const rawIdx = normToRawMap[idx] ?? 0;
+  let ro = startReadingOrder;
+  for (const breakOffset of section.xhtmlBreaks) {
+    if (rawIdx >= breakOffset) ro++;
+    else break;
+  }
+
+  return ro;
 }

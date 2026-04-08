@@ -12,6 +12,7 @@ export interface VectorSearchResult {
   start_position: string | null;
   end_position: string | null;
   page_breaks: number[] | null;
+  xhtml_breaks: number[] | null;
   similarity: number | null;
   section_id?: string;
   section_index?: number;
@@ -71,6 +72,7 @@ export async function vectorSearch(
         start_position: row.start_position ?? null,
         end_position: row.end_position ?? null,
         page_breaks: Array.isArray(row.page_breaks) ? row.page_breaks : null,
+        xhtml_breaks: Array.isArray(row.xhtml_breaks) ? row.xhtml_breaks : null,
         similarity: typeof row.similarity === "number" ? row.similarity : null,
         section_id: row.id ?? undefined,
         section_index: typeof row.section_index === "number" ? row.section_index : undefined,
@@ -153,6 +155,7 @@ export async function vectorSearchMulti(
         start_position: row.start_position ?? null,
         end_position: row.end_position ?? null,
         page_breaks: Array.isArray(row.page_breaks) ? row.page_breaks : null,
+        xhtml_breaks: Array.isArray(row.xhtml_breaks) ? row.xhtml_breaks : null,
         similarity: typeof row.similarity === "number" ? row.similarity : null,
         section_id: row.id ?? undefined,
         section_index: typeof row.section_index === "number" ? row.section_index : undefined,
@@ -184,6 +187,7 @@ export interface PassageResult {
   start_position: string | null;
   end_position: string | null;
   page_breaks: number[] | null;
+  xhtml_breaks: number[] | null;
   chunks: ChunkInfo[];
 }
 
@@ -207,11 +211,12 @@ export interface MultiBookIndexRange extends IndexRange {
  * Merge chunks into a single passage with merged page_breaks and chunk metadata.
  */
 function mergeChunks(
-  chunks: Array<{ id: string; section_index: number; content_text: string; start_position: string | null; end_position: string | null; page_breaks: number[] | null }>
+  chunks: Array<{ id: string; section_index: number; content_text: string; start_position: string | null; end_position: string | null; page_breaks: number[] | null; xhtml_breaks: number[] | null }>
 ): PassageResult {
   const sorted = [...chunks].sort((a, b) => a.section_index - b.section_index);
 
   const mergedPageBreaks: number[] = [];
+  const mergedXhtmlBreaks: number[] = [];
   const chunkInfos: ChunkInfo[] = [];
   let charOffset = 0;
   const textParts: string[] = [];
@@ -228,6 +233,11 @@ function mergeChunks(
         mergedPageBreaks.push(pb + charOffset);
       }
     }
+    if (chunk.xhtml_breaks && chunk.xhtml_breaks.length > 0) {
+      for (const xb of chunk.xhtml_breaks) {
+        mergedXhtmlBreaks.push(xb + charOffset);
+      }
+    }
     textParts.push(text);
     charOffset += text.length + 1; // +1 for space separator
   }
@@ -237,6 +247,7 @@ function mergeChunks(
     start_position: sorted[0]!.start_position ?? null,
     end_position: sorted[sorted.length - 1]!.end_position ?? null,
     page_breaks: mergedPageBreaks.length > 0 ? mergedPageBreaks : null,
+    xhtml_breaks: mergedXhtmlBreaks.length > 0 ? mergedXhtmlBreaks : null,
     chunks: chunkInfos,
   };
 }
@@ -295,7 +306,7 @@ export async function getPassagesByRange(
     const supabase = createServiceClient();
     const { data: chunks, error } = await supabase
       .from("embedding_sections")
-      .select("id, section_index, content_text, start_position, end_position, page_breaks")
+      .select("id, section_index, content_text, start_position, end_position, page_breaks, xhtml_breaks")
       .eq("book_id", bookId)
       .in("section_index", [...allIndices]);
 
@@ -311,7 +322,7 @@ export async function getPassagesByRange(
 
     const passages: PassageResult[] = [];
     for (const r of clampedRanges) {
-      const rangeChunks: Array<{ id: string; section_index: number; content_text: string; start_position: string | null; end_position: string | null; page_breaks: number[] | null }> = [];
+      const rangeChunks: Array<{ id: string; section_index: number; content_text: string; start_position: string | null; end_position: string | null; page_breaks: number[] | null; xhtml_breaks: number[] | null }> = [];
       for (let i = r.start; i <= r.end; i++) {
         const chunk = chunkByIndex.get(i);
         if (chunk) {
@@ -322,6 +333,7 @@ export async function getPassagesByRange(
             start_position: chunk.start_position ?? null,
             end_position: chunk.end_position ?? null,
             page_breaks: Array.isArray(chunk.page_breaks) ? chunk.page_breaks : null,
+            xhtml_breaks: Array.isArray((chunk as any).xhtml_breaks) ? (chunk as any).xhtml_breaks : null,
           });
         }
       }
@@ -379,7 +391,7 @@ export async function getPassagesByRangeMulti(
 
       const { data: chunks, error } = await supabase
         .from("embedding_sections")
-        .select("id, section_index, content_text, start_position, end_position, page_breaks")
+        .select("id, section_index, content_text, start_position, end_position, page_breaks, xhtml_breaks")
         .eq("book_id", bookId)
         .in("section_index", [...allIndices]);
 
@@ -394,7 +406,7 @@ export async function getPassagesByRangeMulti(
       }
 
       for (const r of bookRanges) {
-        const rangeChunks: Array<{ id: string; section_index: number; content_text: string; start_position: string | null; end_position: string | null; page_breaks: number[] | null }> = [];
+        const rangeChunks: Array<{ id: string; section_index: number; content_text: string; start_position: string | null; end_position: string | null; page_breaks: number[] | null; xhtml_breaks: number[] | null }> = [];
         for (let i = r.start; i <= r.end; i++) {
           const chunk = chunkByIndex.get(i);
           if (chunk) {
@@ -405,6 +417,7 @@ export async function getPassagesByRangeMulti(
               start_position: chunk.start_position ?? null,
               end_position: chunk.end_position ?? null,
               page_breaks: Array.isArray(chunk.page_breaks) ? chunk.page_breaks : null,
+              xhtml_breaks: Array.isArray((chunk as any).xhtml_breaks) ? (chunk as any).xhtml_breaks : null,
             });
           }
         }

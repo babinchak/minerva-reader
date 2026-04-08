@@ -47,7 +47,7 @@ export async function GET(
 
     const { data: section, error } = await serviceSupabase
       .from("embedding_sections")
-      .select("id, content_text, start_position, end_position, page_breaks")
+      .select("id, content_text, start_position, end_position, page_breaks, xhtml_breaks")
       .eq("id", sectionId)
       .eq("book_id", bookId)
       .single();
@@ -59,7 +59,9 @@ export async function GET(
     return NextResponse.json({
       sectionId: section.id,
       startPosition: section.start_position,
+      endPosition: section.end_position ?? null,
       pageBreaks: section.page_breaks ?? null,
+      xhtmlBreaks: (section as any).xhtml_breaks ?? null,
       contentText: section.content_text ?? null,
     });
   } catch (err) {

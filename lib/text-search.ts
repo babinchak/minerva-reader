@@ -12,6 +12,7 @@ export interface TextSearchResult {
   start_position: string | null;
   end_position: string | null;
   page_breaks: number[] | null;
+  xhtml_breaks: number[] | null;
   section_id?: string;
 }
 
@@ -81,7 +82,7 @@ export async function textSearch(
   const db = userId ? supabase : serviceSupabase;
   let queryBuilder = db
     .from("embedding_sections")
-    .select("id, content_text, start_position, end_position, page_breaks")
+    .select("id, content_text, start_position, end_position, page_breaks, xhtml_breaks")
     .eq("book_id", bookId);
 
   if (terms.length === 0) {
@@ -117,6 +118,7 @@ export async function textSearch(
     let content = row.content_text ?? "";
     let startPos: string | null = row.start_position ?? null;
     let pageBreaks: number[] | null = Array.isArray((row as any).page_breaks) ? (row as any).page_breaks : null;
+    let xhtmlBreaks: number[] | null = Array.isArray((row as any).xhtml_breaks) ? (row as any).xhtml_breaks : null;
     const match = re.exec(content);
     if (!match && matchCtx > 0) {
       continue;
@@ -143,11 +145,36 @@ export async function textSearch(
           }
         }
         pageBreaks = adjusted;
-        // Advance start_position past breaks that fell before the window
-        if (skippedBreaks > 0 && startPos != null) {
+        // Advance start_position past breaks that fell before the window.
+        // Only applies to PDFs where start_position is a plain page number.
+        // EPUB positions contain "/" (e.g. "134/0/6") and must not be adjusted.
+        if (skippedBreaks > 0 && startPos != null && !startPos.includes("/")) {
           const parsed = parseInt(startPos, 10);
           if (!Number.isNaN(parsed)) {
             startPos = String(parsed + skippedBreaks);
+          }
+        }
+      }
+      // Adjust xhtml_breaks the same way as page_breaks
+      if (xhtmlBreaks) {
+        const prefixLen = prefix.length;
+        let skippedXhtml = 0;
+        const adjusted: number[] = [];
+        for (const offset of xhtmlBreaks) {
+          const shifted = offset - winStart + prefixLen;
+          if (shifted < 0) {
+            skippedXhtml++;
+          } else if (shifted < content.length) {
+            adjusted.push(shifted);
+          }
+        }
+        xhtmlBreaks = adjusted;
+        // Advance reading order in start_position for skipped xhtml transitions
+        if (skippedXhtml > 0 && startPos != null && startPos.includes("/")) {
+          const parts = startPos.split("/");
+          const ro = parseInt(parts[0], 10);
+          if (!Number.isNaN(ro)) {
+            startPos = `${ro + skippedXhtml}/${parts.slice(1).join("/")}`;
           }
         }
       }
@@ -160,6 +187,7 @@ export async function textSearch(
       start_position: startPos,
       end_position: row.end_position ?? null,
       page_breaks: pageBreaks,
+      xhtml_breaks: xhtmlBreaks,
       section_id: row.id,
     });
     if (results.length >= maxResults) break;
@@ -211,7 +239,7 @@ export async function textSearchMulti(
 
   let queryBuilder = serviceSupabase
     .from("embedding_sections")
-    .select("id, book_id, content_text, start_position, end_position, page_breaks")
+    .select("id, book_id, content_text, start_position, end_position, page_breaks, xhtml_breaks")
     .in("book_id", bookIds);
 
   if (terms.length === 1) {
@@ -258,6 +286,7 @@ export async function textSearchMulti(
     let content = row.content_text ?? "";
     let startPos: string | null = row.start_position ?? null;
     let pageBreaks: number[] | null = Array.isArray((row as any).page_breaks) ? (row as any).page_breaks : null;
+    let xhtmlBreaks: number[] | null = Array.isArray((row as any).xhtml_breaks) ? (row as any).xhtml_breaks : null;
     const match = re.exec(content);
     if (!match && matchCtx > 0) {
       continue;
@@ -282,10 +311,34 @@ export async function textSearchMulti(
           }
         }
         pageBreaks = adjusted;
-        if (skippedBreaks > 0 && startPos != null) {
+        // Only adjust for PDFs (plain page number). EPUB positions contain "/" and must not be modified.
+        if (skippedBreaks > 0 && startPos != null && !startPos.includes("/")) {
           const parsed = parseInt(startPos, 10);
           if (!Number.isNaN(parsed)) {
             startPos = String(parsed + skippedBreaks);
+          }
+        }
+      }
+      // Adjust xhtml_breaks the same way
+      if (xhtmlBreaks) {
+        const prefixLen = prefix.length;
+        let skippedXhtml = 0;
+        const adjusted: number[] = [];
+        for (const offset of xhtmlBreaks) {
+          const shifted = offset - winStart + prefixLen;
+          if (shifted < 0) {
+            skippedXhtml++;
+          } else if (shifted < content.length) {
+            adjusted.push(shifted);
+          }
+        }
+        xhtmlBreaks = adjusted;
+        // Advance reading order in start_position for skipped xhtml transitions
+        if (skippedXhtml > 0 && startPos != null && startPos.includes("/")) {
+          const parts = startPos.split("/");
+          const ro = parseInt(parts[0], 10);
+          if (!Number.isNaN(ro)) {
+            startPos = `${ro + skippedXhtml}/${parts.slice(1).join("/")}`;
           }
         }
       }
@@ -299,6 +352,7 @@ export async function textSearchMulti(
       start_position: startPos,
       end_position: row.end_position ?? null,
       page_breaks: pageBreaks,
+      xhtml_breaks: xhtmlBreaks,
       section_id: row.id,
       book_id: row.book_id,
       book_title: book?.title ?? null,

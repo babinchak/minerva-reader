@@ -29,7 +29,7 @@ import { getPdfLocalContextAroundCurrentSelection } from "@/lib/pdf-position/loc
 import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context-from-document";
 import { getEpubVisibleContext, getEpubVisibleContextWithPosition } from "@/lib/epub-visible-context";
 import { getEpubLocalContextAroundCurrentSelection } from "@/lib/book-position/local-context";
-import { resolveQuotePage } from "@/lib/resolve-quote-page";
+import { resolveQuotePage, resolveQuoteReadingOrder } from "@/lib/resolve-quote-page";
 import { UpgradeCta } from "@/components/upgrade-cta";
 import {
   Dialog,
@@ -247,7 +247,7 @@ export function AIAgentPanel({
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const initialRefScrolledRef = useRef(false);
   /** Map of section_id → section data for resolving navigable references to pages. */
-  const sectionCacheRef = useRef<Map<string, { startPosition: string; pageBreaks: number[] | null; contentText: string | null }>>(new Map());
+  const sectionCacheRef = useRef<Map<string, { startPosition: string; pageBreaks: number[] | null; xhtmlBreaks: number[] | null; contentText: string | null }>>(new Map());
   /** Map of section_id → book info for library mode (which book each section belongs to). */
   const [sectionBookMap, setSectionBookMap] = useState<Map<string, SectionBookInfo>>(new Map());
   const supabase = createClient();
@@ -411,6 +411,7 @@ export function AIAgentPanel({
                   sectionCacheRef.current.set(parsed.sectionId, {
                     startPosition: parsed.startPosition,
                     pageBreaks: parsed.pageBreaks ?? null,
+                    xhtmlBreaks: parsed.xhtmlBreaks ?? null,
                     contentText: parsed.contentText ?? null,
                   });
                   // In library mode, track which book each section belongs to
@@ -464,7 +465,7 @@ export function AIAgentPanel({
   /** Resolve a section_id ref to a page number + quoted text, then delegate to parent handler. */
   /** Fetch section data — check in-memory cache first, then hit API. */
   const fetchSection = useCallback(
-    async (sectionId: string): Promise<{ startPosition: string; pageBreaks: number[] | null; contentText: string | null } | null> => {
+    async (sectionId: string): Promise<{ startPosition: string; pageBreaks: number[] | null; xhtmlBreaks: number[] | null; contentText: string | null } | null> => {
       const cached = sectionCacheRef.current.get(sectionId);
       if (cached) return cached;
 
@@ -479,6 +480,7 @@ export function AIAgentPanel({
         const section = {
           startPosition: data.startPosition as string,
           pageBreaks: (data.pageBreaks as number[] | null) ?? null,
+          xhtmlBreaks: (data.xhtmlBreaks as number[] | null) ?? null,
           contentText: (data.contentText as string | null) ?? null,
         };
         sectionCacheRef.current.set(sectionId, section);
@@ -526,8 +528,9 @@ export function AIAgentPanel({
 
         if (bookType === "epub") {
           const parts = section.startPosition.split("/");
-          const readingOrderIndex = parseInt(parts[0], 10);
-          if (Number.isNaN(readingOrderIndex)) return;
+          const startRo = parseInt(parts[0], 10);
+          if (Number.isNaN(startRo)) return;
+          const readingOrderIndex = resolveQuoteReadingOrder(section, startRo, ref.quotedText);
           onNavigateToRef({ readingOrderIndex, quotedText: ref.quotedText });
           return;
         }

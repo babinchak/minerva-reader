@@ -1,7 +1,7 @@
 import type { BaseMessage } from "@langchain/core/messages";
 import type { AIMessage } from "@langchain/core/messages";
 import type { AgentState } from "./graph";
-import { resolveQuotePage, resolveQuotePosition, type SectionData } from "@/lib/resolve-quote-page";
+import { resolveQuotePage, resolveQuotePosition, resolveQuoteReadingOrder, type SectionData } from "@/lib/resolve-quote-page";
 
 type AgentGraph = ReturnType<typeof import("./graph").createAgentGraph>;
 
@@ -127,8 +127,13 @@ class RefEnricher {
       if (page != null) params.push(`p=${page}`);
     } else {
       // EPUB: extract reading order index from "readingOrderIndex/path"
-      const ro = parseInt(section.startPosition.split("/")[0], 10);
-      if (!Number.isNaN(ro)) params.push(`ro=${ro}`);
+      const startRo = parseInt(section.startPosition.split("/")[0], 10);
+      if (!Number.isNaN(startRo)) {
+        // Use xhtml_breaks to resolve the correct reading order index
+        // when the section spans multiple XHTML files
+        const ro = resolveQuoteReadingOrder(section, startRo, quotedText);
+        params.push(`ro=${ro}`);
+      }
       // EPUB: resolve Readium position number from page_breaks
       const pos = resolveQuotePosition(section, quotedText);
       if (pos != null) params.push(`pos=${pos}`);
@@ -230,9 +235,9 @@ export async function* streamAgentToSSE(
           if (!content) continue;
           try {
             const parsed = JSON.parse(content) as {
-              results?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_type?: string }>;
+              results?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; xhtml_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_type?: string }>;
               passages?: Array<{
-                start_position?: string; page_breaks?: number[] | null; content_text?: string;
+                start_position?: string; page_breaks?: number[] | null; xhtml_breaks?: number[] | null; content_text?: string;
                 book_id?: string; book?: string; book_type?: string;
                 chunks?: Array<{ section_id: string; section_index: number; char_offset: number }>;
               }>;
@@ -244,6 +249,7 @@ export async function* streamAgentToSSE(
                   refEnricher.addSection(item.section_id, {
                     startPosition: item.start_position,
                     pageBreaks: item.page_breaks ?? null,
+                    xhtmlBreaks: item.xhtml_breaks ?? null,
                     contentText: item.content_text ?? null,
                     bookId: item.book_id,
                   });
@@ -265,13 +271,11 @@ export async function* streamAgentToSSE(
             if (parsed.passages) {
               for (const passage of parsed.passages) {
                 if (!passage.chunks?.length || !passage.start_position) continue;
-                // Emit a section_map for each chunk in the passage, with the
-                // merged passage content/page_breaks so the frontend can resolve
-                // any quote to the correct page regardless of which chunk it's in.
                 for (const chunk of passage.chunks) {
                   refEnricher.addSection(chunk.section_id, {
                     startPosition: passage.start_position,
                     pageBreaks: passage.page_breaks ?? null,
+                    xhtmlBreaks: passage.xhtml_breaks ?? null,
                     contentText: passage.content_text ?? null,
                     bookId: passage.book_id,
                   });
