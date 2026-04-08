@@ -1288,19 +1288,16 @@ function highlightQuoteInDocument(
   const normalizedFlat = normalizeTypography(flatText);
 
   // If the quote contains ellipsis (AI abbreviated the original text),
-  // try the full quote first, then fall back to the first substantial segment.
+  // try the full quote first, then try to find the first and last segments
+  // and highlight the entire range between them.
+  const ellipsisSegments = quotedText.split(/\u2026|\.{3,}/).map(s => s.trim()).filter(s => s.length >= 10);
+  const hasEllipsis = ellipsisSegments.length > 1;
   const quoteCandidates = [quotedText];
-  const ellipsisSegments = quotedText.split(/\u2026|\.{3,}/);
-  if (ellipsisSegments.length > 1) {
-    // Add the first segment that's long enough to be meaningful
-    const firstSeg = ellipsisSegments[0]?.trim();
-    if (firstSeg && firstSeg.length >= 15) {
-      quoteCandidates.push(firstSeg);
-    }
-    // Also try the longest segment
-    const longest = ellipsisSegments.reduce((a, b) => (a.length >= b.length ? a : b), "").trim();
-    if (longest && longest.length >= 15 && longest !== firstSeg) {
-      quoteCandidates.push(longest);
+  if (hasEllipsis) {
+    // Add all segments as fallback candidates (first, then remaining by length)
+    const added = new Set<string>();
+    for (const seg of ellipsisSegments) {
+      if (!added.has(seg)) { quoteCandidates.push(seg); added.add(seg); }
     }
   }
 
@@ -1452,6 +1449,44 @@ function highlightQuoteInDocument(
     // Reset for next candidate
     matchStart = -1;
     matchEndNorm = -1;
+  }
+
+  // If the full quote didn't match but we matched an ellipsis segment,
+  // try to find the first and last segments to highlight the entire original range.
+  // Pick the (first, last) pair with the smallest gap to avoid matching distant occurrences.
+  if (matchStart >= 0 && hasEllipsis && normalizedQuote !== normalizeTypography(quotedText)) {
+    const firstSeg = ellipsisSegments[0]!;
+    const lastSeg = ellipsisSegments[ellipsisSegments.length - 1]!;
+    const normFirstSeg = normalizeTypography(firstSeg).toLowerCase();
+    const normLastSeg = normalizeTypography(lastSeg).toLowerCase();
+
+    // Find all occurrences of the first segment
+    let bestStart = -1;
+    let bestEnd = -1;
+    let bestGap = Infinity;
+    let searchPos = 0;
+    while (searchPos < lowerFlat.length) {
+      const firstIdx = lowerFlat.indexOf(normFirstSeg, searchPos);
+      if (firstIdx < 0) break;
+      // Look for the last segment after this first segment
+      const lastIdx = lowerFlat.indexOf(normLastSeg, firstIdx + normFirstSeg.length);
+      if (lastIdx >= 0) {
+        const gap = lastIdx - (firstIdx + normFirstSeg.length);
+        if (gap < bestGap) {
+          bestStart = firstIdx;
+          bestEnd = lastIdx + normLastSeg.length;
+          bestGap = gap;
+        }
+      }
+      searchPos = firstIdx + 1;
+    }
+
+    if (bestStart >= 0 && bestEnd >= 0) {
+      matchStart = bestStart;
+      matchEndNorm = bestEnd;
+      matchLevel = "ellipsis-range";
+      console.log("[EPUB_NAV] Ellipsis range: gap=", bestGap, "chars between segments");
+    }
   }
 
   if (matchStart < 0 || matchEndNorm < 0) return null;
