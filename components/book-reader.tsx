@@ -1137,80 +1137,115 @@ function EpubRefNavigator({
       .replace(/[""\u201C\u201D]+$/, "")
       .trim();
 
-    console.log("[EPUB_NAV] Navigating to href:", targetItem.href, "readingOrderIndex:", navRef.readingOrderIndex, "quotedText:", quotedText?.slice(0, 60));
+    // Wait for the navigator to finish loading before calling goLink.
+    // The navigator's load() is async and calling goLink() before it
+    // completes causes a race in apply() → attachListener().
+    // We detect readiness by checking that getCframes() returns valid frames.
+    let cancelled = false;
+    let waitAttempt = 0;
+    const maxWaitAttempts = 40; // ~6s
 
-    // Use goLink() to navigate to the chapter. We handle text finding + scrolling ourselves.
-    const link = new Link({ href: targetItem.href });
-    goLink(link, false, (ok) => {
-      console.log("[EPUB_NAV] goLink callback, ok:", ok);
-      if (!ok) return;
-      if (!quotedText) return;
+    const waitForNavigatorReady = () => {
+      if (cancelled) return;
+      waitAttempt++;
+      try {
+        const frames = getCframes();
+        const hasValidFrame = frames?.some(f => f?.iframe?.contentDocument?.body);
+        if (hasValidFrame) {
+          doNavigate();
+          return;
+        }
+      } catch { /* not ready */ }
+      if (waitAttempt < maxWaitAttempts) {
+        setTimeout(waitForNavigatorReady, 150);
+      } else {
+        // Last resort: try anyway
+        doNavigate();
+      }
+    };
 
-      // Poll for iframe content to be ready, then highlight + scroll
-      let attempt = 0;
-      const maxAttempts = 25;
+    const doNavigate = () => {
+      if (cancelled) return;
 
-      const tryHighlight = () => {
-        attempt++;
+      console.log("[EPUB_NAV] Navigating to href:", targetItem.href, "readingOrderIndex:", navRef.readingOrderIndex, "quotedText:", quotedText?.slice(0, 60));
 
-        // Try getCframes first, fall back to querying iframes directly
-        let iframeDocs: Document[] = [];
-        try {
-          const frames = getCframes();
-          if (frames) {
-            for (const frame of frames) {
-              if (!frame) continue;
+      // Use goLink() to navigate to the chapter. We handle text finding + scrolling ourselves.
+      const link = new Link({ href: targetItem.href! });
+      goLink(link, false, (ok: boolean) => {
+        console.log("[EPUB_NAV] goLink callback, ok:", ok);
+        if (!ok) return;
+        if (!quotedText) return;
+
+        // Poll for iframe content to be ready, then highlight + scroll
+        let attempt = 0;
+        const maxAttempts = 25;
+
+        const tryHighlight = () => {
+          attempt++;
+
+          // Try getCframes first, fall back to querying iframes directly
+          let iframeDocs: Document[] = [];
+          try {
+            const frames = getCframes();
+            if (frames) {
+              for (const frame of frames) {
+                if (!frame) continue;
+                try {
+                  const doc = frame.iframe?.contentDocument;
+                  if (doc?.body) iframeDocs.push(doc);
+                } catch { /* cross-origin */ }
+              }
+            }
+          } catch { /* getCframes not available */ }
+
+          // Fallback: query iframes directly
+          if (iframeDocs.length === 0) {
+            const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
+            for (const iframe of iframes) {
+              if (!(iframe instanceof HTMLIFrameElement)) continue;
               try {
-                const doc = frame.iframe?.contentDocument;
+                const doc = iframe.contentDocument;
                 if (doc?.body) iframeDocs.push(doc);
               } catch { /* cross-origin */ }
             }
           }
-        } catch { /* getCframes not available */ }
 
-        // Fallback: query iframes directly
-        if (iframeDocs.length === 0) {
-          const iframes = document.querySelectorAll("iframe.readium-navigator-iframe");
-          for (const iframe of iframes) {
-            if (!(iframe instanceof HTMLIFrameElement)) continue;
-            try {
-              const doc = iframe.contentDocument;
-              if (doc?.body) iframeDocs.push(doc);
-            } catch { /* cross-origin */ }
+          if (iframeDocs.length === 0) {
+            if (attempt < maxAttempts) {
+              setTimeout(tryHighlight, 150);
+            } else {
+              console.warn("[EPUB_NAV] Gave up polling for iframe content");
+            }
+            return;
           }
-        }
 
-        if (iframeDocs.length === 0) {
+          console.log("[EPUB_NAV] Found", iframeDocs.length, "iframe doc(s), attempt:", attempt);
+
+          for (const doc of iframeDocs) {
+            const result = highlightQuoteInDocument(doc, quotedText);
+            if (result) {
+              console.log("[EPUB_NAV] Highlight applied successfully");
+              highlightCleanupRef.current = result.cleanup;
+              return;
+            }
+          }
+
+          // Text not found yet — iframe may still be loading content
           if (attempt < maxAttempts) {
             setTimeout(tryHighlight, 150);
           } else {
-            console.warn("[EPUB_NAV] Gave up polling for iframe content");
+            console.warn("[EPUB_NAV] Quote not found in any iframe after", maxAttempts, "attempts");
           }
-          return;
-        }
+        };
 
-        console.log("[EPUB_NAV] Found", iframeDocs.length, "iframe doc(s), attempt:", attempt);
+        // Delay to let Thorium load the iframe content
+        setTimeout(tryHighlight, 300);
+      });
+    };
 
-        for (const doc of iframeDocs) {
-          const result = highlightQuoteInDocument(doc, quotedText);
-          if (result) {
-            console.log("[EPUB_NAV] Highlight applied successfully");
-            highlightCleanupRef.current = result.cleanup;
-            return;
-          }
-        }
+    waitForNavigatorReady();
 
-        // Text not found yet — iframe may still be loading content
-        if (attempt < maxAttempts) {
-          setTimeout(tryHighlight, 150);
-        } else {
-          console.warn("[EPUB_NAV] Quote not found in any iframe after", maxAttempts, "attempts");
-        }
-      };
-
-      // Delay to let Thorium load the iframe content
-      setTimeout(tryHighlight, 300);
-    });
+    return () => { cancelled = true; };
   }, [navRef, rawManifest, goLink, getCframes]);
 
   return null;
