@@ -1,13 +1,13 @@
 "use client";
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff } from "lucide-react";
 import { Markdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
-import { ToolCallSteps, formatToolLabel, getQueryPreview, type MessageToolCall } from "@/components/tool-call-steps";
+import { ToolCallSteps, formatToolLabel, getQueryPreview, type MessageToolCall, type BookMapEntry } from "@/components/tool-call-steps";
 import { createClient } from "@/lib/supabase/client";
 import {
   DropdownMenu,
@@ -250,6 +250,14 @@ export function AIAgentPanel({
   const sectionCacheRef = useRef<Map<string, { startPosition: string; pageBreaks: number[] | null; xhtmlBreaks: number[] | null; contentText: string | null }>>(new Map());
   /** Map of section_id → book info for library mode (which book each section belongs to). */
   const [sectionBookMap, setSectionBookMap] = useState<Map<string, SectionBookInfo>>(new Map());
+  /** Derived bookId → {label, author} map for tool call display. */
+  const bookIdMap = useMemo(() => {
+    const m = new Map<string, BookMapEntry>();
+    for (const info of sectionBookMap.values()) {
+      if (info.bookId && info.bookLabel) m.set(info.bookId, { label: info.bookLabel, author: info.bookAuthor });
+    }
+    return m.size > 0 ? m : undefined;
+  }, [sectionBookMap]);
   const supabase = createClient();
 
   const getSelectionSnapshot = useCallback((): SelectionSnapshot | null => {
@@ -2141,7 +2149,7 @@ export function AIAgentPanel({
                     <div className="flex flex-col gap-2 w-full">
                       {assistantMsg.toolCalls && assistantMsg.toolCalls.length > 0 && (
                         <div className="w-full text-left">
-                          <ToolCallSteps toolCalls={assistantMsg.toolCalls} />
+                          <ToolCallSteps toolCalls={assistantMsg.toolCalls} bookMap={bookIdMap} />
                         </div>
                       )}
                       <div className="w-full text-foreground select-text">
