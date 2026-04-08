@@ -216,6 +216,8 @@ function CardPreview({
 }) {
   const { entry, collectionName } = card;
   const contentRef = useRef<HTMLDivElement>(null);
+  const isHoveredRef = useRef(false);
+  const scrollPosRef = useRef(0); // shared between auto-scroll and manual scroll
 
   const toolSummary =
     entry.toolCalls.length > 0
@@ -262,16 +264,22 @@ function CardPreview({
       const clientHeight = container.clientHeight;
       if (scrollHeight <= clientHeight) return; // Content fits, no scrolling needed
 
-      let scrollPos = 0;
       let pauseUntil = 0;
 
       function tick() {
         if (cancelled) return;
 
+        // When hovered, user controls scrolling – sync our position from container
+        if (isHoveredRef.current) {
+          scrollPosRef.current = container.scrollTop;
+          animId = requestAnimationFrame(tick);
+          return;
+        }
+
         const now = Date.now();
         if (now >= pauseUntil) {
           // Smooth speed curve: decelerate near references, accelerate away
-          const viewCenter = scrollPos + clientHeight / 2;
+          const viewCenter = scrollPosRef.current + clientHeight / 2;
           let speedFactor = 1;
 
           for (const pos of refPositions) {
@@ -287,15 +295,15 @@ function CardPreview({
             }
           }
 
-          scrollPos += cardSpeed * speedFactor;
+          scrollPosRef.current += cardSpeed * speedFactor;
 
           // Loop back to top
-          if (scrollPos >= scrollHeight - clientHeight) {
-            scrollPos = 0;
+          if (scrollPosRef.current >= scrollHeight - clientHeight) {
+            scrollPosRef.current = 0;
             pauseUntil = now + PAUSE_AT_LOOP_MS;
           }
 
-          container.scrollTop = scrollPos;
+          container.scrollTop = scrollPosRef.current;
         }
 
         animId = requestAnimationFrame(tick);
@@ -312,7 +320,11 @@ function CardPreview({
   }, []);
 
   return (
-    <div className="group relative flex w-[340px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm sm:w-[400px]">
+    <div
+      className="group relative flex w-[340px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm sm:w-[400px]"
+      onMouseEnter={() => { isHoveredRef.current = true; }}
+      onMouseLeave={() => { isHoveredRef.current = false; }}
+    >
       {/* Header: collection badge */}
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 shrink-0">
         <Sparkles className="h-3 w-3 text-primary" />
@@ -337,11 +349,11 @@ function CardPreview({
         </div>
       )}
 
-      {/* Auto-scrolling answer content – references are clickable */}
+      {/* Answer content – auto-scrolls, manual scroll on hover */}
       <div className="relative flex-1 overflow-hidden">
         <div
           ref={contentRef}
-          className="overflow-hidden px-3 pb-3"
+          className="overflow-y-auto px-3 pb-3 scrollbar-none"
           style={{ height: `${CARD_CONTENT_HEIGHT}px` }}
         >
           <Markdown

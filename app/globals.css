@@ -3,6 +3,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide scrollbar but keep scroll functional */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Response wall – infinite horizontal scroll */
 @keyframes wall-scroll-left {
   0% { transform: translateX(0); }
