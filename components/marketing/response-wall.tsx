@@ -138,12 +138,10 @@ export function ResponseWall({
         )}
       </div>
 
-      {/* Scrolling wall – single row */}
+      {/* Scrolling wall – single row, CSS animation ticker */}
       <div className="relative overflow-hidden">
-        {/* Fade edges */}
         <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 sm:w-16 bg-gradient-to-r from-background to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 sm:w-16 bg-gradient-to-l from-background to-transparent" />
-
         <div className="py-2">
           <ScrollRow
             key={`wall-${activeFilter ?? "all"}`}
@@ -208,6 +206,7 @@ const SCROLL_SPEED_VARIANCE = 0.35; // ±35% random variation per card
 const SLOWDOWN_RANGE = 160; // px – start decelerating this far from a reference
 const MIN_SPEED_FACTOR = 0.04; // near-zero at the reference center (not a full stop)
 const PAUSE_AT_LOOP_MS = 1500; // pause before looping back to top
+const TOUCH_RESUME_DELAY_MS = 2000; // resume auto-scroll this long after touch ends
 
 function CardPreview({
   card,
@@ -216,8 +215,9 @@ function CardPreview({
 }) {
   const { entry, collectionName } = card;
   const contentRef = useRef<HTMLDivElement>(null);
-  const isHoveredRef = useRef(false);
+  const isInteractingRef = useRef(false); // true during hover or touch
   const scrollPosRef = useRef(0); // shared between auto-scroll and manual scroll
+  const touchResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const toolSummary =
     entry.toolCalls.length > 0
@@ -235,6 +235,13 @@ function CardPreview({
       const url = `/read/${bid}?refSection=${encodeURIComponent(ref.sectionId)}&refQuote=${encodeURIComponent(ref.quotedText ?? "")}`;
       window.open(url, "_blank", "noreferrer");
     }
+  }, []);
+
+  // Clean up touch resume timer on unmount
+  useEffect(() => {
+    return () => {
+      if (touchResumeTimer.current) clearTimeout(touchResumeTimer.current);
+    };
   }, []);
 
   // Vertical auto-scroll with pauses at navigable references
@@ -269,8 +276,8 @@ function CardPreview({
       function tick() {
         if (cancelled) return;
 
-        // When hovered, user controls scrolling – sync our position from container
-        if (isHoveredRef.current) {
+        // When user is interacting (hover or touch), they control scrolling
+        if (isInteractingRef.current) {
           scrollPosRef.current = container.scrollTop;
           animId = requestAnimationFrame(tick);
           return;
@@ -322,8 +329,18 @@ function CardPreview({
   return (
     <div
       className="group relative flex w-[340px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm sm:w-[400px]"
-      onMouseEnter={() => { isHoveredRef.current = true; }}
-      onMouseLeave={() => { isHoveredRef.current = false; }}
+      onMouseEnter={() => { isInteractingRef.current = true; }}
+      onMouseLeave={() => { isInteractingRef.current = false; }}
+      onTouchStart={() => {
+        if (touchResumeTimer.current) clearTimeout(touchResumeTimer.current);
+        isInteractingRef.current = true;
+      }}
+      onTouchEnd={() => {
+        // Resume auto-scroll after a delay so momentum scroll can finish
+        touchResumeTimer.current = setTimeout(() => {
+          isInteractingRef.current = false;
+        }, TOUCH_RESUME_DELAY_MS);
+      }}
     >
       {/* Header: collection badge */}
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 shrink-0">
