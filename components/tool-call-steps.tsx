@@ -1,9 +1,18 @@
 import { ChevronRight, Search, Sparkles, TextSearch, Globe, BookOpen } from "lucide-react";
 
+export interface ToolResultBook {
+  bookId: string;
+  book: string;
+  bookAuthor?: string | null;
+  indices: number[];
+}
+
 export interface MessageToolCall {
   toolName: string;
   args: Record<string, unknown>;
   id?: string;
+  /** Populated after tool returns — per-book summary of search results. */
+  resultSummary?: ToolResultBook[];
 }
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -48,6 +57,7 @@ function formatToolDetail(tc: MessageToolCall, bookMap?: Map<string, BookMapEntr
 
   if (toolName === "vector_search" || toolName === "text_search") {
     const parts: string[] = [];
+    // Always show query args
     const query = typeof args.query === "string" ? args.query : null;
     if (query) parts.push(`"${query}"`);
     const limit = typeof args.limit === "number" ? args.limit : null;
@@ -57,6 +67,24 @@ function formatToolDetail(tc: MessageToolCall, bookMap?: Map<string, BookMapEntr
       if (limit) detail.push(`limit ${limit}`);
       if (maxPerBook) detail.push(`max ${maxPerBook} per book`);
       parts.push(detail.join(", "));
+    }
+    // Append result summary if available
+    if (tc.resultSummary && tc.resultSummary.length > 0) {
+      parts.push(""); // blank line separator
+      for (const b of tc.resultSummary) {
+        // b.book may be "Title by Author" from formatBookLabel — strip author suffix
+        const rawTitle = b.book;
+        const title = b.bookAuthor && rawTitle.endsWith(` by ${b.bookAuthor}`)
+          ? rawTitle.slice(0, -` by ${b.bookAuthor}`.length)
+          : rawTitle;
+        const bookPart = b.bookAuthor ? `${b.bookAuthor} · ${title}` : title;
+        if (b.indices.length > 0) {
+          const sorted = [...b.indices].sort((a, c) => a - c);
+          parts.push(`${bookPart} — §${sorted.join(", §")}`);
+        } else {
+          parts.push(bookPart);
+        }
+      }
     }
     return parts.join("\n") || null;
   }
@@ -112,7 +140,7 @@ export function ToolCallSteps({ toolCalls, bookMap }: { toolCalls: MessageToolCa
             <summary className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer list-none [&::-webkit-details-marker]:hidden">
               <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
               <Icon className="h-3 w-3 shrink-0" />
-              <span className="font-medium">{formatToolLabel(tc.toolName)}</span>
+              <span className="font-medium shrink-0 whitespace-nowrap">{formatToolLabel(tc.toolName)}</span>
               {getQueryPreview(tc) && (
                 <span className="truncate">— {getQueryPreview(tc)}</span>
               )}

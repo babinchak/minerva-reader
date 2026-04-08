@@ -229,21 +229,25 @@ export async function* streamAgentToSSE(
         yield `data: ${JSON.stringify({ type: "status", message: "Processing results..." })}\n\n`;
         // Extract section data from tool results so the client can map section_id → page
         for (const toolMsg of updates.tools.messages) {
+          const toolCallId = (toolMsg as { tool_call_id?: string }).tool_call_id ?? undefined;
+          const toolName = (toolMsg as { name?: string }).name ?? undefined;
           const content = typeof (toolMsg as { content?: unknown }).content === "string"
             ? (toolMsg as { content: string }).content
             : null;
           if (!content) continue;
           try {
             const parsed = JSON.parse(content) as {
-              results?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; xhtml_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_author?: string | null; book_type?: string }>;
+              results?: Array<{ section_id?: string; section_index?: number; start_position?: string; page_breaks?: number[] | null; xhtml_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_author?: string | null; book_type?: string }>;
               passages?: Array<{
                 start_position?: string; page_breaks?: number[] | null; xhtml_breaks?: number[] | null; content_text?: string;
                 book_id?: string; book?: string; book_author?: string | null; book_type?: string;
                 chunks?: Array<{ section_id: string; section_index: number; char_offset: number }>;
               }>;
             };
-            // Handle vector_search results (each item has its own section_id)
+            // Handle vector_search / text_search results (each item has its own section_id)
             if (parsed.results) {
+              // Build per-book summary for the tool result
+              const bookSections = new Map<string, { bookId: string; book: string; bookAuthor?: string | null; indices: number[] }>();
               for (const item of parsed.results) {
                 if (item.section_id && item.start_position) {
                   refEnricher.addSection(item.section_id, {
@@ -265,7 +269,27 @@ export async function* streamAgentToSSE(
                   if (item.book_author) sectionEvent.bookAuthor = item.book_author;
                   if (item.book_type) sectionEvent.bookType = item.book_type;
                   yield `data: ${JSON.stringify(sectionEvent)}\n\n`;
+                  // Accumulate for summary
+                  const bk = item.book_id ?? "_unknown";
+                  if (!bookSections.has(bk)) {
+                    bookSections.set(bk, { bookId: bk, book: item.book ?? "Unknown", bookAuthor: item.book_author, indices: [] });
+                  }
+                  if (typeof item.section_index === "number") {
+                    bookSections.get(bk)!.indices.push(item.section_index);
+                  }
                 }
+              }
+              // Emit a summary event so the client can show results grouped by book
+              if (toolCallId && (toolName === "vector_search" || toolName === "text_search")) {
+                const summary = [...bookSections.values()].sort((a, b) =>
+                  (a.bookAuthor ?? "").localeCompare(b.bookAuthor ?? "") || a.book.localeCompare(b.book)
+                ).map((b) => ({
+                  bookId: b.bookId,
+                  book: b.book,
+                  bookAuthor: b.bookAuthor ?? null,
+                  indices: b.indices.sort((a, c) => a - c),
+                }));
+                yield `data: ${JSON.stringify({ type: "tool_result_summary", toolCallId, results: summary })}\n\n`;
               }
             }
             // Handle get_passages results (merged passages with chunks array)

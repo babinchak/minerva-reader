@@ -443,6 +443,26 @@ export function AIAgentPanel({
                     });
                   }
                 }
+              } else if (parsed.type === "tool_result_summary" && typeof parsed.toolCallId === "string") {
+                // Attach search result summary to the matching tool call
+                const summary = Array.isArray(parsed.results) ? parsed.results : [];
+                const tcId = parsed.toolCallId;
+                // Update in accumulated list
+                const matchedTc = accumulatedToolCalls.find((t) => t.id === tcId);
+                if (matchedTc) matchedTc.resultSummary = summary;
+                // Update in rendered messages
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId && msg.toolCalls
+                      ? {
+                          ...msg,
+                          toolCalls: msg.toolCalls.map((t) =>
+                            t.id === tcId ? { ...t, resultSummary: summary } : t
+                          ),
+                        }
+                      : msg
+                  )
+                );
               } else if (parsed.type === "status" && typeof parsed.message === "string") {
                 onStatus?.(parsed.message);
               } else if (parsed.type === "usage") {
@@ -768,6 +788,7 @@ export function AIAgentPanel({
                     toolName: tc.toolName as string,
                     args: (tc.args && typeof tc.args === "object" ? tc.args : {}) as Record<string, unknown>,
                     id: typeof tc.id === "string" ? tc.id : undefined,
+                    resultSummary: Array.isArray(tc.resultSummary) ? tc.resultSummary : undefined,
                   }))
               : undefined;
             return {
