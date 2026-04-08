@@ -121,6 +121,8 @@ export interface AIAgentPanelProps {
   aiScope?: { type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] };
   /** Called when user changes scope in the dropdown. */
   onAiScopeChange?: (scope: { type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] }) => void;
+  /** Pre-fill the composer with this question on mount. */
+  prefillQuestion?: string | null;
 }
 
 interface SummaryContext {
@@ -216,6 +218,7 @@ export function AIAgentPanel({
   collections: collectionsProp,
   aiScope,
   onAiScopeChange,
+  prefillQuestion,
 }: AIAgentPanelProps) {
   const lastAutoRunNonceRef = useRef<number | null>(null);
 
@@ -223,7 +226,7 @@ export function AIAgentPanel({
   const trimmedSelectedText = normalizedSelectedText.trim();
 
   const [messages, setMessages] = useState<AIMessage[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(prefillQuestion ?? "");
   const [isLoading, setIsLoading] = useState(false);
   const [bookTitle, setBookTitle] = useState<string>("");
   const [bookAuthor, setBookAuthor] = useState<string>("");

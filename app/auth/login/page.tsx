@@ -4,7 +4,14 @@ import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SiteFooter } from "@/components/site-footer";
 import { MinervaLogo } from "@/components/minerva-logo";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const params = await searchParams;
+  const nextUrl = params.next ?? undefined;
+
   return (
     <div className="flex min-h-svh w-full flex-col">
       <div className="flex-1 flex items-center justify-center p-6 md:p-10 relative">
@@ -16,7 +23,7 @@ export default function Page() {
             <MinervaLogo size={48} />
             <span className="text-xl font-semibold text-foreground">Minerva Reader</span>
           </Link>
-          <LoginForm />
+          <LoginForm nextUrl={nextUrl} />
         </div>
       </div>
       <SiteFooter className="py-6" />

@@ -71,7 +71,9 @@ export async function updateSession(request: NextRequest) {
     // Credits (returns freeBetaMode for anonymous; needed for Deep mode toggle)
     !request.nextUrl.pathname.startsWith("/api/credits") &&
     // Admin API (returns 401/403 for non-admin; needs to reach handler for JSON response)
-    !request.nextUrl.pathname.startsWith("/api/admin/")
+    !request.nextUrl.pathname.startsWith("/api/admin/") &&
+    // Collection demos (public landing page content)
+    !request.nextUrl.pathname.startsWith("/api/collection-demos")
   ) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();

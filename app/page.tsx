@@ -9,6 +9,7 @@ import { ServerSiteNav } from "@/components/server-site-nav";
 import { LibraryPageSkeleton } from "@/components/library-grid-skeleton";
 import { HomeContentSkeleton } from "@/components/home-content-skeleton";
 import { ResponseWall } from "@/components/marketing/response-wall";
+import { LandingSearch } from "@/components/marketing/landing-search";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
@@ -17,33 +18,39 @@ import { Suspense } from "react";
 import Image from "next/image";
 import { MinervaLogo } from "@/components/minerva-logo";
 
-async function SignedOutCollectionsPreview() {
+/** Fetch a small batch of full demo responses for the response wall seed. */
+async function fetchResponseWallSeed(limit = 15) {
   const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("collection_demos")
+    .select("id, question, tool_calls, answer, books, curated_collections!inner(name, slug)")
+    .limit(limit);
+
+  if (error || !data?.length) return [];
+
+  return (data as any[]).map((d) => ({
+    id: d.id as string,
+    question: d.question as string,
+    toolCalls: (d.tool_calls ?? []) as { toolName: string; args: Record<string, unknown> }[],
+    answer: d.answer as string,
+    books: (d.books ?? {}) as Record<string, { bookId: string; bookLabel: string; bookType: string | null }>,
+    collectionName: d.curated_collections?.name ?? "",
+    collectionSlug: d.curated_collections?.slug ?? "",
+  }));
+}
+
+async function fetchCollectionCards() {
+  const supabase = createServiceClient();
+  // Only fetch demo questions (no answer/books/tool_calls) — full data loaded on demand
   const { data: collections, error } = await supabase
     .from("curated_collections")
-    .select("id, name, description, slug, cover_image_path, sort_order, curated_collection_books(count), collection_demos(id, question, tool_calls, answer, books, sort_order)")
+    .select("id, name, description, slug, cover_image_path, sort_order, curated_collection_books(count), collection_demos(id, question, sort_order)")
     .order("sort_order");
 
-  if (error || !collections?.length) {
-    return (
-      <section className="w-full max-w-7xl rounded-xl border border-dashed border-border bg-muted/20 px-6 py-10 text-center">
-        <p className="text-sm text-muted-foreground">
-          Curated collections are coming soon. Check back later or sign up to upload your own books.
-        </p>
-        <div className="mt-4">
-          <Link
-            href="/browse"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-          >
-            Browse library
-          </Link>
-        </div>
-      </section>
-    );
-  }
+  if (error || !collections?.length) return [];
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const cards = collections.map((c) => ({
+  return collections.map((c) => ({
     id: c.id,
     name: c.name,
     description: c.description,
@@ -53,21 +60,13 @@ async function SignedOutCollectionsPreview() {
         ? `${supabaseUrl}/storage/v1/object/public/covers/${c.cover_image_path}`
         : null,
     bookCount: (c as any).curated_collection_books?.[0]?.count ?? 0,
-    demos: (((c as any).collection_demos ?? []) as { id: string; question: string; tool_calls: any; answer: string; books: any; sort_order: number }[])
+    demos: (((c as any).collection_demos ?? []) as { id: string; question: string; sort_order: number }[])
       .sort((a: any, b: any) => a.sort_order - b.sort_order)
       .map((d: any) => ({
+        id: d.id as string,
         question: d.question as string,
-        toolCalls: d.tool_calls as { toolName: string; args: Record<string, unknown> }[],
-        answer: d.answer as string,
-        books: (d.books ?? {}) as Record<string, { bookId: string; bookLabel: string; bookType: string | null }>,
       })),
   }));
-
-  return (
-    <section className="w-full max-w-7xl space-y-5">
-      <ResponseWall collections={cards} />
-    </section>
-  );
 }
 
 async function HomeContent({
@@ -109,36 +108,63 @@ async function HomeContent({
     );
   }
 
-  // User is not logged in - show landing page with response wall first, then hero
-  return (
-    <div className="w-full max-w-7xl space-y-12 sm:space-y-14">
-      {/* 1. Response wall — immediate wow factor */}
-      <SignedOutCollectionsPreview />
+  // User is not logged in — fetch collection data for landing page
+  const [cards, wallSeed] = await Promise.all([
+    fetchCollectionCards(),
+    fetchResponseWallSeed(),
+  ]);
 
-      {/* 2. In-book demo (existing hero) — shows the reading experience */}
+  return (
+    <div className="w-full max-w-7xl space-y-16 sm:space-y-20">
+      {/* 1. Hero headline + search box — the main event */}
+      <section className="flex flex-col items-center pt-8 sm:pt-12">
+        <div className="mb-2">
+          <Image
+            src="/hero-owl.png"
+            alt="Minerva Reader"
+            width={120}
+            height={120}
+            className="rounded-lg"
+            priority
+          />
+        </div>
+        <h1 className="max-w-3xl text-center text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+          Your books, answered.
+        </h1>
+        <p className="mt-4 max-w-2xl text-center text-base text-muted-foreground sm:text-lg">
+          Upload books, build collections, and get answers traced back to the
+          exact passage — with references you can click and verify.
+        </p>
+        <p className="mt-2 text-center text-sm text-muted-foreground/70">
+          150,000+ passages indexed and searchable
+        </p>
+
+        <div className="mt-8 w-full">
+          <LandingSearch collections={cards} />
+        </div>
+      </section>
+
+      {/* 2. Response wall — social proof / depth showcase */}
+      {wallSeed.length > 0 && (
+        <section className="w-full max-w-7xl space-y-5">
+          <ResponseWall seed={wallSeed} />
+        </section>
+      )}
+
+      {/* 3. In-book demo — shows the reading experience */}
       <section className="w-full rounded-[2rem] border border-border/70 bg-gradient-to-br from-background via-background to-muted/35 px-4 py-6 shadow-sm sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:items-center">
           <div className="space-y-6 text-left">
-            <div className="mb-2 flex justify-center">
-              <Image
-                src="/hero-owl.png"
-                alt="Minerva Reader - Owl with book wings"
-                width={320}
-                height={320}
-                className="rounded-lg"
-                priority
-              />
-            </div>
             <div className="space-y-4">
-              <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-                <span className="block">Explain any passage instantly.</span>
+              <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                <span className="block">Select any passage.</span>
                 <span className="mt-2 block text-muted-foreground">
-                  Search deeper across the book.
+                  Get an instant explanation in context.
                 </span>
-              </h1>
-              <p className="max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
-                Highlight any passage for an instant explanation, or use Deep
-                mode for broader questions across the book.
+              </h2>
+              <p className="max-w-xl text-base leading-7 text-muted-foreground">
+                Highlight text for a quick explanation, or switch to Deep mode
+                for agentic search across every section of the book.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -153,7 +179,7 @@ async function HomeContent({
               </Suspense>
             </div>
             <p className="max-w-lg text-sm leading-6 text-muted-foreground">
-              Sign up to upload your own books and save a personal library.
+              Sign up to upload your own books and build a personal library.
             </p>
           </div>
 

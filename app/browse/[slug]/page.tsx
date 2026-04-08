@@ -16,10 +16,14 @@ export const revalidate = 0;
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ prefill?: string; openChat?: string }>;
 }
 
-export default async function BrowseCollectionPage({ params }: PageProps) {
+export default async function BrowseCollectionPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
+  const sp = await searchParams;
+  const prefillQuestion = sp.prefill ?? null;
+  const shouldOpenChat = sp.openChat === "1";
 
   if (!hasEnvVars) {
     return (
@@ -111,6 +115,8 @@ export default async function BrowseCollectionPage({ params }: PageProps) {
                 <CuratedCollectionAI
                   collectionName={collection.name}
                   bookIds={books.map((b) => b.id)}
+                  prefillQuestion={prefillQuestion}
+                  forceOpen={shouldOpenChat}
                 />
               )}
             </div>

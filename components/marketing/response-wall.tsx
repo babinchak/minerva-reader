@@ -20,16 +20,6 @@ interface DemoChatEntry {
   >;
 }
 
-interface CollectionInfo {
-  id: string;
-  name: string;
-  description: string | null;
-  slug: string;
-  coverUrl: string | null;
-  bookCount: number;
-  demos: DemoChatEntry[];
-}
-
 /** A single card in the wall — flattened from collection + demo. */
 interface ResponseCard {
   /** Unique key for dedup (demo row id, or synthetic for SSR seed). */
@@ -68,6 +58,29 @@ function buildSectionBookMap(
   return map.size > 0 ? map : undefined;
 }
 
+/** Convert API demos to ResponseCards, deduping UIDs via the seen set. */
+function demosToCards(demos: ApiDemo[], seen: Set<string>): ResponseCard[] {
+  return demos.map((d) => {
+    let uid = d.id;
+    let suffix = 1;
+    while (seen.has(uid)) {
+      uid = `${d.id}-${suffix++}`;
+    }
+    seen.add(uid);
+    return {
+      uid,
+      collectionName: d.collectionName,
+      collectionSlug: d.collectionSlug,
+      entry: {
+        question: d.question,
+        toolCalls: d.toolCalls,
+        answer: d.answer,
+        books: d.books,
+      },
+    };
+  });
+}
+
 /** Fisher-Yates shuffle (in place). */
 function shuffle<T>(arr: T[]): T[] {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -103,71 +116,40 @@ async function fetchDemoBatch(
 /* ------------------------------------------------------------------ */
 
 export function ResponseWall({
-  collections,
+  seed,
 }: {
-  collections: CollectionInfo[];
+  seed: ApiDemo[];
 }) {
-  // Build initial seed cards from server data
-  const seedCards: ResponseCard[] = useMemo(
-    () =>
-      shuffle(
-        collections.flatMap((c) =>
-          c.demos.map((entry, i) => ({
-            uid: `seed-${c.slug}-${i}`,
-            collectionName: c.name,
-            collectionSlug: c.slug,
-            entry,
-          }))
-        )
-      ),
-    [collections]
+  const seenIdsRef = useRef<Set<string>>(new Set());
+
+  // Build initial cards from server-provided seed (small batch, ~15 items)
+  const seedCards = useMemo(
+    () => shuffle(demosToCards(seed, seenIdsRef.current)),
+    [seed]
   );
 
-  // Client-managed card pool — starts with seed, grows via API fetches
   const [cardPool, setCardPool] = useState<ResponseCard[]>(seedCards);
   const fetchingRef = useRef(false);
-  const seenIdsRef = useRef<Set<string>>(new Set());
 
   // Called by ScrollRow when it's approaching the end of its cards
   const handleNeedMore = useCallback(() => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
-    // Collect IDs of recently shown cards to try to avoid immediate repeats
     const recentIds = cardPool
       .map((c) => c.uid)
-      .filter((id) => !id.startsWith("seed-"))
       .slice(-20);
 
     fetchDemoBatch(recentIds).then((demos) => {
       if (demos.length > 0) {
-        const newCards: ResponseCard[] = demos.map((d) => {
-          // Generate a unique uid per fetch to avoid key collisions
-          let uid = d.id;
-          let suffix = 1;
-          while (seenIdsRef.current.has(uid)) {
-            uid = `${d.id}-${suffix++}`;
-          }
-          seenIdsRef.current.add(uid);
-          return {
-            uid,
-            collectionName: d.collectionName,
-            collectionSlug: d.collectionSlug,
-            entry: {
-              question: d.question,
-              toolCalls: d.toolCalls,
-              answer: d.answer,
-              books: d.books,
-            },
-          };
-        });
+        const newCards = demosToCards(demos, seenIdsRef.current);
         setCardPool((prev) => [...prev, ...shuffle(newCards)]);
       }
       fetchingRef.current = false;
     });
   }, [cardPool]);
 
-  if (seedCards.length === 0) return null;
+  if (cardPool.length === 0) return null;
 
   return (
     <section className="w-full space-y-4">
@@ -176,11 +158,10 @@ export function ResponseWall({
           AI-powered reading
         </p>
         <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
-          See Minerva in action
+          Real answers from real books
         </h2>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground sm:text-base">
-          Real AI responses across curated book collections. Every reference is
-          clickable.
+          Every reference is clickable and traced to the exact passage.
         </p>
       </div>
 

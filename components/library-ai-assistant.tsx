@@ -22,6 +22,8 @@ interface LibraryAIAssistantProps {
   onForceOpenConsumed?: () => void;
   /** Custom label for the trigger button. Defaults to "Ask across library". */
   buttonLabel?: string;
+  /** Pre-fill the AI composer with this question. */
+  prefillQuestion?: string | null;
 }
 
 export function LibraryAIAssistant({
@@ -32,6 +34,7 @@ export function LibraryAIAssistant({
   forceOpen,
   onForceOpenConsumed,
   buttonLabel = "Ask across library",
+  prefillQuestion,
 }: LibraryAIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -84,6 +87,7 @@ export function LibraryAIAssistant({
               onAiScopeChange={onAiScopeChange}
               className="flex-1 flex flex-col min-h-0"
               showHeader={false}
+              prefillQuestion={prefillQuestion}
             />
           </div>
         )}
@@ -122,6 +126,7 @@ export function LibraryAIAssistant({
             onAiScopeChange={onAiScopeChange}
             className="h-full w-full flex flex-col min-w-0"
             onClose={() => setIsOpen(false)}
+            prefillQuestion={prefillQuestion}
           />
         </div>
       )}

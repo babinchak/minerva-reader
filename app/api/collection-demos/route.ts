@@ -6,12 +6,42 @@ import { NextRequest, NextResponse } from "next/server";
  * Used by the landing page ResponseWall for continuous rotation.
  *
  * Query params:
+ *   id     – fetch a single demo by ID (returns { demo } instead of { demos })
  *   limit  – batch size (default 20, max 50)
  *   exclude – comma-separated demo IDs to exclude (avoids immediate repeats)
  *   collection – optional collection slug filter
  */
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
+
+  // Single-demo fetch by ID
+  const demoId = sp.get("id");
+  if (demoId) {
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from("collection_demos")
+      .select("id, question, tool_calls, answer, books, curated_collections!inner(name, slug)")
+      .eq("id", demoId)
+      .single();
+
+    if (error || !data) {
+      return NextResponse.json({ error: "Demo not found" }, { status: 404 });
+    }
+
+    const d = data as any;
+    return NextResponse.json({
+      demo: {
+        id: d.id,
+        question: d.question,
+        toolCalls: d.tool_calls ?? [],
+        answer: d.answer,
+        books: d.books ?? {},
+        collectionName: d.curated_collections?.name ?? "",
+        collectionSlug: d.curated_collections?.slug ?? "",
+      },
+    });
+  }
+
   const limit = Math.min(parseInt(sp.get("limit") ?? "20", 10) || 20, 50);
   const excludeRaw = sp.get("exclude") ?? "";
   const excludeIds = excludeRaw

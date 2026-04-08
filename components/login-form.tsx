@@ -19,8 +19,9 @@ import { useState } from "react";
 
 export function LoginForm({
   className,
+  nextUrl,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}: React.ComponentPropsWithoutRef<"div"> & { nextUrl?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -33,10 +34,13 @@ export function LoginForm({
     setIsGoogleLoading(true);
     setError(null);
 
+    const callbackUrl = nextUrl
+      ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextUrl)}`
+      : `${window.location.origin}/auth/callback`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl,
       },
     });
 
@@ -58,7 +62,7 @@ export function LoginForm({
         password,
       });
       if (error) throw error;
-      router.push("/");
+      router.push(nextUrl ?? "/");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
