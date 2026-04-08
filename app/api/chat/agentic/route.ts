@@ -57,6 +57,7 @@ const LIBRARY_SYSTEM_PROMPT =
   "Supports `max_per_book` to cap results from any single book (use 2-3 when exploring broadly across books).\n" +
   "- text_search: keyword search across all books. Also supports `max_per_book`.\n" +
   "- web_search: search the web\n" +
+  "Prefer vector_search for most questions; use text_search only when the user needs exact keyword or phrase matches (e.g. a specific term, name, or quote).\n" +
   "\n## Searching across books\n" +
   "Choose limit and max_per_book based on the question type:\n" +
   "- **Specific book question**: `limit: 10`, omit max_per_book for deeper results from that book.\n" +
