@@ -1358,6 +1358,7 @@ export function AIAgentPanel({
             bookId: bookId ?? undefined,
             bookIds: isLibraryMode ? bookIds : undefined,
             chatId: chatId ?? undefined,
+            scopeLabel: isLibraryMode && aiScope?.type === "collection" ? `collection "${aiScope.name}"` : undefined,
           })
         : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 
@@ -1706,6 +1707,7 @@ export function AIAgentPanel({
             bookId: bookId ?? undefined,
             bookIds: isLibraryMode ? bookIds : undefined,
             chatId: chatId ?? undefined,
+            scopeLabel: isLibraryMode && aiScope?.type === "collection" ? `collection "${aiScope.name}"` : undefined,
           })
         : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 

@@ -45,14 +45,15 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- For long quotes, use … to skip less important sections in the middle. Keep the opening and closing verbatim.";
 
 const LIBRARY_SYSTEM_PROMPT =
-  "You are a helpful reading assistant with access to the user's book library. Respond using GitHub-flavored Markdown (GFM).\n" +
+  "You are a helpful reading assistant with access to the user's book {scope}. Respond using GitHub-flavored Markdown (GFM).\n" +
   "- Use headings, bullet lists, and tables when helpful.\n" +
   "- Use short section headings (e.g. ###) to break up the answer.\n" +
   "- Bold the key terms and the most meaningful phrases.\n" +
   "- Use fenced code blocks with a language tag for code.\n" +
   "- Do NOT wrap the entire response in a single code block.\n" +
   "- Avoid raw HTML; prefer Markdown.\n" +
-  "\nYou have access to tools that search across ALL books in the user's library:\n" +
+  "- Do NOT begin your response with a \"Short answer\" or summary line. Dive straight into the substance.\n" +
+  "\nYou have access to tools that search across ALL books in the user's {scope}:\n" +
   "- list_books: see all available books (title, author, book_id). Call this if you need to know what's in the collection.\n" +
   "- vector_search: semantic search — returns full text chunks (~1200 chars) with section_index. " +
   "Supports `max_per_book` to cap results from any single book (use 2-3 when exploring broadly across books).\n" +
@@ -106,8 +107,8 @@ export async function POST(req: NextRequest) {
     const serviceSupabase = createServiceClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const body = (await req.json()) as { messages?: unknown; bookId?: string; bookIds?: string[]; chatId?: string };
-    const { messages: rawMessages, bookId, bookIds, chatId } = body;
+    const body = (await req.json()) as { messages?: unknown; bookId?: string; bookIds?: string[]; chatId?: string; scopeLabel?: string };
+    const { messages: rawMessages, bookId, bookIds, chatId, scopeLabel } = body;
     const isLibraryMode = Array.isArray(bookIds) && bookIds.length > 0;
 
     if (!rawMessages || !Array.isArray(rawMessages)) {
@@ -216,6 +217,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Build book list for library mode system prompt (up to 200 books)
+    const scope = scopeLabel || "library";
     let bookListBlock = "";
     if (isLibraryMode && validatedBookIds && validatedBookIds.length <= 200) {
       const { data: booksMeta } = await serviceSupabase
@@ -227,7 +229,7 @@ export async function POST(req: NextRequest) {
           const label = b.title && b.author ? `${b.title} by ${b.author}` : (b.title || "Unknown title");
           return `- [${b.id}] ${label}`;
         });
-        bookListBlock = `\n\n## Books in this collection (${booksMeta.length})\n${lines.join("\n")}`;
+        bookListBlock = `\n\n## Books in this ${scope} (${booksMeta.length})\n${lines.join("\n")}`;
       }
     }
 
@@ -249,7 +251,7 @@ export async function POST(req: NextRequest) {
       model,
       bookIds: validatedBookIds,
     });
-    const systemPrompt = (isLibraryMode ? LIBRARY_SYSTEM_PROMPT : MARKDOWN_SYSTEM_PROMPT) + bookListBlock;
+    const systemPrompt = (isLibraryMode ? LIBRARY_SYSTEM_PROMPT.replace(/\{scope\}/g, scope) : MARKDOWN_SYSTEM_PROMPT) + bookListBlock;
     const initialState = {
       messages: [new SystemMessage(systemPrompt), ...langchainMessages],
     };
