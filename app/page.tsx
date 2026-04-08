@@ -8,7 +8,7 @@ import { HeroReplay } from "@/components/marketing/hero-replay";
 import { ServerSiteNav } from "@/components/server-site-nav";
 import { LibraryPageSkeleton } from "@/components/library-grid-skeleton";
 import { HomeContentSkeleton } from "@/components/home-content-skeleton";
-import { CollectionDemoSection } from "@/components/marketing/collection-demo-section";
+import { ResponseWall } from "@/components/marketing/response-wall";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
@@ -66,28 +66,7 @@ async function SignedOutCollectionsPreview() {
 
   return (
     <section className="w-full max-w-7xl space-y-5">
-      <div className="flex flex-col gap-3 text-left sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            Start reading now
-          </p>
-          <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
-            Curated Collections
-          </h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Explore curated collections of public domain books you can read and discuss
-            with AI. Sign up to upload your own.
-          </p>
-        </div>
-        <Link
-          href="/browse"
-          className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-        >
-          Explore all collections
-        </Link>
-      </div>
-
-      <CollectionDemoSection collections={cards} />
+      <ResponseWall collections={cards} />
     </section>
   );
 }
@@ -131,9 +110,13 @@ async function HomeContent({
     );
   }
 
-  // User is not logged in - show landing page with browse CTA
+  // User is not logged in - show landing page with response wall first, then hero
   return (
     <div className="w-full max-w-7xl space-y-12 sm:space-y-14">
+      {/* 1. Response wall — immediate wow factor */}
+      <SignedOutCollectionsPreview />
+
+      {/* 2. In-book demo (existing hero) — shows the reading experience */}
       <section className="w-full rounded-[2rem] border border-border/70 bg-gradient-to-br from-background via-background to-muted/35 px-4 py-6 shadow-sm sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:items-center">
           <div className="space-y-6 text-left">
@@ -178,8 +161,6 @@ async function HomeContent({
           <HeroReplay />
         </div>
       </section>
-
-      <SignedOutCollectionsPreview />
     </div>
   );
 }
