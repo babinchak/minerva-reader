@@ -1114,6 +1114,9 @@ export function AIAgentPanel({
         sendPositionLabel = formatted.label;
         sendPositionTitle = formatted.title;
       }
+    } else if (isLibraryMode) {
+      sendPositionLabel = aiScope?.type === "collection" ? aiScope.name : "Library";
+      sendPositionTitle = aiScope?.type === "collection" ? `Collection: ${aiScope.name}` : "Library";
     } else {
       sendPositionLabel = "(View)";
       sendPositionTitle = "EPUB visible context";
