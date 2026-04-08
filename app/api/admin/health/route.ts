@@ -21,6 +21,8 @@ type Issue = {
   resourceName?: string;
 };
 
+export const maxDuration = 60;
+
 export async function GET() {
   try {
     const supabase = await createClient();
