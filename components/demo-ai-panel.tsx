@@ -12,12 +12,14 @@ import { cn } from "@/lib/utils";
 
 export interface DemoAIPanelProps {
   demoEntries: DemoChatEntry[];
+  autoPlayEntry?: DemoChatEntry | null;
   onClose?: () => void;
   className?: string;
 }
 
 export function DemoAIPanel({
   demoEntries,
+  autoPlayEntry,
   onClose,
   className,
 }: DemoAIPanelProps) {
@@ -104,6 +106,14 @@ export function DemoAIPanel({
     [isStreaming, scrollToBottom]
   );
 
+  // Auto-play entry on mount if provided
+  useEffect(() => {
+    if (autoPlayEntry) {
+      playEntry(autoPlayEntry);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -132,31 +142,6 @@ export function DemoAIPanel({
     }
   }, []);
 
-  // Which questions are still available (not yet played)
-  const playedQuestions = new Set(playedEntries.map((e) => e.question));
-  const remainingEntries = demoEntries.filter((e) => !playedQuestions.has(e.question));
-
-  const questionChips = (
-    <div className="space-y-2">
-      {remainingEntries.map((entry) => (
-        <button
-          key={entry.question}
-          type="button"
-          disabled={isStreaming}
-          onClick={() => playEntry(entry)}
-          className={cn(
-            "w-full text-left rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm transition-colors",
-            isStreaming
-              ? "opacity-50 cursor-not-allowed"
-              : "hover:bg-accent hover:border-accent-foreground/20"
-          )}
-        >
-          {entry.question}
-        </button>
-      ))}
-    </div>
-  );
-
   return (
     <div className={cn("flex flex-col bg-background", className)}>
       {/* Header */}
@@ -183,12 +168,11 @@ export function DemoAIPanel({
 
       {/* Messages area */}
       {playedEntries.length === 0 ? (
-        <div className="flex-1 flex flex-col justify-start pt-6 px-4 min-h-0 overflow-y-auto">
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground text-center">
-              Try asking Minerva about this book
-            </p>
-            {questionChips}
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0">
+          <div className="flex gap-1">
+            <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
+            <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
+            <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
           </div>
         </div>
       ) : (
@@ -259,12 +243,6 @@ export function DemoAIPanel({
             );
           })}
 
-          {/* Remaining question chips after messages */}
-          {!isStreaming && remainingEntries.length > 0 && (
-            <div className="pt-2">
-              {questionChips}
-            </div>
-          )}
         </div>
       )}
 

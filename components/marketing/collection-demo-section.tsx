@@ -27,6 +27,7 @@ export function CollectionDemoSection({
   collections: CollectionInfo[];
 }) {
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
+  const [autoPlayEntry, setAutoPlayEntry] = useState<DemoChatEntry | null>(null);
   const activeCollection = collections.find((c) => c.slug === activeSlug);
   const activeEntries = activeCollection?.demos;
 
@@ -54,7 +55,10 @@ export function CollectionDemoSection({
                     <button
                       key={entry.question}
                       type="button"
-                      onClick={() => setActiveSlug(c.slug)}
+                      onClick={() => {
+                        setActiveSlug(c.slug);
+                        setAutoPlayEntry(entry);
+                      }}
                       className="w-full text-left rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm transition-colors hover:bg-accent hover:border-accent-foreground/20"
                     >
                       {entry.question}
@@ -71,8 +75,10 @@ export function CollectionDemoSection({
       {activeSlug && activeEntries && activeEntries.length > 0 && (
         <div className="!mt-0 fixed top-0 right-0 z-50 h-full w-[400px] border-l border-border bg-background shadow-lg flex flex-col">
           <DemoAIPanel
+            key={`${activeSlug}-${autoPlayEntry?.question ?? ""}`}
             demoEntries={activeEntries}
-            onClose={() => setActiveSlug(null)}
+            autoPlayEntry={autoPlayEntry}
+            onClose={() => { setActiveSlug(null); setAutoPlayEntry(null); }}
             className="h-full w-full flex flex-col min-w-0"
           />
         </div>
