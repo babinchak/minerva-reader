@@ -128,15 +128,12 @@ export async function vectorSearchMulti(
 
     const supabase = createServiceClient();
 
-    const rpcParams: Record<string, unknown> = {
+    const { data, error } = await supabase.rpc("match_embedding_sections_multi", {
       query_embedding: JSON.stringify(queryVector),
       match_book_ids: bookIds,
       match_count: topK,
-    };
-    if (options?.maxPerBook != null) {
-      rpcParams.max_per_book = Math.max(1, options.maxPerBook);
-    }
-    const { data, error } = await supabase.rpc("match_embedding_sections_multi", rpcParams);
+      max_per_book: options?.maxPerBook != null ? Math.max(1, options.maxPerBook) : topK,
+    });
 
     if (error) {
       console.error("[vector-search-multi] RPC error:", error);
