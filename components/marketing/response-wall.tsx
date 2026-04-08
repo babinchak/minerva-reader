@@ -209,7 +209,6 @@ function ScrollRow({
   const trackRef = useRef<HTMLDivElement>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   const needMoreCalledRef = useRef(false);
-  // Track the card count that was used when needMore was last called
   const lastNeedMoreCountRef = useRef(0);
 
   // Detect narrow viewport → glide mode
@@ -316,7 +315,8 @@ function ScrollRow({
         const eased = easeInOutCubic(t);
         const fromX = -currentIndex * cardWidth + offsetToCenter;
         const toX = -(currentIndex + 1) * cardWidth + offsetToCenter;
-        track!.style.transform = `translateX(${fromX + (toX - fromX) * eased}px)`;
+        const currentX = fromX + (toX - fromX) * eased;
+        track!.style.transform = `translateX(${currentX}px)`;
 
         if (t >= 1) {
           currentIndex++;
@@ -388,12 +388,26 @@ function CardPreview({
   card: ResponseCard;
 }) {
   const { entry, collectionName } = card;
+  const cardRootRef = useRef<HTMLDivElement>(null);
   const clipRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const isInteractingRef = useRef(false);
+  const isVisibleRef = useRef(false);
   const scrollPosRef = useRef(0);
   const touchResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasInteractingRef = useRef(false);
+
+  // Only run rAF when the card is near the viewport
+  useEffect(() => {
+    const el = cardRootRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { isVisibleRef.current = entry.isIntersecting; },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const toolSummary =
     entry.toolCalls.length > 0
@@ -449,6 +463,12 @@ function CardPreview({
 
       function tick() {
         if (cancelled) return;
+
+        // Skip all work when card is off-screen
+        if (!isVisibleRef.current) {
+          animId = requestAnimationFrame(tick);
+          return;
+        }
 
         const interacting = isInteractingRef.current;
         const wasInteracting = wasInteractingRef.current;
@@ -519,6 +539,7 @@ function CardPreview({
 
   return (
     <div
+      ref={cardRootRef}
       className="group relative flex w-[340px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm sm:w-[400px]"
       onMouseEnter={() => { isInteractingRef.current = true; }}
       onMouseLeave={() => { isInteractingRef.current = false; }}
