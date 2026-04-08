@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BookOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AIAgentPanel } from "@/components/ai-agent-pane";
+import { useResizePane } from "@/lib/use-resize-pane";
 import type { AIScope } from "@/components/library-ai-assistant";
 
 interface CollectionItem {
@@ -20,6 +21,7 @@ interface CollectionItem {
 
 export function BrowseCollectionsGrid({ collections }: { collections: CollectionItem[] }) {
   const [aiCollection, setAiCollection] = useState<CollectionItem | null>(null);
+  const { width: paneWidth, handleProps } = useResizePane();
 
   const scope: AIScope | undefined = aiCollection
     ? { type: "collection", id: aiCollection.id, name: aiCollection.name, bookIds: aiCollection.bookIds }
@@ -76,7 +78,17 @@ export function BrowseCollectionsGrid({ collections }: { collections: Collection
 
       {aiCollection && scope && typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed inset-y-0 right-0 z-[60] w-[400px] border-l border-border bg-background shadow-lg flex flex-col">
+          <div
+            className="fixed inset-y-0 right-0 z-[60] border-l border-border bg-background shadow-lg flex flex-col"
+            style={{ width: `${paneWidth}px` }}
+          >
+            <div
+              className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
+              {...handleProps}
+              aria-label="Resize AI panel"
+              role="separator"
+              aria-orientation="vertical"
+            />
             <AIAgentPanel
               bookIds={aiCollection.bookIds}
               aiScope={scope}

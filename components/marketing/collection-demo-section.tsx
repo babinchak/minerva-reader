@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CollectionCard } from "@/components/collection-card";
 import { DemoAIPanel } from "@/components/demo-ai-panel";
+import { useResizePane } from "@/lib/use-resize-pane";
 
 export interface DemoChatEntry {
   question: string;
@@ -28,6 +29,7 @@ export function CollectionDemoSection({
 }) {
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [autoPlayEntry, setAutoPlayEntry] = useState<DemoChatEntry | null>(null);
+  const { width: paneWidth, handleProps } = useResizePane();
   const activeCollection = collections.find((c) => c.slug === activeSlug);
   const activeEntries = activeCollection?.demos;
 
@@ -73,7 +75,17 @@ export function CollectionDemoSection({
 
       {/* Docked right-side AI pane — matches library AI assistant */}
       {activeSlug && activeEntries && activeEntries.length > 0 && (
-        <div className="!mt-0 fixed top-0 right-0 z-50 h-full w-[400px] border-l border-border bg-background shadow-lg flex flex-col">
+        <div
+          className="!mt-0 fixed top-0 right-0 z-50 h-full border-l border-border bg-background shadow-lg flex flex-col"
+          style={{ width: `${paneWidth}px` }}
+        >
+          <div
+            className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
+            {...handleProps}
+            aria-label="Resize AI panel"
+            role="separator"
+            aria-orientation="vertical"
+          />
           <DemoAIPanel
             key={`${activeSlug}-${autoPlayEntry?.question ?? ""}`}
             demoEntries={activeEntries}

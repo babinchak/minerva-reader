@@ -6,6 +6,7 @@ import { AIBottomDrawer } from "@/components/ai-bottom-drawer";
 import { AIAgentPanel } from "@/components/ai-agent-pane";
 import { DemoAIPanel } from "@/components/demo-ai-panel";
 import { useIsMobile } from "@/lib/use-media-query";
+import { useResizePane } from "@/lib/use-resize-pane";
 import type { DemoChatEntry } from "@/lib/demo-chat-data";
 
 export interface AIAssistantProps {
@@ -55,10 +56,6 @@ export interface AIAssistantProps {
   demoMode?: boolean;
   /** Canned demo Q&A entries for demo mode. */
   demoEntries?: DemoChatEntry[];
-}
-
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
 }
 
 export function AIAssistant(props: AIAssistantProps) {
@@ -112,21 +109,7 @@ function DesktopDemoAssistant({
   onNavigateToRef,
 }: AIAssistantProps) {
   const [isOpen, setIsOpen] = useState(true);
-  const [dockWidth, setDockWidth] = useState(384);
-  const resizingRef = useRef<{ startX: number; startW: number; pointerId: number } | null>(null);
-
-  const startResize = (e: React.PointerEvent) => {
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    resizingRef.current = { startX: e.clientX, startW: dockWidth, pointerId: e.pointerId };
-  };
-  const moveResize = (e: React.PointerEvent) => {
-    const r = resizingRef.current;
-    if (!r || r.pointerId !== e.pointerId) return;
-    setDockWidth(clamp(r.startW + (r.startX - e.clientX), 280, 640));
-  };
-  const endResize = (e: React.PointerEvent) => {
-    if (resizingRef.current?.pointerId === e.pointerId) resizingRef.current = null;
-  };
+  const { width: dockWidth, handleProps } = useResizePane(384);
 
   return (
     <div
@@ -135,10 +118,7 @@ function DesktopDemoAssistant({
     >
       <div
         className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
-        onPointerDown={startResize}
-        onPointerMove={moveResize}
-        onPointerUp={endResize}
-        onPointerCancel={endResize}
+        {...handleProps}
         aria-label="Resize AI panel"
         role="separator"
         aria-orientation="vertical"
@@ -213,26 +193,7 @@ function DesktopAIAssistant({
     setIsOpen(true);
   }, [requestOpen]);
 
-  const [dockWidth, setDockWidth] = useState(384); // 24rem
-  const resizingRef = useRef<{ startX: number; startW: number; pointerId: number } | null>(null);
-
-  const startResize = (e: React.PointerEvent) => {
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    resizingRef.current = { startX: e.clientX, startW: dockWidth, pointerId: e.pointerId };
-  };
-
-  const moveResize = (e: React.PointerEvent) => {
-    const r = resizingRef.current;
-    if (!r || r.pointerId !== e.pointerId) return;
-    const delta = r.startX - e.clientX; // dragging left increases width
-    setDockWidth(clamp(r.startW + delta, 280, 640));
-  };
-
-  const endResize = (e: React.PointerEvent) => {
-    const r = resizingRef.current;
-    if (!r || r.pointerId !== e.pointerId) return;
-    resizingRef.current = null;
-  };
+  const { width: dockWidth, handleProps } = useResizePane(384);
 
   const handleActionComplete = useCallback(() => {
     if (openedViaRequestRunRef.current) {
@@ -274,10 +235,7 @@ function DesktopAIAssistant({
     >
       <div
         className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
-        onPointerDown={startResize}
-        onPointerMove={moveResize}
-        onPointerUp={endResize}
-        onPointerCancel={endResize}
+        {...handleProps}
         aria-label="Resize AI panel"
         role="separator"
         aria-orientation="vertical"

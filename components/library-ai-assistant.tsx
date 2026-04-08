@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Sparkles, X } from "lucide-react";
 import { AIAgentPanel } from "@/components/ai-agent-pane";
 import { useIsMobile } from "@/lib/use-media-query";
+import { useResizePane } from "@/lib/use-resize-pane";
 import type { CollectionSummary } from "@/components/collections-view";
 
 export type AIScope =
@@ -34,6 +35,7 @@ export function LibraryAIAssistant({
 }: LibraryAIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isMobile = useIsMobile();
+  const { width: paneWidth, handleProps } = useResizePane();
 
   // Handle force open from collection AI button
   useEffect(() => {
@@ -102,7 +104,17 @@ export function LibraryAIAssistant({
         </Button>
       )}
       {isOpen && (
-        <div className="fixed top-0 right-0 z-50 h-full w-[400px] border-l border-border bg-background shadow-lg flex flex-col">
+        <div
+          className="fixed top-0 right-0 z-50 h-full border-l border-border bg-background shadow-lg flex flex-col"
+          style={{ width: `${paneWidth}px` }}
+        >
+          <div
+            className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
+            {...handleProps}
+            aria-label="Resize AI panel"
+            role="separator"
+            aria-orientation="vertical"
+          />
           <AIAgentPanel
             bookIds={bookIds}
             collections={collections}
