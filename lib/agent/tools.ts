@@ -23,7 +23,7 @@ export function createAgentTools(
       }
       const { results, error } = await vectorSearch(bookId, query, limit ?? 10);
       if (error) {
-        return JSON.stringify({ results: [], error });
+        throw new Error(error);
       }
       // Fallback to text search when no embeddings exist (e.g. vectors_processed_at is null)
       if (results.length === 0) {
@@ -86,7 +86,7 @@ export function createAgentTools(
       }
       const { passages, error } = await getPassagesByRange(bookId, ranges, userId);
       if (error) {
-        return JSON.stringify({ passages: [], error });
+        throw new Error(error);
       }
       return JSON.stringify({
         passages: passages.map((p) => ({
@@ -128,7 +128,7 @@ export function createAgentTools(
         matchContextChars: 200,
       });
       if (error) {
-        return JSON.stringify({ results: [], error });
+        throw new Error(error);
       }
       return JSON.stringify({
         results: results.map((r) => ({
@@ -161,7 +161,7 @@ export function createAgentTools(
     async ({ query, max_results }: { query: string; max_results?: number }) => {
       const { results, error } = await webSearch(query, { maxResults: max_results ?? 5 });
       if (error) {
-        return JSON.stringify({ results: [], error });
+        throw new Error(error);
       }
       return JSON.stringify({
         results: results.map((r) => ({ title: r.title, url: r.url, content: r.content })),
@@ -219,7 +219,7 @@ export function createLibraryAgentTools(
         maxPerBook: max_per_book,
       });
       if (error) {
-        return JSON.stringify({ results: [], error });
+        throw new Error(error);
       }
       if (results.length === 0) {
         // Fallback to text search
@@ -292,7 +292,7 @@ export function createLibraryAgentTools(
       }
       const { passages, error } = await getPassagesByRangeMulti(ranges, userId, bookIds);
       if (error) {
-        return JSON.stringify({ passages: [], error });
+        throw new Error(error);
       }
       return JSON.stringify({
         passages: passages.map((p) => ({
@@ -338,7 +338,7 @@ export function createLibraryAgentTools(
         maxPerBook: max_per_book,
       });
       if (error) {
-        return JSON.stringify({ results: [], error });
+        throw new Error(error);
       }
       return JSON.stringify({
         results: results.map((r) => ({
@@ -378,7 +378,7 @@ export function createLibraryAgentTools(
     async ({ query, max_results }: { query: string; max_results?: number }) => {
       const { results, error } = await webSearch(query, { maxResults: max_results ?? 5 });
       if (error) {
-        return JSON.stringify({ results: [], error });
+        throw new Error(error);
       }
       return JSON.stringify({
         results: results.map((r) => ({ title: r.title, url: r.url, content: r.content })),
@@ -404,7 +404,7 @@ export function createLibraryAgentTools(
         .select("id, title, author, book_type")
         .in("id", bookIds);
       if (error) {
-        return JSON.stringify({ books: [], error: error.message });
+        throw new Error(error.message);
       }
       return JSON.stringify({
         books: (data ?? []).map((b: any) => ({
