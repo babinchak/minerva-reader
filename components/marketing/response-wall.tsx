@@ -310,10 +310,12 @@ function CardPreview({
   card: ResponseCard;
 }) {
   const { entry, collectionName } = card;
-  const contentRef = useRef<HTMLDivElement>(null);
+  const clipRef = useRef<HTMLDivElement>(null); // outer clip container (overflow hidden)
+  const innerRef = useRef<HTMLDivElement>(null); // inner content, moved via transform
   const isInteractingRef = useRef(false); // true during hover or touch
-  const scrollPosRef = useRef(0); // shared between auto-scroll and manual scroll
+  const scrollPosRef = useRef(0); // sub-pixel position for smooth auto-scroll
   const touchResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasInteractingRef = useRef(false); // edge detection for interaction transitions
 
   const toolSummary =
     entry.toolCalls.length > 0
@@ -341,9 +343,12 @@ function CardPreview({
   }, []);
 
   // Vertical auto-scroll with pauses at navigable references
+  // Uses CSS transform for sub-pixel smooth movement; switches to native
+  // scrollTop only while the user is interacting (hover/touch).
   useEffect(() => {
-    const container = contentRef.current;
-    if (!container) return;
+    const clip = clipRef.current;
+    const inner = innerRef.current;
+    if (!clip || !inner) return;
 
     let cancelled = false;
     let animId: number;
@@ -358,23 +363,47 @@ function CardPreview({
       if (cancelled) return;
 
       // Find all navigable reference elements (rendered as span[role="button"] by Markdown)
-      const refElements = container.querySelectorAll('span[role="button"]');
+      const refElements = inner.querySelectorAll('span[role="button"]');
       const refPositions = Array.from(refElements).map(
         (el) => (el as HTMLElement).offsetTop
       );
 
-      const scrollHeight = container.scrollHeight;
-      const clientHeight = container.clientHeight;
-      if (scrollHeight <= clientHeight) return; // Content fits, no scrolling needed
+      const contentHeight = inner.scrollHeight;
+      const viewHeight = CARD_CONTENT_HEIGHT;
+      const maxScroll = contentHeight - viewHeight;
+      if (maxScroll <= 0) return; // Content fits, no scrolling needed
 
       let pauseUntil = 0;
 
       function tick() {
         if (cancelled) return;
 
-        // When user is interacting (hover or touch), they control scrolling
-        if (isInteractingRef.current) {
-          scrollPosRef.current = container.scrollTop;
+        const interacting = isInteractingRef.current;
+        const wasInteracting = wasInteractingRef.current;
+
+        // Transition: auto-scroll → user interaction
+        if (interacting && !wasInteracting) {
+          // Switch to native scroll: remove transform, enable overflow, sync scrollTop
+          inner!.style.transform = "";
+          inner!.style.willChange = "";
+          clip!.style.overflowY = "auto";
+          clip!.scrollTop = scrollPosRef.current;
+          wasInteractingRef.current = true;
+        }
+
+        // Transition: user interaction → auto-scroll
+        if (!interacting && wasInteracting) {
+          // Read user's scroll position, switch back to transform mode
+          scrollPosRef.current = Math.min(clip!.scrollTop, maxScroll);
+          clip!.style.overflowY = "hidden";
+          clip!.scrollTop = 0;
+          inner!.style.willChange = "transform";
+          inner!.style.transform = `translateY(${-scrollPosRef.current}px)`;
+          wasInteractingRef.current = false;
+        }
+
+        // While user is interacting, just keep the loop alive
+        if (interacting) {
           animId = requestAnimationFrame(tick);
           return;
         }
@@ -382,14 +411,14 @@ function CardPreview({
         const now = Date.now();
         if (now >= pauseUntil) {
           // Smooth speed curve: decelerate near references, accelerate away
-          const viewCenter = scrollPosRef.current + clientHeight / 2;
+          const viewCenter = scrollPosRef.current + viewHeight / 2;
           let speedFactor = 1;
 
           for (const pos of refPositions) {
             const dist = Math.abs(pos - viewCenter);
             if (dist < SLOWDOWN_RANGE) {
               // Cosine ease: full speed at edges, near-zero at center
-              const t = dist / SLOWDOWN_RANGE; // 0 at ref center, 1 at range edge
+              const t = dist / SLOWDOWN_RANGE;
               const factor =
                 MIN_SPEED_FACTOR +
                 (1 - MIN_SPEED_FACTOR) *
@@ -401,17 +430,21 @@ function CardPreview({
           scrollPosRef.current += cardSpeed * speedFactor;
 
           // Loop back to top
-          if (scrollPosRef.current >= scrollHeight - clientHeight) {
+          if (scrollPosRef.current >= maxScroll) {
             scrollPosRef.current = 0;
             pauseUntil = now + PAUSE_AT_LOOP_MS;
           }
 
-          container.scrollTop = scrollPosRef.current;
+          // Sub-pixel smooth transform (GPU-composited)
+          inner!.style.transform = `translateY(${-scrollPosRef.current}px)`;
         }
 
         animId = requestAnimationFrame(tick);
       }
 
+      // Start in transform mode
+      inner.style.willChange = "transform";
+      clip.style.overflowY = "hidden";
       animId = requestAnimationFrame(tick);
     }, 400);
 
@@ -432,7 +465,6 @@ function CardPreview({
         isInteractingRef.current = true;
       }}
       onTouchEnd={() => {
-        // Resume auto-scroll after a delay so momentum scroll can finish
         touchResumeTimer.current = setTimeout(() => {
           isInteractingRef.current = false;
         }, TOUCH_RESUME_DELAY_MS);
@@ -462,18 +494,20 @@ function CardPreview({
         </div>
       )}
 
-      {/* Answer content – auto-scrolls, manual scroll on hover */}
+      {/* Answer content – auto-scrolls via transform, native scroll on hover */}
       <div className="relative flex-1 overflow-hidden">
         <div
-          ref={contentRef}
-          className="overflow-y-auto px-3 pb-3 scrollbar-none"
-          style={{ height: `${CARD_CONTENT_HEIGHT}px` }}
+          ref={clipRef}
+          className="px-3 pb-3 scrollbar-none"
+          style={{ height: `${CARD_CONTENT_HEIGHT}px`, overflowY: "hidden" }}
         >
-          <Markdown
-            content={entry.answer}
-            sectionBookMap={sectionBookMap}
-            onRefClick={handleRefClick}
-          />
+          <div ref={innerRef}>
+            <Markdown
+              content={entry.answer}
+              sectionBookMap={sectionBookMap}
+              onRefClick={handleRefClick}
+            />
+          </div>
         </div>
         {/* Top fade */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-card to-transparent" />
