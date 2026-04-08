@@ -20,10 +20,8 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- Use fenced code blocks with a language tag for code.\n" +
   "- Do NOT wrap the entire response in a single code block.\n" +
   "- Avoid raw HTML; prefer Markdown.\n" +
-  "\nYou have access to tools: vector_search (semantic search — returns full text chunks with section_index), get_passages (fetch merged text for chunk index ranges), text_search (keyword search in the book), and web_search (search the web). " +
-  "Use them when they would improve your answer. vector_search returns full chunks (~1200 chars) which may be sufficient to quote from directly. " +
-  "If text is cut off at a chunk boundary or you need more context, call get_passages with index ranges (e.g. if chunk 5 ends mid-sentence, request {start: 4, end: 6}). " +
-  "You can also answer directly from the context provided if it's sufficient.\n" +
+  "\nYou have access to tools: vector_search (semantic search — returns full text chunks with section_index), text_search (keyword search in the book), and web_search (search the web). " +
+  "Use them when they would improve your answer. You can also answer directly from the context provided if it's sufficient.\n" +
   "\n## Multi-search strategy\n" +
   "Most questions need only ONE well-crafted vector_search call. A broad thematic question like \"What role does doubt play in the pursuit of knowledge?\" should be a single search, not split into multiple similar searches.\n" +
   "Only use multiple parallel vector_search calls when the question has genuinely DISTINCT sides that need separate queries — i.e. a clear X vs Y, for vs against, or A compared to B structure where each side would match different passages. " +
@@ -57,11 +55,8 @@ const LIBRARY_SYSTEM_PROMPT =
   "{list_books_hint}" +
   "- vector_search: semantic search — returns full text chunks (~1200 chars) with section_index. " +
   "Supports `max_per_book` to cap results from any single book (use 2-3 when exploring broadly across books).\n" +
-  "- get_passages: fetch merged text for chunk index ranges (include book_id)\n" +
   "- text_search: keyword search across all books. Also supports `max_per_book`.\n" +
   "- web_search: search the web\n" +
-  "vector_search returns full chunks which may be sufficient to quote from directly. " +
-  "If text is cut off at a chunk boundary or you need more context, call get_passages with index ranges and book_id.\n" +
   "\n## Searching across books\n" +
   "Choose limit and max_per_book based on the question type:\n" +
   "- **Specific book question**: `limit: 10`, omit max_per_book for deeper results from that book.\n" +
