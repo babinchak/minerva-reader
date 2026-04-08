@@ -40,7 +40,7 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- The quoted text inside the link MUST be copied verbatim from the passage content_text. Do not paraphrase or alter it.\n" +
   "- Use the section_id exactly as it appears in the tool result.\n" +
   "- If a passage has no section_id, just use a regular blockquote instead.\n" +
-  "- For long quotes, use … to skip less important sections in the middle. Keep the opening and closing verbatim.";
+  "- Prefer short, complete quotes (1-2 sentences). Only use … to omit an irrelevant clause within a longer quote that is essential to the argument. Avoid ellipsis when a shorter complete quote would work.";
 
 const LIBRARY_SYSTEM_PROMPT =
   "You are a helpful reading assistant with access to the user's book {scope}. Respond using GitHub-flavored Markdown (GFM).\n" +
@@ -85,7 +85,7 @@ const LIBRARY_SYSTEM_PROMPT =
   "- The quoted text inside the link MUST be copied verbatim from the passage content_text. Do not paraphrase or alter it.\n" +
   "- Use the section_id exactly as it appears in the tool result.\n" +
   "- If a passage has no section_id, just use a regular blockquote instead.\n" +
-  "- For long quotes, use … to skip less important sections in the middle. Keep the opening and closing verbatim.\n" +
+  "- Prefer short, complete quotes (1-2 sentences). Only use … to omit an irrelevant clause within a longer quote that is essential to the argument. Avoid ellipsis when a shorter complete quote would work.\n" +
   "- Always state which book the quote is from before or after the reference.";
 
 type IncomingMessage = { role: "system" | "user" | "assistant"; content: string };
