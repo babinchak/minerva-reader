@@ -141,7 +141,7 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                     <span className="italic">{display}</span>
                   </span>
                   {(metaLine || newTabUrl) && (
-                    <span className="flex items-center gap-2 border-t border-border px-3 py-1 text-[11px] text-muted-foreground/70">
+                    <span className="flex items-center gap-2 border-t border-border px-3 py-0.5 text-[11px] text-muted-foreground/70">
                       {metaLine && <span className="truncate">{metaLine}</span>}
                       {newTabUrl && (
                         <a
