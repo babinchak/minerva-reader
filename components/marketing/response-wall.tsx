@@ -140,8 +140,8 @@ export function ResponseWall({
 
       {/* Scrolling wall – single row, CSS animation ticker */}
       <div className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 sm:w-16 bg-gradient-to-r from-background to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 sm:w-16 bg-gradient-to-l from-background to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden sm:block sm:w-10 bg-gradient-to-r from-background to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden sm:block sm:w-10 bg-gradient-to-l from-background to-transparent" />
         <div className="py-2">
           <ScrollRow
             key={`wall-${activeFilter ?? "all"}`}
@@ -158,6 +158,16 @@ export function ResponseWall({
 /*  ScrollRow – single infinite horizontal ticker                      */
 /* ------------------------------------------------------------------ */
 
+/* ---- Hold-and-glide constants ---- */
+const HOLD_DURATION_MS = 5000; // how long each card stays centered
+const GLIDE_DURATION_MS = 800; // S-curve transition between cards
+const CARD_GAP_PX = 16; // matches gap-4
+
+/** Cubic ease-in-out (S-curve) */
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
 function ScrollRow({
   cards,
   speed,
@@ -165,6 +175,10 @@ function ScrollRow({
   cards: ResponseCard[];
   speed: number;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [useGlideMode, setUseGlideMode] = useState(false);
+
   // Ensure enough cards to fill the viewport; repeat set if needed
   const minCards = Math.max(cards.length * 2, 6);
   const repeatedCards: ResponseCard[] = [];
@@ -174,13 +188,95 @@ function ScrollRow({
   // Double for seamless loop
   const displayCards = [...repeatedCards, ...repeatedCards];
 
+  // Detect narrow viewport → glide mode
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    function check() {
+      const w = container!.clientWidth;
+      // Card is 340px on mobile (sm:400px). If ≤1.5 cards fit, use glide.
+      setUseGlideMode(w < 340 * 1.5 + CARD_GAP_PX);
+    }
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
+  // Hold-and-glide JS animation for mobile
+  useEffect(() => {
+    const track = trackRef.current;
+    const container = containerRef.current;
+    if (!useGlideMode || !track || !container) return;
+
+    let cancelled = false;
+    let animId: number;
+
+    // Measure card width from first child
+    const firstCard = track.children[0] as HTMLElement | undefined;
+    if (!firstCard) return;
+    const cardWidth = firstCard.offsetWidth + CARD_GAP_PX;
+    const totalUniqueCards = repeatedCards.length; // half of displayCards
+
+    let currentIndex = 0;
+    let phase: "hold" | "glide" = "hold";
+    let phaseStart = performance.now();
+
+    // Center the first card
+    const containerWidth = container.clientWidth;
+    const offsetToCenter = (containerWidth - firstCard.offsetWidth) / 2;
+    track.style.transform = `translateX(${-currentIndex * cardWidth + offsetToCenter}px)`;
+
+    function tick(now: number) {
+      if (cancelled) return;
+      const elapsed = now - phaseStart;
+
+      if (phase === "hold") {
+        if (elapsed >= HOLD_DURATION_MS) {
+          phase = "glide";
+          phaseStart = now;
+        }
+      } else {
+        // Glide phase
+        const t = Math.min(elapsed / GLIDE_DURATION_MS, 1);
+        const eased = easeInOutCubic(t);
+        const fromX = -currentIndex * cardWidth + offsetToCenter;
+        const toX = -(currentIndex + 1) * cardWidth + offsetToCenter;
+        const x = fromX + (toX - fromX) * eased;
+        track!.style.transform = `translateX(${x}px)`;
+
+        if (t >= 1) {
+          currentIndex++;
+          // Seamless loop: jump back when we've scrolled through one set
+          if (currentIndex >= totalUniqueCards) {
+            currentIndex = 0;
+            track!.style.transform = `translateX(${-currentIndex * cardWidth + offsetToCenter}px)`;
+          }
+          phase = "hold";
+          phaseStart = now;
+        }
+      }
+
+      animId = requestAnimationFrame(tick);
+    }
+
+    animId = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(animId);
+    };
+  }, [useGlideMode, repeatedCards.length]);
+
   return (
-    <div className="flex overflow-hidden">
+    <div ref={containerRef} className="flex overflow-hidden">
       <div
+        ref={trackRef}
         className="flex shrink-0 gap-4"
-        style={{
-          animation: `wall-scroll-left ${speed}s linear infinite`,
-        }}
+        style={
+          useGlideMode
+            ? { willChange: "transform" }
+            : { animation: `wall-scroll-left ${speed}s linear infinite` }
+        }
       >
         {displayCards.map((card, i) => (
           <CardPreview
