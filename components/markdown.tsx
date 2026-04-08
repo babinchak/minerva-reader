@@ -114,10 +114,15 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                 : null;
               const pageNumber = ref.page ?? null;
               const positionNumber = ref.position ?? null;
-              const locationLabel = pageNumber != null ? `Page ${pageNumber}` : positionNumber != null ? `Position ${positionNumber}` : null;
+              const locationLabel = pageNumber != null ? `p. ${pageNumber}` : positionNumber != null ? `p. ${positionNumber}` : null;
               const handleContainerClick = isLibraryMode && newTabUrl
                 ? () => window.open(newTabUrl, "_blank", "noreferrer")
                 : () => onRefClick({ ...ref, quotedText: raw });
+              const metaParts: string[] = [];
+              if (locationLabel != null) metaParts.push(locationLabel);
+              if (isLibraryMode && sectionBook?.bookLabel) metaParts.push(sectionBook.bookLabel);
+              const metaLine = metaParts.join(" · ");
+
               return (
                 <span
                   role="button"
@@ -127,21 +132,19 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                   className="my-1.5 flex flex-col w-full rounded-md border border-border bg-muted/50 text-sm leading-relaxed text-foreground hover:bg-muted hover:border-primary/30 transition-colors break-words cursor-pointer"
                   title={isLibraryMode ? "Open this passage in a new tab" : "Jump to this passage in the book"}
                 >
-                  {isLibraryMode && sectionBook?.bookLabel && (
-                    <span className="px-3 pt-2 text-xs font-medium text-muted-foreground">{sectionBook.bookLabel}</span>
-                  )}
-                  {(locationLabel != null || newTabUrl) && (
-                    <span className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground">
-                      {locationLabel != null && (
-                        <span>{locationLabel}</span>
-                      )}
+                  <span className="px-3 py-2">
+                    <span className="italic">{display}</span>
+                  </span>
+                  {(metaLine || newTabUrl) && (
+                    <span className="flex items-center gap-2 border-t border-border px-3 py-1 text-[11px] text-muted-foreground/70">
+                      {metaLine && <span className="truncate">{metaLine}</span>}
                       {newTabUrl && (
                         <a
                           href={newTabUrl}
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="ml-auto p-0.5 rounded hover:bg-background/80 hover:text-foreground transition-colors"
+                          className="ml-auto shrink-0 p-0.5 rounded hover:bg-background/80 hover:text-foreground transition-colors"
                           title="Open in new tab"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
@@ -149,9 +152,6 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                       )}
                     </span>
                   )}
-                  <span className={locationLabel != null || newTabUrl ? "border-t border-border px-3 py-2" : "px-3 py-2"}>
-                    <span className="italic">{display}</span>
-                  </span>
                 </span>
               );
             }
