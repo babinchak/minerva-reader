@@ -12,16 +12,6 @@
   display: none;
 }
 
-/* Response wall – infinite horizontal scroll */
-@keyframes wall-scroll-left {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-@keyframes wall-scroll-right {
-  0% { transform: translateX(-50%); }
-  100% { transform: translateX(0); }
-}
-
 /* Radix popper wrappers use `transform` which creates a stacking context at
    z-auto, placing dropdown/popover content behind fixed overlays like the
    mobile AI drawer backdrop (z-40). Force them above. */
