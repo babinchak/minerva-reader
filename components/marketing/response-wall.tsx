@@ -167,8 +167,6 @@ function ScrollRow({
   cards: ResponseCard[];
   speed: number;
 }) {
-  const [isPaused, setIsPaused] = useState(false);
-
   // Ensure enough cards to fill the viewport; repeat set if needed
   const minCards = Math.max(cards.length * 2, 6);
   const repeatedCards: ResponseCard[] = [];
@@ -179,23 +177,17 @@ function ScrollRow({
   const displayCards = [...repeatedCards, ...repeatedCards];
 
   return (
-    <div
-      className="flex overflow-hidden"
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
-    >
+    <div className="flex overflow-hidden">
       <div
         className="flex shrink-0 gap-4"
         style={{
           animation: `wall-scroll-left ${speed}s linear infinite`,
-          animationPlayState: isPaused ? "paused" : "running",
         }}
       >
         {displayCards.map((card, i) => (
           <CardPreview
             key={`${card.collectionSlug}-${i}`}
             card={card}
-            pauseVerticalScroll={isPaused}
           />
         ))}
       </div>
@@ -211,22 +203,19 @@ function ScrollRow({
 /* ------------------------------------------------------------------ */
 
 const CARD_CONTENT_HEIGHT = 420; // px – visible content window
-const SCROLL_PX_PER_FRAME = 0.5; // ~30px/sec at 60fps base speed
+const SCROLL_PX_PER_FRAME_BASE = 1.2; // ~72px/sec at 60fps base speed
+const SCROLL_SPEED_VARIANCE = 0.35; // ±35% random variation per card
 const SLOWDOWN_RANGE = 160; // px – start decelerating this far from a reference
 const MIN_SPEED_FACTOR = 0.04; // near-zero at the reference center (not a full stop)
 const PAUSE_AT_LOOP_MS = 1500; // pause before looping back to top
 
 function CardPreview({
   card,
-  pauseVerticalScroll,
 }: {
   card: ResponseCard;
-  pauseVerticalScroll: boolean;
 }) {
   const { entry, collectionName } = card;
   const contentRef = useRef<HTMLDivElement>(null);
-  const pauseRef = useRef(pauseVerticalScroll);
-  pauseRef.current = pauseVerticalScroll;
 
   const toolSummary =
     entry.toolCalls.length > 0
@@ -254,6 +243,11 @@ function CardPreview({
     let cancelled = false;
     let animId: number;
 
+    // Random speed per card instance so they don't all scroll in lockstep
+    const cardSpeed =
+      SCROLL_PX_PER_FRAME_BASE *
+      (1 + (Math.random() * 2 - 1) * SCROLL_SPEED_VARIANCE);
+
     // Wait for markdown to render so we can measure reference positions
     const initTimer = setTimeout(() => {
       if (cancelled) return;
@@ -274,36 +268,34 @@ function CardPreview({
       function tick() {
         if (cancelled) return;
 
-        if (!pauseRef.current) {
-          const now = Date.now();
-          if (now >= pauseUntil) {
-            // Smooth speed curve: decelerate near references, accelerate away
-            const viewCenter = scrollPos + clientHeight / 2;
-            let speedFactor = 1;
+        const now = Date.now();
+        if (now >= pauseUntil) {
+          // Smooth speed curve: decelerate near references, accelerate away
+          const viewCenter = scrollPos + clientHeight / 2;
+          let speedFactor = 1;
 
-            for (const pos of refPositions) {
-              const dist = Math.abs(pos - viewCenter);
-              if (dist < SLOWDOWN_RANGE) {
-                // Cosine ease: full speed at edges, near-zero at center
-                const t = dist / SLOWDOWN_RANGE; // 0 at ref center, 1 at range edge
-                const factor =
-                  MIN_SPEED_FACTOR +
-                  (1 - MIN_SPEED_FACTOR) *
-                    (1 - Math.cos(t * Math.PI)) / 2;
-                speedFactor = Math.min(speedFactor, factor);
-              }
+          for (const pos of refPositions) {
+            const dist = Math.abs(pos - viewCenter);
+            if (dist < SLOWDOWN_RANGE) {
+              // Cosine ease: full speed at edges, near-zero at center
+              const t = dist / SLOWDOWN_RANGE; // 0 at ref center, 1 at range edge
+              const factor =
+                MIN_SPEED_FACTOR +
+                (1 - MIN_SPEED_FACTOR) *
+                  (1 - Math.cos(t * Math.PI)) / 2;
+              speedFactor = Math.min(speedFactor, factor);
             }
-
-            scrollPos += SCROLL_PX_PER_FRAME * speedFactor;
-
-            // Loop back to top
-            if (scrollPos >= scrollHeight - clientHeight) {
-              scrollPos = 0;
-              pauseUntil = now + PAUSE_AT_LOOP_MS;
-            }
-
-            container.scrollTop = scrollPos;
           }
+
+          scrollPos += cardSpeed * speedFactor;
+
+          // Loop back to top
+          if (scrollPos >= scrollHeight - clientHeight) {
+            scrollPos = 0;
+            pauseUntil = now + PAUSE_AT_LOOP_MS;
+          }
+
+          container.scrollTop = scrollPos;
         }
 
         animId = requestAnimationFrame(tick);
