@@ -418,9 +418,17 @@ export function AIAgentPanel({
                   if (parsed.bookId && typeof parsed.bookId === "string") {
                     setSectionBookMap((prev) => {
                       const next = new Map(prev);
+                      // bookLabel from stream is "Title by Author" — strip the " by Author" suffix
+                      // since we now track author separately for compact metadata display
+                      const rawLabel: string = parsed.bookLabel ?? "Unknown book";
+                      const author: string | null = parsed.bookAuthor ?? null;
+                      const titleOnly = author && rawLabel.endsWith(` by ${author}`)
+                        ? rawLabel.slice(0, -` by ${author}`.length)
+                        : rawLabel;
                       next.set(parsed.sectionId, {
                         bookId: parsed.bookId,
-                        bookLabel: parsed.bookLabel ?? "Unknown book",
+                        bookLabel: titleOnly,
+                        bookAuthor: author,
                         bookType: parsed.bookType ?? null,
                       });
                       return next;
@@ -490,7 +498,8 @@ export function AIAgentPanel({
             const next = new Map(prev);
             next.set(sectionId, {
               bookId: data.bookId,
-              bookLabel: data.bookTitle ? `${data.bookTitle}${data.bookAuthor ? ` by ${data.bookAuthor}` : ""}` : "Unknown book",
+              bookLabel: data.bookTitle ?? "Unknown book",
+              bookAuthor: data.bookAuthor ?? null,
               bookType: data.bookType ?? null,
             });
             return next;

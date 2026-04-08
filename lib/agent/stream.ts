@@ -235,10 +235,10 @@ export async function* streamAgentToSSE(
           if (!content) continue;
           try {
             const parsed = JSON.parse(content) as {
-              results?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; xhtml_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_type?: string }>;
+              results?: Array<{ section_id?: string; start_position?: string; page_breaks?: number[] | null; xhtml_breaks?: number[] | null; content_text?: string; book_id?: string; book?: string; book_author?: string | null; book_type?: string }>;
               passages?: Array<{
                 start_position?: string; page_breaks?: number[] | null; xhtml_breaks?: number[] | null; content_text?: string;
-                book_id?: string; book?: string; book_type?: string;
+                book_id?: string; book?: string; book_author?: string | null; book_type?: string;
                 chunks?: Array<{ section_id: string; section_index: number; char_offset: number }>;
               }>;
             };
@@ -262,6 +262,7 @@ export async function* streamAgentToSSE(
                   };
                   if (item.book_id) sectionEvent.bookId = item.book_id;
                   if (item.book) sectionEvent.bookLabel = item.book;
+                  if (item.book_author) sectionEvent.bookAuthor = item.book_author;
                   if (item.book_type) sectionEvent.bookType = item.book_type;
                   yield `data: ${JSON.stringify(sectionEvent)}\n\n`;
                 }
@@ -288,6 +289,7 @@ export async function* streamAgentToSSE(
                   };
                   if (passage.book_id) sectionEvent.bookId = passage.book_id;
                   if (passage.book) sectionEvent.bookLabel = passage.book;
+                  if (passage.book_author) sectionEvent.bookAuthor = passage.book_author;
                   if (passage.book_type) sectionEvent.bookType = passage.book_type;
                   yield `data: ${JSON.stringify(sectionEvent)}\n\n`;
                 }

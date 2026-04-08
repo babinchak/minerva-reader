@@ -241,6 +241,7 @@ export function createLibraryAgentTools(
                 similarity: null,
                 book_id: r.book_id,
                 book: formatBookLabel(r.book_title, r.book_author),
+                book_author: r.book_author ?? null,
                 book_type: r.book_type,
               })),
               _fallback: "keyword",
@@ -261,6 +262,7 @@ export function createLibraryAgentTools(
           similarity: r.similarity,
           book_id: r.book_id,
           book: formatBookLabel(r.book_title, r.book_author),
+          book_author: r.book_author ?? null,
           book_type: r.book_type,
         })),
         _hint: "Each result is a full chunk (~1200 chars). Use get_passages with index ranges and book_id to fetch surrounding context if needed.",
@@ -302,6 +304,7 @@ export function createLibraryAgentTools(
           chunks: p.chunks,
           book_id: p.book_id,
           book: formatBookLabel(p.book_title, p.book_author),
+          book_author: p.book_author ?? null,
           book_type: p.book_type,
         })),
       });
@@ -347,6 +350,7 @@ export function createLibraryAgentTools(
           section_id: r.section_id,
           book_id: r.book_id,
           book: formatBookLabel(r.book_title, r.book_author),
+          book_author: r.book_author ?? null,
           book_type: r.book_type,
         })),
         _hint: vectorsReady

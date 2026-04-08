@@ -61,6 +61,7 @@ export function parsePassageRef(href: string | undefined): PassageRef | null {
 export interface SectionBookInfo {
   bookId: string;
   bookLabel: string;
+  bookAuthor?: string | null;
   bookType: string | null;
 }
 
@@ -120,7 +121,11 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
                 : () => onRefClick({ ...ref, quotedText: raw });
               const metaParts: string[] = [];
               if (locationLabel != null) metaParts.push(locationLabel);
-              if (isLibraryMode && sectionBook?.bookLabel) metaParts.push(sectionBook.bookLabel);
+              if (isLibraryMode && sectionBook) {
+                const author = sectionBook.bookAuthor;
+                if (author) metaParts.push(author);
+                if (sectionBook.bookLabel) metaParts.push(sectionBook.bookLabel);
+              }
               const metaLine = metaParts.join(" · ");
 
               return (
