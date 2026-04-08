@@ -109,12 +109,8 @@ export function LandingSearch({
   );
   const demos = selectedCollection?.demos ?? [];
 
-  // Filter demos by input text
-  const filteredDemos = useMemo(() => {
-    if (!inputValue.trim()) return demos;
-    const q = inputValue.toLowerCase();
-    return demos.filter((d) => d.question.toLowerCase().includes(q));
-  }, [demos, inputValue]);
+  // Always show all demos — don't filter by typed input
+  const filteredDemos = demos;
 
   // Close picker on outside click
   useEffect(() => {
@@ -202,7 +198,7 @@ export function LandingSearch({
       // Phase 1: tool calls
       for (let i = 0; i < entry.toolCalls.length; i++) {
         if (cancelRef.current) break;
-        await delay(400);
+        await delay(200);
         setVisibleToolCalls(i + 1);
         scrollToBottom();
       }
@@ -222,7 +218,7 @@ export function LandingSearch({
             resolve();
             return;
           }
-          pos += 3 + Math.floor(Math.random() * 6);
+          pos += 12 + Math.floor(Math.random() * 12);
           if (pos >= text.length) {
             setStreamedText(text);
             setStreamDone(true);
