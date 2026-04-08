@@ -3,7 +3,7 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff } from "lucide-react";
 import { Markdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
@@ -1405,7 +1405,7 @@ export function AIAgentPanel({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -2032,13 +2032,15 @@ export function AIAgentPanel({
                 </div>
               )}
               <div className="flex gap-2">
-                <Input
+                <Textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask across ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                   disabled={isLoading}
-                  className="flex-1 bg-muted/50 shadow-md border-border dark:bg-muted dark:border-muted-foreground/30 dark:shadow-none"
+                  rows={1}
+                  style={{ fieldSizing: "content" } as React.CSSProperties}
+                  className="flex-1 min-h-[36px] max-h-[80px] resize-none overflow-y-auto py-2 bg-muted/50 shadow-md border-border dark:bg-muted dark:border-muted-foreground/30 dark:shadow-none"
                 />
                 <Button
                   onClick={handleSend}
@@ -2192,13 +2194,15 @@ export function AIAgentPanel({
             </div>
           )}
           <div className="flex gap-2">
-              <Input
+              <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask across ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                 disabled={isLoading}
-                className="flex-1"
+                rows={1}
+                style={{ fieldSizing: "content" } as React.CSSProperties}
+                className="flex-1 min-h-[36px] max-h-[80px] resize-none overflow-y-auto py-2"
               />
               <Button
                 onClick={handleSend}
