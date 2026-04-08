@@ -15,7 +15,6 @@ import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Suspense } from "react";
-import Image from "next/image";
 import { MinervaLogo } from "@/components/minerva-logo";
 
 /** Fetch a small batch of full demo responses for the response wall seed. */
@@ -115,38 +114,23 @@ async function HomeContent({
   ]);
 
   return (
-    <div className="w-full max-w-7xl space-y-16 sm:space-y-20">
-      {/* 1. Hero headline + search box — the main event */}
-      <section className="flex flex-col items-center pt-8 sm:pt-12">
-        <div className="mb-2">
-          <Image
-            src="/hero-owl.png"
-            alt="Minerva Reader"
-            width={120}
-            height={120}
-            className="rounded-lg"
-            priority
-          />
-        </div>
-        <h1 className="max-w-3xl text-center text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+    <div className="w-full max-w-7xl space-y-8 sm:space-y-10">
+      {/* 1. Search box with inline headline */}
+      <section className="flex flex-col items-center pt-2 sm:pt-4">
+        <h1 className="text-center text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
           Your books, answered.
         </h1>
-        <p className="mt-4 max-w-2xl text-center text-base text-muted-foreground sm:text-lg">
-          Upload books, build collections, and get answers traced back to the
-          exact passage — with references you can click and verify.
+        <p className="mt-1 text-center text-xs text-muted-foreground/70">
+          150,000+ passages across 300+ books
         </p>
-        <p className="mt-2 text-center text-sm text-muted-foreground/70">
-          150,000+ passages indexed and searchable
-        </p>
-
-        <div className="mt-8 w-full">
+        <div className="mt-4 w-full">
           <LandingSearch collections={cards} />
         </div>
       </section>
 
       {/* 2. Response wall — social proof / depth showcase */}
       {wallSeed.length > 0 && (
-        <section className="w-full max-w-7xl space-y-5">
+        <section className="w-full max-w-7xl">
           <ResponseWall seed={wallSeed} />
         </section>
       )}

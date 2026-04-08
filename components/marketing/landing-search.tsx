@@ -91,15 +91,9 @@ export function LandingSearch({
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Demo streaming state
+  // Demo state
   const [activeDemo, setActiveDemo] = useState<DemoFull | null>(null);
   const [loadingDemoId, setLoadingDemoId] = useState<string | null>(null);
-  const [streamedText, setStreamedText] = useState("");
-  const [visibleToolCalls, setVisibleToolCalls] = useState(0);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamDone, setStreamDone] = useState(false);
-  const cancelRef = useRef(false);
-  const messagesRef = useRef<HTMLDivElement>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,12 +125,7 @@ export function LandingSearch({
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         if (activeDemo) {
-          cancelRef.current = true;
           setActiveDemo(null);
-          setStreamedText("");
-          setStreamDone(false);
-          setIsStreaming(false);
-          setVisibleToolCalls(0);
         } else {
           setIsFocused(false);
           inputRef.current?.blur();
@@ -165,75 +154,20 @@ export function LandingSearch({
     }
   }, []);
 
-  const scrollToBottom = useCallback(() => {
-    const el = messagesRef.current;
-    if (el) {
-      requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
-      });
-    }
-  }, []);
-
-  // Play a demo: fetch full data by ID, then stream
+  // Play a demo: fetch full data by ID, render immediately
   const playDemo = useCallback(
     async (stub: DemoStub) => {
-      if (isStreaming || loadingDemoId) return;
-      cancelRef.current = false;
+      if (loadingDemoId) return;
       setLoadingDemoId(stub.id);
       setInputValue("");
 
       const entry = await fetchDemoById(stub.id);
-      if (!entry || cancelRef.current) {
-        setLoadingDemoId(null);
-        return;
-      }
-
       setLoadingDemoId(null);
-      setActiveDemo(entry);
-      setStreamedText("");
-      setStreamDone(false);
-      setIsStreaming(true);
-      setVisibleToolCalls(0);
-
-      // Phase 1: tool calls
-      for (let i = 0; i < entry.toolCalls.length; i++) {
-        if (cancelRef.current) break;
-        await delay(200);
-        setVisibleToolCalls(i + 1);
-        scrollToBottom();
+      if (entry) {
+        setActiveDemo(entry);
       }
-
-      if (cancelRef.current) {
-        setIsStreaming(false);
-        return;
-      }
-
-      // Phase 2: stream answer
-      const text = entry.answer;
-      let pos = 0;
-      await new Promise<void>((resolve) => {
-        const interval = setInterval(() => {
-          if (cancelRef.current) {
-            clearInterval(interval);
-            resolve();
-            return;
-          }
-          pos += 12 + Math.floor(Math.random() * 12);
-          if (pos >= text.length) {
-            setStreamedText(text);
-            setStreamDone(true);
-            clearInterval(interval);
-            resolve();
-          } else {
-            setStreamedText(text.slice(0, pos));
-          }
-          scrollToBottom();
-        }, 10);
-      });
-
-      setIsStreaming(false);
     },
-    [isStreaming, loadingDemoId, scrollToBottom]
+    [loadingDemoId]
   );
 
   // Handle submitting a custom question → redirect to login
@@ -320,14 +254,8 @@ export function LandingSearch({
                       onClick={() => {
                         setSelectedSlug(c.slug);
                         setPickerOpen(false);
-                        // Reset demo if switching collection
                         if (activeDemo) {
-                          cancelRef.current = true;
                           setActiveDemo(null);
-                          setStreamedText("");
-                          setStreamDone(false);
-                          setIsStreaming(false);
-                          setVisibleToolCalls(0);
                         }
                       }}
                       className={cn(
@@ -348,7 +276,7 @@ export function LandingSearch({
         )}
       </div>
 
-      {/* Demo questions + streaming response area */}
+      {/* Demo questions list */}
       {isFocused && !showDemoPanel && (
         <div className="mx-auto w-full max-w-3xl">
           {filteredDemos.length > 0 ? (
@@ -376,25 +304,11 @@ export function LandingSearch({
                 ))}
               </div>
             </div>
-          ) : inputValue.trim() ? (
-            <div className="rounded-xl border border-border bg-card p-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                No matching demo questions.
-              </p>
-              <button
-                type="button"
-                onClick={handleSubmitCustom}
-                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                Sign in to ask: &ldquo;{inputValue}&rdquo;
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
           ) : null}
         </div>
       )}
 
-      {/* Streaming demo response */}
+      {/* Demo response — rendered immediately */}
       {showDemoPanel && (
         <div className="mx-auto w-full max-w-3xl">
           <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
@@ -411,14 +325,7 @@ export function LandingSearch({
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  cancelRef.current = true;
-                  setActiveDemo(null);
-                  setStreamedText("");
-                  setStreamDone(false);
-                  setIsStreaming(false);
-                  setVisibleToolCalls(0);
-                }}
+                onClick={() => setActiveDemo(null)}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 Close
@@ -426,10 +333,7 @@ export function LandingSearch({
             </div>
 
             {/* Messages */}
-            <div
-              ref={messagesRef}
-              className="max-h-[32rem] overflow-y-auto p-4 space-y-4"
-            >
+            <div className="max-h-[32rem] overflow-y-auto p-4 space-y-4">
               {/* User question */}
               <div className="flex justify-end">
                 <div className="max-w-[85%] rounded-2xl bg-primary px-3 py-2 text-sm text-primary-foreground">
@@ -438,72 +342,55 @@ export function LandingSearch({
               </div>
 
               {/* Tool calls */}
-              {visibleToolCalls > 0 && (
+              {activeDemo.toolCalls.length > 0 && (
                 <ToolCallSteps
-                  toolCalls={activeDemo.toolCalls
-                    .slice(0, visibleToolCalls)
-                    .map((tc, i) => ({
-                      ...tc,
-                      id: `landing-tc-${i}`,
-                    }))}
+                  toolCalls={activeDemo.toolCalls.map((tc, i) => ({
+                    ...tc,
+                    id: `landing-tc-${i}`,
+                  }))}
                 />
               )}
 
-              {/* Streamed response */}
-              {streamedText && (
-                <div className="text-foreground select-text">
-                  <Markdown
-                    content={streamedText}
-                    sectionBookMap={sectionBookMap}
-                    onRefClick={handleRefClick}
-                  />
-                </div>
-              )}
-
-              {/* Typing indicator */}
-              {isStreaming &&
-                !streamedText &&
-                visibleToolCalls >= activeDemo.toolCalls.length && (
-                  <div className="flex gap-1">
-                    <div className="h-2 w-2 rounded-full bg-foreground animate-bounce" />
-                    <div className="h-2 w-2 rounded-full bg-foreground animate-bounce [animation-delay:0.2s]" />
-                    <div className="h-2 w-2 rounded-full bg-foreground animate-bounce [animation-delay:0.4s]" />
-                  </div>
-                )}
+              {/* Full response */}
+              <div className="text-foreground select-text">
+                <Markdown
+                  content={activeDemo.answer}
+                  sectionBookMap={sectionBookMap}
+                  onRefClick={handleRefClick}
+                />
+              </div>
             </div>
 
             {/* Bottom CTA */}
-            {streamDone && (
-              <div className="border-t border-border px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && inputValue.trim()) {
-                        e.preventDefault();
-                        handleSubmitCustom();
-                      }
-                    }}
-                    placeholder="Ask a follow-up..."
-                    className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSubmitCustom}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                  >
-                    {inputValue.trim() ? "Sign in to ask" : "Sign in for more"}
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+            <div className="border-t border-border px-4 py-3">
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && inputValue.trim()) {
+                      e.preventDefault();
+                      handleSubmitCustom();
+                    }
+                  }}
+                  placeholder="Ask a follow-up..."
+                  className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+                <button
+                  type="button"
+                  onClick={handleSubmitCustom}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  {inputValue.trim() ? "Sign in to ask" : "Sign in for more"}
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* More demo questions after response */}
-          {streamDone && filteredDemos.length > 1 && (
+          {filteredDemos.length > 1 && (
             <div className="mt-4 space-y-2">
               <p className="text-xs font-medium text-muted-foreground">
                 Try another question
@@ -517,7 +404,7 @@ export function LandingSearch({
                       key={demo.id}
                       type="button"
                       onClick={() => playDemo(demo)}
-                      disabled={isStreaming || !!loadingDemoId}
+                      disabled={!!loadingDemoId}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent disabled:opacity-50"
                     >
                       <Sparkles className="h-3 w-3 text-primary/60" />
@@ -533,8 +420,4 @@ export function LandingSearch({
       )}
     </div>
   );
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
