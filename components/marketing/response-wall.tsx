@@ -81,133 +81,12 @@ function demosToCards(demos: ApiDemo[], seen: Set<string>): ResponseCard[] {
   });
 }
 
-/** Fisher-Yates shuffle (in place). */
-function shuffle<T>(arr: T[]): T[] {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Fetch helper                                                       */
-/* ------------------------------------------------------------------ */
-
-const BATCH_SIZE = 30;
-
-async function fetchDemoBatch(
-  excludeIds: string[],
-): Promise<ApiDemo[]> {
-  const params = new URLSearchParams({ limit: String(BATCH_SIZE) });
-  if (excludeIds.length > 0) params.set("exclude", excludeIds.join(","));
-  try {
-    const res = await fetch(`/api/collection-demos?${params.toString()}`);
-    if (!res.ok) return [];
-    const json = await res.json();
-    return (json.demos ?? []) as ApiDemo[];
-  } catch {
-    return [];
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Shared vertical-scroll driver                                      */
-/*  One rAF loop drives ALL visible cards' vertical auto-scroll.       */
-/* ------------------------------------------------------------------ */
-
-interface CardScrollState {
-  clip: HTMLDivElement;
-  inner: HTMLDivElement;
-  root: HTMLDivElement;
-  speed: number;
-  scrollPos: number;
-  maxScroll: number;
-  refPositions: number[];
-  pauseUntil: number;
-  isInteracting: boolean;
-  wasInteracting: boolean;
-  isVisible: boolean;
-}
-
-const cardScrollRegistry = new Set<CardScrollState>();
-let sharedAnimId: number | null = null;
 
 const CARD_CONTENT_HEIGHT = 420;
-const SCROLL_PX_PER_FRAME_BASE = 1.2;
-const SCROLL_SPEED_VARIANCE = 0.35;
-const SLOWDOWN_RANGE = 160;
-const MIN_SPEED_FACTOR = 0.04;
-const PAUSE_AT_LOOP_MS = 1500;
-
-function startSharedLoop() {
-  if (sharedAnimId !== null) return;
-
-  function tick() {
-    const now = Date.now();
-
-    for (const s of cardScrollRegistry) {
-      if (!s.isVisible) continue;
-
-      // Transition: user started interacting
-      if (s.isInteracting && !s.wasInteracting) {
-        s.inner.style.transform = "";
-        s.inner.style.willChange = "";
-        s.clip.style.overflowY = "auto";
-        s.clip.scrollTop = s.scrollPos;
-        s.wasInteracting = true;
-      }
-
-      // Transition: user stopped interacting
-      if (!s.isInteracting && s.wasInteracting) {
-        s.scrollPos = Math.min(s.clip.scrollTop, s.maxScroll);
-        s.clip.style.overflowY = "hidden";
-        s.clip.scrollTop = 0;
-        s.inner.style.willChange = "transform";
-        s.inner.style.transform = `translateY(${-s.scrollPos}px)`;
-        s.wasInteracting = false;
-      }
-
-      if (s.isInteracting) continue;
-
-      if (now >= s.pauseUntil) {
-        const viewCenter = s.scrollPos + CARD_CONTENT_HEIGHT / 2;
-        let speedFactor = 1;
-
-        for (const pos of s.refPositions) {
-          const dist = Math.abs(pos - viewCenter);
-          if (dist < SLOWDOWN_RANGE) {
-            const t = dist / SLOWDOWN_RANGE;
-            const factor =
-              MIN_SPEED_FACTOR +
-              (1 - MIN_SPEED_FACTOR) * (1 - Math.cos(t * Math.PI)) / 2;
-            speedFactor = Math.min(speedFactor, factor);
-          }
-        }
-
-        s.scrollPos += s.speed * speedFactor;
-
-        if (s.scrollPos >= s.maxScroll) {
-          s.scrollPos = 0;
-          s.pauseUntil = now + PAUSE_AT_LOOP_MS;
-        }
-
-        s.inner.style.transform = `translateY(${-s.scrollPos}px)`;
-      }
-    }
-
-    sharedAnimId = requestAnimationFrame(tick);
-  }
-
-  sharedAnimId = requestAnimationFrame(tick);
-}
-
-function stopSharedLoopIfEmpty() {
-  if (cardScrollRegistry.size === 0 && sharedAnimId !== null) {
-    cancelAnimationFrame(sharedAnimId);
-    sharedAnimId = null;
-  }
-}
+/** Base vertical scroll speed in px/sec */
+const VERT_PX_PER_SEC = 30;
+/** Variance so cards don't all scroll at the same rate */
+const VERT_SPEED_VARIANCE = 0.35;
 
 /* ------------------------------------------------------------------ */
 /*  ResponseWall                                                       */
@@ -218,39 +97,17 @@ export function ResponseWall({
 }: {
   seed: ApiDemo[];
 }) {
-  const seenIdsRef = useRef<Set<string>>(new Set());
   // Defer card rendering until after hydration to avoid mismatch
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => { setHydrated(true); }, []);
 
-  // Build initial cards from server-provided seed (already shuffled server-side)
-  const seedCards = useMemo(
-    () => demosToCards(seed, seenIdsRef.current),
-    [seed]
-  );
+  // Build cards once from server-provided seed (already randomized server-side)
+  const cards = useMemo(() => {
+    const seen = new Set<string>();
+    return demosToCards(seed, seen);
+  }, [seed]);
 
-  const [cardPool, setCardPool] = useState<ResponseCard[]>(seedCards);
-  const fetchingRef = useRef(false);
-
-  // Called by ScrollRow when it's approaching the end of its cards
-  const handleNeedMore = useCallback(() => {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-
-    const recentIds = cardPool
-      .map((c) => c.uid)
-      .slice(-20);
-
-    fetchDemoBatch(recentIds).then((demos) => {
-      if (demos.length > 0) {
-        const newCards = demosToCards(demos, seenIdsRef.current);
-        setCardPool((prev) => [...prev, ...shuffle(newCards)]);
-      }
-      fetchingRef.current = false;
-    });
-  }, [cardPool]);
-
-  if (cardPool.length === 0) return null;
+  if (cards.length === 0) return null;
 
   return (
     <section className="w-full space-y-4">
@@ -273,10 +130,7 @@ export function ResponseWall({
             <div className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden sm:block sm:w-10 bg-gradient-to-r from-background to-transparent" />
             <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden sm:block sm:w-10 bg-gradient-to-l from-background to-transparent" />
             <div className="py-2">
-              <ScrollRow
-                cards={cardPool}
-                onNeedMore={handleNeedMore}
-              />
+              <ScrollRow cards={cards} />
             </div>
           </>
         ) : null}
@@ -286,185 +140,54 @@ export function ResponseWall({
 }
 
 /* ------------------------------------------------------------------ */
-/*  ScrollRow – JS-driven infinite horizontal scroll                   */
+/*  ScrollRow – CSS-driven infinite horizontal scroll                  */
+/*  Horizontal motion uses a CSS @keyframes animation on the           */
+/*  compositor thread, immune to main-thread GC/JS pauses.             */
 /* ------------------------------------------------------------------ */
 
-const CARD_GAP_PX = 16;
 const DESKTOP_PX_PER_SEC = 40;
-const HOLD_DURATION_MS = 5000;
-const GLIDE_DURATION_MS = 800;
-const REFILL_THRESHOLD = 0.6;
-const TOUCH_RESUME_DELAY_MS = 2000;
-
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
 
 function ScrollRow({
   cards,
-  onNeedMore,
 }: {
   cards: ResponseCard[];
-  onNeedMore: () => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
-  const [isNarrow, setIsNarrow] = useState(false);
-  const needMoreCalledRef = useRef(false);
-  const lastNeedMoreCountRef = useRef(0);
-  // Cached scrollWidth — updated on resize or card count change, not every frame
-  const cachedHalfWidthRef = useRef(0);
 
-  // Detect narrow viewport → glide mode
+  // Measure half-width once after first layout, set animation directly on DOM
+  // to avoid React re-renders that would restart the CSS animation.
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    function check() {
-      setIsNarrow(container!.clientWidth < 340 * 1.5 + CARD_GAP_PX);
-    }
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(container);
-    return () => ro.disconnect();
+    const track = trackRef.current;
+    if (!track) return;
+
+    const raf = requestAnimationFrame(() => {
+      const halfWidth = track.scrollWidth / 2;
+      if (halfWidth > 0) {
+        const duration = halfWidth / DESKTOP_PX_PER_SEC;
+        track.style.animation = `wall-scroll-left ${duration}s linear infinite`;
+      }
+    });
+
+    return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Update cached scrollWidth when cards change or on resize
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    // Defer measurement to after layout
-    const raf = requestAnimationFrame(() => {
-      cachedHalfWidthRef.current = track.scrollWidth / 2;
-    });
-    const ro = new ResizeObserver(() => {
-      cachedHalfWidthRef.current = track.scrollWidth / 2;
-    });
-    ro.observe(track);
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
-  }, [cards.length]);
-
-  // Reset needMore flag when pool actually grows
-  useEffect(() => {
-    if (cards.length > lastNeedMoreCountRef.current) {
-      needMoreCalledRef.current = false;
-    }
-  }, [cards.length]);
-
-  // ---- Desktop: continuous smooth horizontal scroll via transform ----
-  useEffect(() => {
-    if (isNarrow) return;
-    const track = trackRef.current;
-    if (!track) return;
-
-    let cancelled = false;
-    let animId: number;
-    let scrollX = 0;
-    let lastTime = 0;
-
-    function tick(now: number) {
-      if (cancelled) return;
-      if (lastTime === 0) lastTime = now;
-      const dt = (now - lastTime) / 1000;
-      lastTime = now;
-
-      scrollX += DESKTOP_PX_PER_SEC * dt;
-
-      const halfWidth = cachedHalfWidthRef.current;
-
-      if (halfWidth > 0 && scrollX >= halfWidth) {
-        scrollX -= halfWidth;
-      }
-
-      track!.style.transform = `translateX(${-scrollX}px)`;
-
-      if (halfWidth > 0 && scrollX > halfWidth * REFILL_THRESHOLD && !needMoreCalledRef.current) {
-        needMoreCalledRef.current = true;
-        lastNeedMoreCountRef.current = cards.length;
-        onNeedMore();
-      }
-
-      animId = requestAnimationFrame(tick);
-    }
-
-    animId = requestAnimationFrame(tick);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(animId);
-    };
-  }, [isNarrow, cards.length, onNeedMore]);
-
-  // ---- Mobile: hold-and-glide ----
-  useEffect(() => {
-    if (!isNarrow) return;
-    const track = trackRef.current;
-    const container = containerRef.current;
-    if (!track || !container) return;
-
-    let cancelled = false;
-    let animId: number;
-
-    const firstCard = track.children[0] as HTMLElement | undefined;
-    if (!firstCard) return;
-    const cardWidth = firstCard.offsetWidth + CARD_GAP_PX;
-    const totalCards = cards.length;
-
-    let currentIndex = 0;
-    let phase: "hold" | "glide" = "hold";
-    let phaseStart = performance.now();
-
-    const containerWidth = container.clientWidth;
-    const offsetToCenter = (containerWidth - firstCard.offsetWidth) / 2;
-    track.style.transform = `translateX(${offsetToCenter}px)`;
-
-    function tick(now: number) {
-      if (cancelled) return;
-      const elapsed = now - phaseStart;
-
-      if (phase === "hold") {
-        if (elapsed >= HOLD_DURATION_MS) {
-          phase = "glide";
-          phaseStart = now;
-        }
-      } else {
-        const t = Math.min(elapsed / GLIDE_DURATION_MS, 1);
-        const eased = easeInOutCubic(t);
-        const fromX = -currentIndex * cardWidth + offsetToCenter;
-        const toX = -(currentIndex + 1) * cardWidth + offsetToCenter;
-        const currentX = fromX + (toX - fromX) * eased;
-        track!.style.transform = `translateX(${currentX}px)`;
-
-        if (t >= 1) {
-          currentIndex++;
-          if (currentIndex >= totalCards) {
-            currentIndex = 0;
-            track!.style.transform = `translateX(${offsetToCenter}px)`;
-          }
-          phase = "hold";
-          phaseStart = now;
-
-          if (currentIndex > totalCards * REFILL_THRESHOLD && !needMoreCalledRef.current) {
-            needMoreCalledRef.current = true;
-            lastNeedMoreCountRef.current = cards.length;
-            onNeedMore();
-          }
-        }
-      }
-
-      animId = requestAnimationFrame(tick);
-    }
-
-    animId = requestAnimationFrame(tick);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(animId);
-    };
-  }, [isNarrow, cards.length, onNeedMore]);
+  // Pause on hover via DOM to avoid re-render
+  const handleMouseEnter = useCallback(() => {
+    if (trackRef.current) trackRef.current.style.animationPlayState = "paused";
+  }, []);
+  const handleMouseLeave = useCallback(() => {
+    if (trackRef.current) trackRef.current.style.animationPlayState = "running";
+  }, []);
 
   // Build display array: cards + duplicate for seamless loop
   const displayCards = useMemo(() => [...cards, ...cards], [cards]);
 
   return (
-    <div ref={containerRef} className="flex overflow-hidden">
+    <div
+      className="flex overflow-hidden"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <div
         ref={trackRef}
         className="flex shrink-0 gap-4"
@@ -482,8 +205,9 @@ function ScrollRow({
 }
 
 /* ------------------------------------------------------------------ */
-/*  CardPreview – tall card with vertical auto-scroll                  */
-/*  Registers with shared rAF loop instead of running its own.         */
+/*  CardPreview – tall card with compositor-driven vertical scroll     */
+/*  Uses Web Animations API (element.animate) — runs on compositor     */
+/*  thread, immune to main-thread GC/JS pauses.                        */
 /* ------------------------------------------------------------------ */
 
 function CardPreview({
@@ -492,11 +216,8 @@ function CardPreview({
   card: ResponseCard;
 }) {
   const { entry, collectionName } = card;
-  const cardRootRef = useRef<HTMLDivElement>(null);
-  const clipRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
-  const scrollStateRef = useRef<CardScrollState | null>(null);
-  const touchResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animRef = useRef<Animation | null>(null);
 
   const toolSummary =
     entry.toolCalls.length > 0
@@ -516,87 +237,45 @@ function CardPreview({
     }
   }, []);
 
-  // Register with shared scroll loop
+  // Start compositor-driven vertical scroll after content renders
   useEffect(() => {
-    const clip = clipRef.current;
     const inner = innerRef.current;
-    const root = cardRootRef.current;
-    if (!clip || !inner || !root) return;
+    if (!inner) return;
 
     const initTimer = setTimeout(() => {
-      const refElements = inner.querySelectorAll('span[role="button"]');
-      const refPositions = Array.from(refElements).map(
-        (el) => (el as HTMLElement).offsetTop
-      );
-
-      const contentHeight = inner.scrollHeight;
-      const maxScroll = contentHeight - CARD_CONTENT_HEIGHT;
+      const maxScroll = inner.scrollHeight - CARD_CONTENT_HEIGHT;
       if (maxScroll <= 0) return;
 
-      const state: CardScrollState = {
-        clip,
-        inner,
-        root,
-        speed: SCROLL_PX_PER_FRAME_BASE * (1 + (Math.random() * 2 - 1) * SCROLL_SPEED_VARIANCE),
-        scrollPos: 0,
-        maxScroll,
-        refPositions,
-        pauseUntil: 0,
-        isInteracting: false,
-        wasInteracting: false,
-        isVisible: false,
-      };
+      // Vary speed per card so they don't all move in lockstep
+      const speed = VERT_PX_PER_SEC * (1 + (Math.random() * 2 - 1) * VERT_SPEED_VARIANCE);
+      const duration = (maxScroll / speed) * 1000;
 
-      inner.style.willChange = "transform";
-      clip.style.overflowY = "hidden";
-
-      scrollStateRef.current = state;
-      cardScrollRegistry.add(state);
-      startSharedLoop();
-
-      // IntersectionObserver to toggle visibility
-      const observer = new IntersectionObserver(
-        ([e]) => { state.isVisible = e.isIntersecting; },
-        { rootMargin: "200px" }
+      const anim = inner.animate(
+        [
+          { transform: "translateY(0)" },
+          { transform: `translateY(${-maxScroll}px)` },
+        ],
+        {
+          duration,
+          iterations: Infinity,
+          direction: "alternate",
+          easing: "linear",
+        }
       );
-      observer.observe(root);
 
-      // Store observer for cleanup
-      (state as any)._observer = observer;
+      animRef.current = anim;
     }, 400);
 
     return () => {
       clearTimeout(initTimer);
-      if (touchResumeTimer.current) clearTimeout(touchResumeTimer.current);
-      const state = scrollStateRef.current;
-      if (state) {
-        cardScrollRegistry.delete(state);
-        stopSharedLoopIfEmpty();
-        (state as any)._observer?.disconnect();
-        scrollStateRef.current = null;
-      }
+      animRef.current?.cancel();
+      animRef.current = null;
     };
   }, []);
 
   return (
     <div
-      ref={cardRootRef}
       className="group relative flex w-[340px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm sm:w-[400px]"
-      onMouseEnter={() => {
-        if (scrollStateRef.current) scrollStateRef.current.isInteracting = true;
-      }}
-      onMouseLeave={() => {
-        if (scrollStateRef.current) scrollStateRef.current.isInteracting = false;
-      }}
-      onTouchStart={() => {
-        if (touchResumeTimer.current) clearTimeout(touchResumeTimer.current);
-        if (scrollStateRef.current) scrollStateRef.current.isInteracting = true;
-      }}
-      onTouchEnd={() => {
-        touchResumeTimer.current = setTimeout(() => {
-          if (scrollStateRef.current) scrollStateRef.current.isInteracting = false;
-        }, TOUCH_RESUME_DELAY_MS);
-      }}
     >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 shrink-0">
         <Sparkles className="h-3 w-3 text-primary" />
@@ -621,11 +300,10 @@ function CardPreview({
 
       <div className="relative flex-1 overflow-hidden">
         <div
-          ref={clipRef}
-          className="px-3 pb-3 scrollbar-none"
-          style={{ height: `${CARD_CONTENT_HEIGHT}px`, overflowY: "hidden" }}
+          className="px-3 pb-3"
+          style={{ height: `${CARD_CONTENT_HEIGHT}px`, overflow: "hidden" }}
         >
-          <div ref={innerRef} style={{ willChange: "transform", transform: "translateY(0px)" }}>
+          <div ref={innerRef} style={{ willChange: "transform" }}>
             <Markdown
               content={entry.answer}
               sectionBookMap={sectionBookMap}
