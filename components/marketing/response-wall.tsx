@@ -87,10 +87,39 @@ function demosToCards(demos: ApiDemo[], seen: Set<string>): ResponseCard[] {
 /* ------------------------------------------------------------------ */
 
 const HEADLINES = [
+  "Don't just read. Viberead.",
   "Stop copy-pasting passages into ChatGPT",
   "Search across your entire book collection",
-  "Get cited answers, not hallucinations",
-  "Understand any passage while you read",
+  "One tap to navigate to any reference",
+  "Search an author's entire body of work in seconds",
+  "AI reading, done right",
+  "RAG-tastic reading",
+  "Find that quote you half-remember",
+  "Not a summary app. A reading app.",
+  "Stop losing your place in dense books",
+  "Unlock every book's full potential",
+  "Your smartest reading companion",
+  "Prep for book club in 5 minutes",
+  "Cross-reference ideas across 10 books at once",
+  "Your entire library, instantly searchable",
+  "Now you can finally understand Hegel",
+  "Did Dumbledore really ask calmly? Now you can check.",
+  "Call me Ishmael. Or just search for him.",
+  "MLA format not included",
+  "Quote-finding machine",
+  "Paine, Locke, and Jefferson walk into a search bar",
+  "Ask Nietzsche and Buddha the same question",
+  "Settle the free will debate once and for all",
+  "When is retreat wisdom? Ask five generals at once.",
+  "Plot twist: the footnotes were useful",
+  "Search the canon",
+  "Ask. Read. Know.",
+  "Upload your entire pogonology collection",
+  "The paragraph you reread four times? Just ask.",
+  "Every obscure reference, explained in context",
+  "That passage you skipped? It actually makes sense now.",
+  "No more pretending you understood that paragraph",
+  "Finally understand that Latin phrase Nietzsche dropped",
 ];
 
 const HEADLINE_INTERVAL_MS = 4000;
@@ -164,15 +193,36 @@ export function ResponseWall({
 /*  RotatingHeadline                                                    */
 /* ------------------------------------------------------------------ */
 
+function pickWeightedIndex(lastShown: number[], current: number): number {
+  const now = Date.now();
+  const weights = lastShown.map((t, i) =>
+    i === current ? 0 : Math.max(now - t, 1)
+  );
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return i;
+  }
+  return (current + 1) % HEADLINES.length;
+}
+
 export function RotatingHeadline() {
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
+  const lastShownRef = useRef<number[]>(
+    HEADLINES.map(() => 0)
+  );
+
+  useEffect(() => {
+    lastShownRef.current[index] = Date.now();
+  }, [index]);
 
   useEffect(() => {
     const id = setInterval(() => {
       setVisible(false);
       setTimeout(() => {
-        setIndex((i) => (i + 1) % HEADLINES.length);
+        setIndex((i) => pickWeightedIndex(lastShownRef.current, i));
         setVisible(true);
       }, 400);
     }, HEADLINE_INTERVAL_MS);
