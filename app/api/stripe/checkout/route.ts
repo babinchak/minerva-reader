@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const host = req.headers.get("host") ?? "localhost:3000";
+    const host = req.headers.get("host") ?? "localhost:4000";
     const protocol = host.includes("localhost") ? "http" : "https";
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `${protocol}://${host}`;
 

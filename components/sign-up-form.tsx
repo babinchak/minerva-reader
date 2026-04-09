@@ -16,7 +16,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { GoogleIcon } from "@/components/google-icon";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { hapticLight } from "@/lib/haptic";
 
 export function SignUpForm({
   className,
@@ -29,9 +30,23 @@ export function SignUpForm({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [shakeTerms, setShakeTerms] = useState(false);
   const router = useRouter();
+  const termsRef = useRef<HTMLDivElement>(null);
+
+  const nudgeTerms = () => {
+    setError("Please accept the Terms of Service and Privacy Policy");
+    hapticLight();
+    setShakeTerms(true);
+    setTimeout(() => setShakeTerms(false), 400);
+  };
 
   const handleGoogleSignUp = async () => {
+    if (!acceptedTerms) {
+      nudgeTerms();
+      return;
+    }
+
     const supabase = createClient();
     setIsGoogleLoading(true);
     setError(null);
@@ -62,7 +77,7 @@ export function SignUpForm({
     }
 
     if (!acceptedTerms) {
-      setError("Please accept the Terms of Service and Privacy Policy");
+      nudgeTerms();
       setIsLoading(false);
       return;
     }
@@ -128,7 +143,10 @@ export function SignUpForm({
                   onChange={(e) => setRepeatPassword(e.target.value)}
                 />
               </div>
-              <div className="flex items-start gap-2">
+              <div
+                ref={termsRef}
+                className={cn("flex items-start gap-2", shakeTerms && "animate-shake")}
+              >
                 <Checkbox
                   id="terms"
                   checked={acceptedTerms}
@@ -162,7 +180,7 @@ export function SignUpForm({
                 </label>
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading || !acceptedTerms}>
+              <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Creating an account..." : "Sign up"}
               </Button>
               <div className="relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
