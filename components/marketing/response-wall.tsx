@@ -230,7 +230,7 @@ export function RotatingHeadline() {
   }, []);
 
   return (
-    <div className="relative h-[2.5rem] sm:h-[2.5rem] overflow-hidden">
+    <div className="relative h-[4rem] sm:h-[2.5rem] overflow-hidden">
       <h1
         className="text-center text-2xl font-bold tracking-tight text-foreground transition-all duration-400 ease-in-out sm:text-3xl"
         style={{
