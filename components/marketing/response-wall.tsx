@@ -140,23 +140,44 @@ export function ResponseWall({
 }
 
 /* ------------------------------------------------------------------ */
-/*  ScrollRow – CSS-driven infinite horizontal scroll                  */
-/*  Horizontal motion uses a CSS @keyframes animation on the           */
-/*  compositor thread, immune to main-thread GC/JS pauses.             */
+/*  ScrollRow – CSS on desktop, JS hold-and-glide on mobile            */
 /* ------------------------------------------------------------------ */
 
 const DESKTOP_PX_PER_SEC = 40;
+const CARD_GAP_PX = 16;
+const NARROW_BREAKPOINT = 340 * 1.5 + CARD_GAP_PX;
+const HOLD_DURATION_MS = 5000;
+const GLIDE_DURATION_MS = 800;
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
 
 function ScrollRow({
   cards,
 }: {
   cards: ResponseCard[];
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const [isNarrow, setIsNarrow] = useState(false);
 
-  // Measure half-width once after first layout, set animation directly on DOM
-  // to avoid React re-renders that would restart the CSS animation.
+  // Detect narrow viewport
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    function check() {
+      setIsNarrow(container!.clientWidth < NARROW_BREAKPOINT);
+    }
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
+  // ---- Desktop: CSS animation (compositor thread) ----
+  useEffect(() => {
+    if (isNarrow) return;
     const track = trackRef.current;
     if (!track) return;
 
@@ -168,22 +189,85 @@ function ScrollRow({
       }
     });
 
-    return () => cancelAnimationFrame(raf);
-  }, []);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (track) track.style.animation = "";
+    };
+  }, [isNarrow]);
 
-  // Pause on hover via DOM to avoid re-render
+  // ---- Mobile: JS hold-and-glide (one card at a time) ----
+  useEffect(() => {
+    if (!isNarrow) return;
+    const track = trackRef.current;
+    const container = containerRef.current;
+    if (!track || !container) return;
+
+    let cancelled = false;
+    let animId: number;
+
+    const firstCard = track.children[0] as HTMLElement | undefined;
+    if (!firstCard) return;
+    const cardWidth = firstCard.offsetWidth + CARD_GAP_PX;
+    const totalCards = cards.length;
+
+    let currentIndex = 0;
+    let phase: "hold" | "glide" = "hold";
+    let phaseStart = performance.now();
+
+    const containerWidth = container.clientWidth;
+    const offsetToCenter = (containerWidth - firstCard.offsetWidth) / 2;
+    track.style.transform = `translateX(${offsetToCenter}px)`;
+
+    function tick(now: number) {
+      if (cancelled) return;
+      const elapsed = now - phaseStart;
+
+      if (phase === "hold") {
+        if (elapsed >= HOLD_DURATION_MS) {
+          phase = "glide";
+          phaseStart = now;
+        }
+      } else {
+        const t = Math.min(elapsed / GLIDE_DURATION_MS, 1);
+        const eased = easeInOutCubic(t);
+        const fromX = -currentIndex * cardWidth + offsetToCenter;
+        const toX = -(currentIndex + 1) * cardWidth + offsetToCenter;
+        track!.style.transform = `translateX(${fromX + (toX - fromX) * eased}px)`;
+
+        if (t >= 1) {
+          currentIndex = (currentIndex + 1) % totalCards;
+          phase = "hold";
+          phaseStart = now;
+        }
+      }
+
+      animId = requestAnimationFrame(tick);
+    }
+
+    animId = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(animId);
+    };
+  }, [isNarrow, cards.length]);
+
+  // Pause desktop CSS on hover via DOM
   const handleMouseEnter = useCallback(() => {
-    if (trackRef.current) trackRef.current.style.animationPlayState = "paused";
-  }, []);
+    if (!isNarrow && trackRef.current) trackRef.current.style.animationPlayState = "paused";
+  }, [isNarrow]);
   const handleMouseLeave = useCallback(() => {
-    if (trackRef.current) trackRef.current.style.animationPlayState = "running";
-  }, []);
+    if (!isNarrow && trackRef.current) trackRef.current.style.animationPlayState = "running";
+  }, [isNarrow]);
 
-  // Build display array: cards + duplicate for seamless loop
-  const displayCards = useMemo(() => [...cards, ...cards], [cards]);
+  // Desktop: duplicate cards for seamless CSS loop. Mobile: single set.
+  const displayCards = useMemo(
+    () => isNarrow ? cards : [...cards, ...cards],
+    [cards, isNarrow]
+  );
 
   return (
     <div
+      ref={containerRef}
       className="flex overflow-hidden"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
