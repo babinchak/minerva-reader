@@ -138,39 +138,8 @@ async function HomeContent({
       )}
 
       {/* 3. In-book demo — shows the reading experience */}
-      <section className="w-full rounded-[2rem] border border-border/70 bg-gradient-to-br from-background via-background to-muted/35 px-4 py-6 shadow-sm sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:items-center">
-          <div className="space-y-6 text-left">
-            <div className="space-y-4">
-              <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                <span className="block">Select any passage.</span>
-                <span className="mt-2 block text-muted-foreground">
-                  Get an instant explanation in context.
-                </span>
-              </h2>
-              <p className="max-w-xl text-base leading-7 text-muted-foreground">
-                Highlight text for a quick explanation, or switch to Deep mode
-                for agentic search across every section of the book.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Link
-                href="/browse"
-                className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                Explore curated library
-              </Link>
-              <Suspense>
-                <AuthButton />
-              </Suspense>
-            </div>
-            <p className="max-w-lg text-sm leading-6 text-muted-foreground">
-              Sign up to upload your own books and build a personal library.
-            </p>
-          </div>
-
-          <HeroReplay />
-        </div>
+      <section className="w-full">
+        <HeroReplay />
       </section>
     </div>
   );
