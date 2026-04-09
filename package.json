@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "next dev -p 4000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 4000",
     "postinstall": "node scripts/fix-pdfjs-assets.cjs && node scripts/postinstall-icons.cjs",
     "gen:favicons": "node scripts/generate-favicons.cjs",
     "gen:pwa-icons": "node scripts/generate-pwa-icons.cjs",
