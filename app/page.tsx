@@ -23,6 +23,7 @@ async function fetchResponseWallSeed(limit = 15) {
   const { data, error } = await supabase
     .from("collection_demos")
     .select("id, question, tool_calls, answer, books, curated_collections!inner(name, slug)")
+    .order("id")
     .limit(limit);
 
   if (error || !data?.length) return [];
