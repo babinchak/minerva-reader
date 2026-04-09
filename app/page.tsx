@@ -8,7 +8,7 @@ import { HeroReplay } from "@/components/marketing/hero-replay";
 import { ServerSiteNav } from "@/components/server-site-nav";
 import { LibraryPageSkeleton } from "@/components/library-grid-skeleton";
 import { HomeContentSkeleton } from "@/components/home-content-skeleton";
-import { ResponseWall } from "@/components/marketing/response-wall";
+import { ResponseWall, RotatingHeadline } from "@/components/marketing/response-wall";
 import { LandingSearch } from "@/components/marketing/landing-search";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
@@ -115,18 +115,19 @@ async function HomeContent({
   ]);
 
   return (
-    <div className="w-full max-w-7xl space-y-8 sm:space-y-10">
+    <div className="w-full max-w-7xl space-y-5 sm:space-y-6">
       {/* 1. Search box with inline headline */}
       <section className="flex flex-col items-center pt-2 sm:pt-4">
-        <h1 className="text-center text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-          Your books, answered.
-        </h1>
-        <p className="mt-1 text-center text-xs text-muted-foreground/70">
-          150,000+ passages across 300+ books
-        </p>
+        <RotatingHeadline />
         <div className="mt-4 w-full">
           <LandingSearch collections={cards} />
         </div>
+        <Link
+          href="/auth/sign-up"
+          className="mt-4 inline-flex items-center justify-center rounded-xl bg-primary px-8 py-3 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        >
+          Sign up free — build your library
+        </Link>
       </section>
 
       {/* 2. Response wall — social proof / depth showcase */}

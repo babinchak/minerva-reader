@@ -217,7 +217,7 @@ export function LandingSearch({
             onChange={(e) => setInputValue(e.target.value)}
             onFocus={() => setIsFocused(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything across 150,000+ passages..."
+            placeholder="Ask anything across 150,000+ passages and 300+ books..."
             className="flex-1 bg-transparent px-3 py-4 text-base text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
           {inputValue.trim() && (

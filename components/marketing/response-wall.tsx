@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { BookOpen, Highlighter, Library, Search, Sparkles } from "lucide-react";
 import { Markdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
 import { formatToolLabel } from "@/components/tool-call-steps";
 
@@ -82,6 +82,26 @@ function demosToCards(demos: ApiDemo[], seen: Set<string>): ResponseCard[] {
 }
 
 
+/* ------------------------------------------------------------------ */
+/*  Rotating headlines                                                  */
+/* ------------------------------------------------------------------ */
+
+const HEADLINES = [
+  "Stop copy-pasting passages into ChatGPT",
+  "Search across your entire book collection",
+  "Get cited answers, not hallucinations",
+  "Understand any passage while you read",
+];
+
+const HEADLINE_INTERVAL_MS = 4000;
+
+const FEATURES = [
+  { icon: Highlighter, text: "Highlight and explain anything in context" },
+  { icon: Search, text: "Deep semantic search within any book" },
+  { icon: Library, text: "Ask questions across entire collections" },
+  { icon: BookOpen, text: "Navigate to the exact cited passage" },
+];
+
 const CARD_CONTENT_HEIGHT = 420;
 /** Base vertical scroll speed in px/sec */
 const VERT_PX_PER_SEC = 30;
@@ -110,17 +130,18 @@ export function ResponseWall({
   if (cards.length === 0) return null;
 
   return (
-    <section className="w-full space-y-4">
-      <div>
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          AI-powered reading
-        </p>
-        <h2 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
-          Real answers from real books
-        </h2>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground sm:text-base">
-          Every reference is clickable and traced to the exact passage.
-        </p>
+    <section className="w-full space-y-6">
+      {/* Static feature pills */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {FEATURES.map((f) => (
+          <div
+            key={f.text}
+            className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-3 py-2.5"
+          >
+            <f.icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span className="text-sm text-muted-foreground">{f.text}</span>
+          </div>
+        ))}
       </div>
 
       {/* Scrolling wall — only rendered after hydration to avoid mismatch */}
@@ -136,6 +157,40 @@ export function ResponseWall({
         ) : null}
       </div>
     </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  RotatingHeadline                                                    */
+/* ------------------------------------------------------------------ */
+
+export function RotatingHeadline() {
+  const [index, setIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIndex((i) => (i + 1) % HEADLINES.length);
+        setVisible(true);
+      }, 400);
+    }, HEADLINE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="relative h-[2.5rem] sm:h-[2.5rem] overflow-hidden">
+      <h1
+        className="text-center text-2xl font-bold tracking-tight text-foreground transition-all duration-400 ease-in-out sm:text-3xl"
+        style={{
+          opacity: visible ? 1 : 0,
+          transform: visible ? "translateY(0)" : "translateY(-12px)",
+        }}
+      >
+        {HEADLINES[index]}
+      </h1>
+    </div>
   );
 }
 
