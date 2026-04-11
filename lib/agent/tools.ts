@@ -61,7 +61,7 @@ export function createAgentTools(
           section_id: r.section_id,
           similarity: r.similarity,
         })),
-        _hint: "Each result is a full chunk (~1200 chars). Use get_passages with index ranges to fetch surrounding context if text is cut off at boundaries or you need more context. For example, if chunk 5 ends mid-sentence, request range {start: 4, end: 6}.",
+        _hint: "Each result is a full chunk (~1200 chars). If a quote or argument continues beyond a chunk boundary, use get_passages with a range spanning adjacent chunks (e.g. {start: 4, end: 6}). Never request a single chunk — you already have it.",
       });
     },
     {
@@ -103,8 +103,9 @@ export function createAgentTools(
     {
       name: "get_passages",
       description:
-        "Fetch merged text for chunk index ranges. Use after vector_search to get surrounding context. " +
-        "Each range {start, end} returns all chunks from start to end merged into one continuous passage. " +
+        "Fetch adjacent chunks to expand context around search results. Use when a quote or argument appears to continue beyond a chunk boundary, " +
+        "or when you need surrounding text for a complete navigable reference. " +
+        "Each range MUST span at least 2 chunks (e.g. start: 4, end: 6). Never request a single chunk (start === end) — you already have that text from search results. " +
         "The response includes a chunks array with section_id and char_offset for each chunk so you can reference the correct section when quoting. " +
         "Max 10 chunks per range.",
       schema: z.object({
@@ -112,10 +113,10 @@ export function createAgentTools(
           .array(
             z.object({
               start: z.number().describe("Start section_index (inclusive)."),
-              end: z.number().describe("End section_index (inclusive)."),
+              end: z.number().describe("End section_index (inclusive). Must be > start."),
             })
           )
-          .describe("Array of index ranges to fetch (e.g. [{start: 4, end: 6}, {start: 12, end: 14}])."),
+          .describe("Array of index ranges to fetch (e.g. [{start: 4, end: 6}, {start: 12, end: 14}]). Each range must span at least 2 chunks."),
       }),
     }
   );
@@ -315,8 +316,9 @@ export function createLibraryAgentTools(
     {
       name: "get_passages",
       description:
-        "Fetch merged text for chunk index ranges across books. Use after vector_search to get surrounding context. " +
-        "Each range {book_id, start, end} returns all chunks merged into one continuous passage. " +
+        "Fetch adjacent chunks to expand context around search results. Use when a quote or argument appears to continue beyond a chunk boundary, " +
+        "or when you need surrounding text for a complete navigable reference. " +
+        "Each range MUST span at least 2 chunks (e.g. start: 4, end: 6). Never request a single chunk (start === end) — you already have that text from search results. " +
         "The response includes a chunks array with section_id and char_offset for referencing. " +
         "Max 10 chunks per range.",
       schema: z.object({
@@ -325,10 +327,10 @@ export function createLibraryAgentTools(
             z.object({
               book_id: z.string().describe("Book ID from vector_search results."),
               start: z.number().describe("Start section_index (inclusive)."),
-              end: z.number().describe("End section_index (inclusive)."),
+              end: z.number().describe("End section_index (inclusive). Must be > start."),
             })
           )
-          .describe("Array of index ranges with book_id to fetch."),
+          .describe("Array of index ranges with book_id to fetch. Each range must span at least 2 chunks."),
       }),
     }
   );
