@@ -135,6 +135,10 @@ function createThoriumPreferences(isMobile: boolean) {
       ...defaultPreferences.affordances,
       paginated: mobilePaginatedAffordance,
     },
+    metadata: {
+      ...defaultPreferences.metadata,
+      documentTitle: { format: "none" },
+    },
   });
 }
 
@@ -143,13 +147,14 @@ const EPUB_STORAGE_KEY_SUFFIX = "-current-location";
 interface BookReaderProps {
   rawManifest: { readingOrder?: Array<{ href?: string }> };
   selfHref: string;
+  bookTitle?: string;
   initialReadingPosition?: Record<string, unknown> | null;
   isLoggedIn?: boolean;
   demoMode?: boolean;
   demoEntries?: import("@/lib/demo-chat-data").DemoChatEntry[];
 }
 
-export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLoggedIn = false, demoMode, demoEntries }: BookReaderProps) {
+export function BookReader({ rawManifest, selfHref, bookTitle, initialReadingPosition, isLoggedIn = false, demoMode, demoEntries }: BookReaderProps) {
   const [mounted, setMounted] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
   const isMobile = useIsMobile();
@@ -160,6 +165,11 @@ export function BookReader({ rawManifest, selfHref, initialReadingPosition, isLo
   const refChatId = searchParams.get("refChatId") || null;
   const refQuote = searchParams.get("refQuote") || null;
   const thoriumPreferences = useMemo(() => createThoriumPreferences(isMobile), [isMobile]);
+
+  useEffect(() => {
+    if (bookTitle) document.title = bookTitle;
+    return () => { document.title = "Minerva Reader"; };
+  }, [bookTitle]);
 
   const aiNonceRef = useRef(0);
   const [aiRequest, setAiRequest] = useState<{ nonce: number; action: "page" | "selection" } | null>(null);

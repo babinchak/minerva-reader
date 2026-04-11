@@ -203,11 +203,16 @@ function isPdfDebugVerboseEnabled() {
   }
 }
 
-export function PdfReader({ pdfUrl, bookId, initialPage, initialBookmarks, isLoggedIn = false, demoMode, demoEntries }: PdfReaderProps) {
+export function PdfReader({ pdfUrl, fileName, bookId, initialPage, initialBookmarks, isLoggedIn = false, demoMode, demoEntries }: PdfReaderProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const selectedText = useSelectedText();
+
+  useEffect(() => {
+    if (fileName) document.title = fileName;
+    return () => { document.title = "Minerva Reader"; };
+  }, [fileName]);
   const selectionExists = Boolean(selectedText && selectedText.trim().length > 0);
   const router = useRouter();
   const searchParams = useSearchParams();

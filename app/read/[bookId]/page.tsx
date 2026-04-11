@@ -169,10 +169,13 @@ export default async function ReadBookPage({ params }: PageProps) {
     selfHref = `${supabaseUrl}/storage/v1/object/public/readium-manifests/${manifestPath}`;
   }
 
+  const epubTitle = book.title ?? book.file_name ?? "";
+
   return (
     <BookReader
       rawManifest={manifest}
       selfHref={selfHref}
+      bookTitle={epubTitle}
       initialReadingPosition={(userBook?.reading_position as Record<string, unknown> | null | undefined) ?? undefined}
       isLoggedIn={!!user}
       demoMode={isDemoMode}
