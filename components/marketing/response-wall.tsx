@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Highlighter, Library, Search, Sparkles } from "lucide-react";
 import { Markdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
-import { formatToolLabel } from "@/components/tool-call-steps";
+
 
 
 /* ------------------------------------------------------------------ */
@@ -407,11 +407,6 @@ function CardPreview({
   const innerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<Animation | null>(null);
 
-  const toolSummary =
-    entry.toolCalls.length > 0
-      ? entry.toolCalls.map((tc) => formatToolLabel(tc.toolName)).join(", ")
-      : null;
-
   const sectionBookMap = useMemo(
     () => buildSectionBookMap(entry.books),
     [entry.books]
@@ -477,14 +472,6 @@ function CardPreview({
           {entry.question}
         </p>
       </div>
-
-      {toolSummary && (
-        <div className="px-3 pb-1 shrink-0">
-          <span className="text-[11px] text-muted-foreground">
-            {toolSummary}
-          </span>
-        </div>
-      )}
 
       <div className="relative flex-1 overflow-hidden">
         <div
