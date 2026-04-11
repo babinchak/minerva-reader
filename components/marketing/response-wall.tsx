@@ -127,7 +127,7 @@ const FEATURES = [
   { icon: Highlighter, text: "Highlight and explain anything in context" },
   { icon: Search, text: "Deep semantic search within any book" },
   { icon: Library, text: "Ask questions across entire collections" },
-  { icon: BookOpen, text: "Navigate to the exact cited passage" },
+  { icon: BookOpen, text: "Navigate to the exact citation" },
 ];
 
 const CARD_CONTENT_HEIGHT = 420;
