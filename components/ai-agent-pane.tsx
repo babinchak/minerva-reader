@@ -628,7 +628,8 @@ export function AIAgentPanel({
   // Credits/tier info. Fetch for both logged-in and anonymous (freeBetaMode).
   const [creditsInfo, setCreditsInfo] = useState<{
     tier: string;
-    remainingDollars: number;
+    includedBalance: number;
+    extraUsageBalance: number;
     allowanceDollars: number;
     freeBetaMode?: boolean;
   } | null>(null);
@@ -642,7 +643,8 @@ export function AIAgentPanel({
         d
           ? {
               tier: d.tier,
-              remainingDollars: d.remainingDollars ?? 0,
+              includedBalance: d.includedBalance ?? 0,
+              extraUsageBalance: d.extraUsageBalance ?? 0,
               allowanceDollars: d.allowanceDollars ?? 0,
               freeBetaMode: d.freeBetaMode ?? false,
             }

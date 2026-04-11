@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Upload, Zap, MessageSquare, BookOpen } from "lucide-react";
+import { Loader2, Upload, Zap, Plus } from "lucide-react";
 import { UsageContentSkeleton } from "@/components/usage-content-skeleton";
 import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
@@ -15,8 +15,8 @@ interface CreditsInfo {
   tier: string;
   freeBetaMode?: boolean;
   allowanceDollars: number;
-  spentDollars: number;
-  remainingDollars: number;
+  includedBalance: number;
+  extraUsageBalance: number;
   allowanceResetAt: string | null;
   booksUploadedThisWeek: number;
   booksUploadLimit: number;
@@ -24,28 +24,14 @@ interface CreditsInfo {
   onDemandLimitDollars: number;
 }
 
-interface UsageRecordDisplay {
-  id: string;
-  date: string;
-  usageType: "chat" | "upload";
-  model?: string;
-  inputTokens?: number;
-  outputTokens?: number;
-  tokens?: number;
-  costDollars: number;
-  included?: boolean;
-  referenceId?: string;
-  title?: string;
-  bookTitle?: string;
-  chatMode?: string;
-}
+const TOP_UP_OPTIONS = [5, 10, 20, 50];
 
 export function UsageContent() {
   const [info, setInfo] = useState<CreditsInfo | null>(null);
-  const [usageRecords, setUsageRecords] = useState<UsageRecordDisplay[]>([]);
-  const [loading, setLoading] = useState<"pro" | "limit" | null>(null);
+  const [loading, setLoading] = useState<"pro" | "limit" | "topup" | null>(null);
   const [limitType, setLimitType] = useState<OnDemandLimitType>("disabled");
   const [limitDollars, setLimitDollars] = useState<string>("10");
+  const [customTopUp, setCustomTopUp] = useState<string>("");
 
   const fetchCredits = useCallback(() => {
     fetch(`/api/credits?t=${Date.now()}`, { cache: "no-store" })
@@ -54,29 +40,17 @@ export function UsageContent() {
       .catch(() => setInfo(null));
   }, []);
 
-  const fetchUsage = useCallback(() => {
-    fetch(`/api/usage?t=${Date.now()}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : { records: [] }))
-      .then((d) => setUsageRecords(d.records ?? []))
-      .catch(() => setUsageRecords([]));
-  }, []);
-
   useEffect(() => {
     fetchCredits();
   }, [fetchCredits]);
 
   useEffect(() => {
-    if (info?.tier !== "anonymous") fetchUsage();
-  }, [info?.tier, fetchUsage]);
-
-  useEffect(() => {
     const handler = () => {
       fetchCredits();
-      fetchUsage();
     };
     window.addEventListener(CREDITS_REFRESH_EVENT, handler);
     return () => window.removeEventListener(CREDITS_REFRESH_EVENT, handler);
-  }, [fetchCredits, fetchUsage]);
+  }, [fetchCredits]);
 
   useEffect(() => {
     if (info?.onDemandLimitType) setLimitType(info.onDemandLimitType);
@@ -126,6 +100,24 @@ export function UsageContent() {
     }
   };
 
+  const handleTopUp = async (dollars: number) => {
+    if (dollars <= 0) return;
+    setLoading("topup");
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "top_up", topUpDollars: dollars }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else throw new Error(data.error ?? "Top-up failed");
+    } catch (err) {
+      console.error(err);
+      setLoading(null);
+    }
+  };
+
   if (!info) {
     return <UsageContentSkeleton />;
   }
@@ -146,7 +138,9 @@ export function UsageContent() {
   const freeBetaMode = info.freeBetaMode ?? false;
 
   const allowanceDollars = info.allowanceDollars ?? 0;
-  const spentDollars = info.spentDollars ?? 0;
+  const includedBalance = info.includedBalance ?? 0;
+  const extraUsageBalance = info.extraUsageBalance ?? 0;
+  const spentDollars = Math.max(0, allowanceDollars - includedBalance);
   const usagePct = allowanceDollars > 0
     ? Math.min(100, Math.round((spentDollars / allowanceDollars) * 100))
     : 0;
@@ -163,13 +157,13 @@ export function UsageContent() {
         </Card>
       )}
 
-      {/* Usage allowance card — shown for both free and paid */}
+      {/* Included usage card */}
       {!freeBetaMode && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5" />
-              {isPaid ? "Included in Pro" : "Usage"}
+              {isPaid ? "Included usage" : "Usage"}
             </CardTitle>
             <CardDescription>
               {info.allowanceResetAt
@@ -181,10 +175,10 @@ export function UsageContent() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
-                  ${spentDollars.toFixed(2)} / ${allowanceDollars.toFixed(2)}
+                  ${spentDollars.toFixed(2)} / ${allowanceDollars.toFixed(2)} used
                 </span>
                 <span className="font-medium text-foreground">
-                  {usagePct}% used
+                  ${includedBalance.toFixed(2)} remaining
                 </span>
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -215,212 +209,116 @@ export function UsageContent() {
         </Card>
       )}
 
+      {/* Extra usage balance card */}
       {isPaid && !freeBetaMode && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5" />
-              On-demand usage
+              <Plus className="h-5 w-5" />
+              Extra usage
             </CardTitle>
             <CardDescription>
-              When included usage runs out, you can keep using and pay for extra.
+              When included usage runs out, extra balance is used.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {(() => {
-              const overageDollars = Math.max(0, spentDollars - allowanceDollars);
-              const savedLimitDollars = info.onDemandLimitType === "fixed" ? info.onDemandLimitDollars : 0;
-              return (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">This period</span>
-                    <span className="font-medium text-foreground">
-                      ${overageDollars.toFixed(2)}
-                      {savedLimitDollars > 0 && (
-                        <span className="text-muted-foreground font-normal"> / ${savedLimitDollars.toFixed(2)}</span>
-                      )}
-                    </span>
-                  </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Balance</span>
+              <span className="font-medium text-foreground text-lg">
+                ${extraUsageBalance.toFixed(2)}
+              </span>
+            </div>
 
-                  <div className="space-y-3 pt-2 border-t border-border">
-                    <Label className="text-sm font-medium">Monthly limit</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Set a fixed amount, unlimited, or disable on-demand.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {(["disabled", "fixed", "unlimited"] as const).map((t) => (
-                        <Button
-                          key={t}
-                          variant={limitType === t ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setLimitType(t)}
-                        >
-                          {t === "disabled" ? "Disabled" : t === "fixed" ? "Fixed" : "Unlimited"}
-                        </Button>
-                      ))}
-                    </div>
-                    {limitType === "fixed" && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">$</span>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={limitDollars}
-                          onChange={(e) => setLimitDollars(e.target.value)}
-                          className="w-24"
-                        />
-                        <span className="text-muted-foreground text-sm">/ month max</span>
-                      </div>
-                    )}
-                    <Button
-                      size="sm"
-                      onClick={handleSaveOnDemandLimit}
-                      disabled={!!loading}
-                    >
-                      {loading === "limit" ? (
-                        <>
-                          <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        "Save"
-                      )}
-                    </Button>
-                  </div>
-                </>
-              );
-            })()}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <Label className="text-sm font-medium">Add balance</Label>
+              <div className="flex flex-wrap gap-2">
+                {TOP_UP_OPTIONS.map((amount) => (
+                  <Button
+                    key={amount}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleTopUp(amount)}
+                    disabled={!!loading}
+                  >
+                    ${amount}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  placeholder="Custom"
+                  value={customTopUp}
+                  onChange={(e) => setCustomTopUp(e.target.value)}
+                  className="w-24"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleTopUp(parseFloat(customTopUp || "0"))}
+                  disabled={!!loading || !customTopUp || parseFloat(customTopUp) <= 0}
+                >
+                  {loading === "topup" ? (
+                    <Loader2 className="animate-spin h-4 w-4" />
+                  ) : (
+                    "Add"
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-2 border-t border-border">
+              <Label className="text-sm font-medium">Monthly extra usage limit</Label>
+              <p className="text-xs text-muted-foreground">
+                Cap how much extra usage you allow per month, or disable it entirely.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(["disabled", "fixed", "unlimited"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    variant={limitType === t ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setLimitType(t)}
+                  >
+                    {t === "disabled" ? "Disabled" : t === "fixed" ? "Fixed" : "Unlimited"}
+                  </Button>
+                ))}
+              </div>
+              {limitType === "fixed" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={limitDollars}
+                    onChange={(e) => setLimitDollars(e.target.value)}
+                    className="w-24"
+                  />
+                  <span className="text-muted-foreground text-sm">/ month max</span>
+                </div>
+              )}
+              <Button
+                size="sm"
+                onClick={handleSaveOnDemandLimit}
+                disabled={!!loading}
+              >
+                {loading === "limit" ? (
+                  <>
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save"
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {(isPaid || freeBetaMode) && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Recent messages
-              </CardTitle>
-              <CardDescription>
-                Chat messages with model, tokens, and cost.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {(() => {
-                const chatRecords = usageRecords.filter((r) => r.usageType === "chat");
-                if (chatRecords.length === 0) {
-                  return (
-                    <p className="text-sm text-muted-foreground py-4">
-                      No chat messages yet. Usage will appear here after you send messages.
-                    </p>
-                  );
-                }
-                return (
-                  <>
-                    <div className="overflow-x-auto -mx-2">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-border">
-                            <th className="text-left py-2 px-2 font-medium text-muted-foreground">Date</th>
-                            <th className="text-left py-2 px-2 font-medium text-muted-foreground">Mode</th>
-                            <th className="text-left py-2 px-2 font-medium text-muted-foreground">Book</th>
-                            <th className="text-left py-2 px-2 font-medium text-muted-foreground">Model</th>
-                            <th className="text-right py-2 px-2 font-medium text-muted-foreground">Tokens</th>
-                            <th className="text-right py-2 px-2 font-medium text-muted-foreground">Cost</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {chatRecords.slice(0, 50).map((r) => (
-                            <tr key={r.id} className="border-b border-border/50">
-                              <td className="py-2 px-2 text-foreground">
-                                {new Date(r.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
-                              </td>
-                              <td className="py-2 px-2 text-muted-foreground">
-                                {r.chatMode === "agentic" ? "Deep" : r.chatMode === "fast" ? "Quick" : r.chatMode ?? "—"}
-                              </td>
-                              <td className="py-2 px-2 text-muted-foreground max-w-[140px] truncate" title={r.bookTitle}>
-                                {r.bookTitle ?? "General"}
-                              </td>
-                              <td className="py-2 px-2 text-muted-foreground">
-                                {r.model ?? "—"}
-                              </td>
-                              <td className="py-2 px-2 text-right text-muted-foreground">
-                                {r.tokens != null ? r.tokens.toLocaleString() : "—"}
-                              </td>
-                              <td className="py-2 px-2 text-right font-medium text-foreground">
-                                {r.included ? <span className="text-muted-foreground font-normal">Included</span> : r.costDollars > 0 ? `$${r.costDollars.toFixed(2)}` : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {chatRecords.length > 50 && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Showing 50 most recent. Total: {chatRecords.length}
-                      </p>
-                    )}
-                  </>
-                );
-              })()}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BookOpen className="h-5 w-5" />
-                Book uploads
-              </CardTitle>
-              <CardDescription>
-                Recent book uploads with total cost.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {(() => {
-                const uploadRecords = usageRecords.filter((r) => r.usageType === "upload");
-                if (uploadRecords.length === 0) {
-                  return (
-                    <p className="text-sm text-muted-foreground py-4">
-                      No book uploads yet. Usage will appear here after you upload books.
-                    </p>
-                  );
-                }
-                return (
-                  <div className="overflow-x-auto -mx-2">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="text-left py-2 px-2 font-medium text-muted-foreground">Date</th>
-                          <th className="text-left py-2 px-2 font-medium text-muted-foreground">Book</th>
-                          <th className="text-right py-2 px-2 font-medium text-muted-foreground">Cost</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {uploadRecords.slice(0, 20).map((r) => (
-                          <tr key={r.id} className="border-b border-border/50">
-                            <td className="py-2 px-2 text-foreground">
-                              {new Date(r.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                            </td>
-                            <td className="py-2 px-2 text-muted-foreground">
-                              {r.title ?? "—"}
-                            </td>
-                            <td className="py-2 px-2 text-right font-medium text-foreground">
-                              {r.included ? <span className="text-muted-foreground font-normal">Included</span> : r.costDollars > 0 ? `$${r.costDollars.toFixed(2)}` : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        </>
-      )}
 
       {!isPaid && (
         <Card>

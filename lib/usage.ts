@@ -68,10 +68,11 @@ export interface RecordUsageParams {
 }
 
 /**
- * Record a usage event. Just inserts a row — no balance deduction.
- * Balance is derived at read time from allowance - SUM(cost since reset).
+ * Record a usage event and deduct from the user's balances.
+ * Deducts from included_balance first, then extra_usage_balance.
+ * Returns whether the cost was included or drawn from extra usage.
  */
-export async function recordUsage(params: RecordUsageParams): Promise<{ success: boolean; costDollars: number }> {
+export async function recordUsage(params: RecordUsageParams): Promise<{ success: boolean; costDollars: number; included: boolean }> {
   const {
     userId,
     costDollars,
@@ -83,12 +84,57 @@ export async function recordUsage(params: RecordUsageParams): Promise<{ success:
     referenceId,
   } = params;
 
-  if (costDollars <= 0) return { success: true, costDollars: 0 };
+  if (costDollars <= 0) return { success: true, costDollars: 0, included: true };
+  if (!userId) {
+    // Anonymous usage — just insert the record, no balance to deduct
+    const supabase = createServiceClient();
+    await supabase.from("usage_records").insert({
+      user_id: null,
+      cost_dollars: costDollars,
+      usage_type: usageType,
+      model: model ?? null,
+      input_tokens: inputTokens ?? null,
+      output_tokens: outputTokens ?? null,
+      cached_input_tokens: cachedInputTokens ?? null,
+      reference_id: referenceId ?? null,
+      included: false,
+    });
+    return { success: true, costDollars, included: false };
+  }
 
   const supabase = createServiceClient();
 
+  // Get current balances
+  const { data: credits } = await supabase
+    .from("user_credits")
+    .select("included_balance, extra_usage_balance")
+    .eq("user_id", userId)
+    .single();
+
+  const includedBalance = credits?.included_balance ?? 0;
+  const extraBalance = credits?.extra_usage_balance ?? 0;
+
+  let included = true;
+  let deductFromIncluded = 0;
+  let deductFromExtra = 0;
+
+  if (includedBalance >= costDollars) {
+    // Fully covered by included balance
+    deductFromIncluded = costDollars;
+  } else if (includedBalance > 0) {
+    // Partially covered — use remaining included, rest from extra
+    deductFromIncluded = includedBalance;
+    deductFromExtra = costDollars - includedBalance;
+    included = false;
+  } else {
+    // Entirely from extra usage
+    deductFromExtra = costDollars;
+    included = false;
+  }
+
+  // Insert usage record
   const { error } = await supabase.from("usage_records").insert({
-    user_id: userId ?? null,
+    user_id: userId,
     cost_dollars: costDollars,
     usage_type: usageType,
     model: model ?? null,
@@ -96,12 +142,27 @@ export async function recordUsage(params: RecordUsageParams): Promise<{ success:
     output_tokens: outputTokens ?? null,
     cached_input_tokens: cachedInputTokens ?? null,
     reference_id: referenceId ?? null,
+    included,
   });
 
   if (error) {
     console.error("[usage] failed to insert usage_record:", error);
-    return { success: false, costDollars };
+    return { success: false, costDollars, included };
   }
 
-  return { success: true, costDollars };
+  // Deduct from balances
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (deductFromIncluded > 0) {
+    update.included_balance = Math.max(0, includedBalance - deductFromIncluded);
+  }
+  if (deductFromExtra > 0) {
+    update.extra_usage_balance = Math.max(0, extraBalance - deductFromExtra);
+  }
+
+  await supabase
+    .from("user_credits")
+    .update(update)
+    .eq("user_id", userId);
+
+  return { success: true, costDollars, included };
 }

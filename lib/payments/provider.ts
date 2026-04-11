@@ -6,7 +6,9 @@ export interface CheckoutSessionParams {
   userId: string;
   successUrl: string;
   cancelUrl: string;
-  mode: "subscription";
+  mode: "subscription" | "top_up";
+  /** Amount in dollars for top_up mode. */
+  topUpDollars?: number;
 }
 
 export interface CheckoutSessionResult {

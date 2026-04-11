@@ -1,5 +1,4 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getCredits, getPeriodStart } from "@/lib/credits";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -38,35 +37,10 @@ export async function GET(req: NextRequest) {
 
     const serviceSupabase = createServiceClient();
 
-    // Build inclusion map: walk through all usage records chronologically,
-    // subtracting from allowance — records within allowance are "included".
-    const credits = await getCredits(user.id);
-    const includedIds = new Set<string>();
-    if (credits) {
-      const periodStart = getPeriodStart(credits.tier as "free" | "paid", credits.allowanceResetAt);
-      const { data: allRecords } = await serviceSupabase
-        .from("usage_records")
-        .select("id, cost_dollars, created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", periodStart.toISOString())
-        .order("created_at", { ascending: true });
-
-      let balance = credits.allowanceDollars;
-      for (const r of allRecords ?? []) {
-        const cost = r.cost_dollars ?? 0;
-        if (balance >= cost) {
-          includedIds.add(r.id);
-          balance -= cost;
-        } else {
-          balance = 0;
-        }
-      }
-    }
-
     // Chat usage from usage_records
     const { data: chatUsageRows } = await serviceSupabase
       .from("usage_records")
-      .select("id, cost_dollars, usage_type, model, input_tokens, output_tokens, reference_id, created_at")
+      .select("id, cost_dollars, usage_type, model, input_tokens, output_tokens, reference_id, included, created_at")
       .eq("user_id", user.id)
       .in("usage_type", ["chat", "chat_agentic"])
       .order("created_at", { ascending: false })
@@ -118,7 +92,7 @@ export async function GET(req: NextRequest) {
         outputTokens: r.output_tokens ?? undefined,
         tokens: tokens > 0 ? tokens : undefined,
         costDollars: r.cost_dollars ?? 0,
-        included: includedIds.has(r.id),
+        included: r.included ?? true,
         referenceId: r.reference_id ?? undefined,
         title: r.reference_id ? chatTitleMap.get(r.reference_id) ?? "Deleted chat" : undefined,
         bookTitle: r.reference_id ? chatBookMap.get(r.reference_id) : undefined,
@@ -129,7 +103,7 @@ export async function GET(req: NextRequest) {
     // Upload/processing usage from usage_records
     const { data: uploadUsageRows } = await serviceSupabase
       .from("usage_records")
-      .select("id, cost_dollars, usage_type, model, reference_id, created_at")
+      .select("id, cost_dollars, usage_type, model, reference_id, included, created_at")
       .eq("user_id", user.id)
       .in("usage_type", ["upload", "summary_book", "summary_chapter", "embedding"])
       .order("created_at", { ascending: false })
@@ -140,7 +114,7 @@ export async function GET(req: NextRequest) {
     for (const r of uploadUsageRows ?? []) {
       const bookId = r.reference_id ?? r.id;
       const costDollars = r.cost_dollars ?? 0;
-      const isIncluded = includedIds.has(r.id);
+      const isIncluded = r.included ?? true;
       const existing = uploadByBook.get(bookId);
       if (existing) {
         existing.costDollars += costDollars;

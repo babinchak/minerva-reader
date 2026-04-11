@@ -10,18 +10,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const body = await req.json();
+    const mode = body.mode as "subscription" | "top_up";
+
     const host = req.headers.get("host") ?? "localhost:4000";
     const protocol = host.includes("localhost") ? "http" : "https";
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `${protocol}://${host}`;
 
-    const successUrl = `${baseUrl}/?success=1&upgrade=1`;
+    const successUrl = `${baseUrl}/?success=1${mode === "subscription" ? "&upgrade=1" : "&topup=1"}`;
     const cancelUrl = `${baseUrl}/?canceled=1`;
 
     const session = await createStripeCheckoutSession({
       userId: user.id,
       successUrl,
       cancelUrl,
-      mode: "subscription",
+      mode,
+      topUpDollars: mode === "top_up" ? parseFloat(body.topUpDollars ?? "0") : undefined,
     });
 
     if (!session) {

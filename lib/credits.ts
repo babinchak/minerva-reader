@@ -1,6 +1,6 @@
 /**
  * Usage system: tier resolution, balance checks (dollars-based).
- * Balance is derived: allowance_dollars - SUM(usage_records.cost_dollars since reset).
+ * Balances are stored directly on user_credits and decremented on each usage.
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
@@ -16,14 +16,14 @@ export const ALLOWANCE_DOLLARS_FREE_DAILY =
 
 /** Monthly allowance for paid tier in dollars. */
 export const ALLOWANCE_DOLLARS_PAID_MONTHLY =
-  Number(process.env.ALLOWANCE_DOLLARS_PAID) || 20;
+  Number(process.env.ALLOWANCE_DOLLARS_PAID) || 10;
 
 export interface UserCredits {
   tier: UserTier;
   allowanceDollars: number;
+  includedBalance: number;
+  extraUsageBalance: number;
   allowanceResetAt: Date | null;
-  spentDollars: number;
-  remainingDollars: number;
   onDemandLimitType: OnDemandLimitType;
   onDemandLimitDollars: number;
 }
@@ -89,22 +89,7 @@ export function getModelForTier(tier: UserTier): string {
 }
 
 /**
- * Get total spend in dollars for a user since a given date.
- */
-async function getSpendSince(userId: string, since: Date): Promise<number> {
-  const supabase = createServiceClient();
-  const { data } = await supabase
-    .from("usage_records")
-    .select("cost_dollars")
-    .eq("user_id", userId)
-    .gte("created_at", since.toISOString());
-
-  if (!data || data.length === 0) return 0;
-  return data.reduce((sum, r) => sum + (r.cost_dollars ?? 0), 0);
-}
-
-/**
- * Get user credits with derived balance. Creates row and applies allowance reset if needed.
+ * Get user credits. Creates row and applies allowance reset if needed.
  */
 export async function getCredits(userId: string): Promise<UserCredits | null> {
   const supabase = createServiceClient();
@@ -112,45 +97,23 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
 
   const { data, error } = await supabase
     .from("user_credits")
-    .select("tier, allowance_dollars, allowance_reset_at, on_demand_limit_type, on_demand_limit_dollars")
+    .select("tier, allowance_dollars, included_balance, extra_usage_balance, allowance_reset_at, on_demand_limit_type, on_demand_limit_dollars")
     .eq("user_id", userId)
     .single();
 
   if (error || !data) return null;
 
   const tier = (data.tier as UserTier) || "free";
-  const allowanceDollars = data.allowance_dollars ?? allowanceDollarsForTier(tier);
-  const resetAt = data.allowance_reset_at ? new Date(data.allowance_reset_at) : null;
-
-  // Derive balance from usage_records since last reset
-  const periodStart = getPeriodStart(tier, resetAt);
-  const spentDollars = await getSpendSince(userId, periodStart);
-  const remainingDollars = allowanceDollars - spentDollars;
 
   return {
     tier,
-    allowanceDollars,
-    allowanceResetAt: resetAt,
-    spentDollars,
-    remainingDollars,
+    allowanceDollars: data.allowance_dollars ?? allowanceDollarsForTier(tier),
+    includedBalance: data.included_balance ?? 0,
+    extraUsageBalance: data.extra_usage_balance ?? 0,
+    allowanceResetAt: data.allowance_reset_at ? new Date(data.allowance_reset_at) : null,
     onDemandLimitType: (data.on_demand_limit_type as OnDemandLimitType) || "disabled",
     onDemandLimitDollars: data.on_demand_limit_dollars ?? 10,
   };
-}
-
-/**
- * Get the start of the current billing period.
- * For free tier: reset - 1 day. For paid tier: reset - 1 month.
- */
-export function getPeriodStart(tier: UserTier, resetAt: Date | null): Date {
-  if (!resetAt) return new Date(0); // no reset date = count everything
-  const start = new Date(resetAt);
-  if (tier === "paid") {
-    start.setMonth(start.getMonth() - 1);
-  } else {
-    start.setDate(start.getDate() - 1);
-  }
-  return start;
 }
 
 /**
@@ -177,6 +140,8 @@ export async function ensureUserCredits(userId: string): Promise<void> {
       user_id: userId,
       tier: "free",
       allowance_dollars: allowanceDollars,
+      included_balance: allowanceDollars,
+      extra_usage_balance: 0,
       allowance_reset_at: resetAt.toISOString(),
       updated_at: now.toISOString(),
     });
@@ -199,6 +164,7 @@ export async function ensureUserCredits(userId: string): Promise<void> {
       .from("user_credits")
       .update({
         allowance_dollars: allowanceDollarsNow,
+        included_balance: allowanceDollarsNow,
         allowance_reset_at: nextResetDate(tier, now).toISOString(),
         updated_at: now.toISOString(),
       })
@@ -209,8 +175,8 @@ export async function ensureUserCredits(userId: string): Promise<void> {
 /**
  * Check if user can make a request costing estimatedCostDollars.
  * - Free beta mode: always allow.
- * - Has remaining allowance: allow.
- * - On-demand enabled: check limit.
+ * - Has included balance: allow.
+ * - Has extra usage balance and on-demand enabled: allow.
  */
 export async function canMakeRequest(
   userId: string,
@@ -221,16 +187,13 @@ export async function canMakeRequest(
   if (isAdminEmail(userEmail)) return true;
   const credits = await getCredits(userId);
   if (!credits) return false;
-  if (credits.remainingDollars > 0) return true;
+  if (credits.includedBalance > 0) return true;
 
-  // On-demand check
+  // No included balance left — check extra usage
   if (credits.onDemandLimitType === "disabled") return false;
-  if (credits.onDemandLimitType === "unlimited") return true;
+  if (credits.extraUsageBalance <= 0) return false;
 
-  // Fixed limit: overage so far + this request's overage
-  const overageSoFar = Math.max(0, -credits.remainingDollars);
-  const wouldBeOverage = overageSoFar + estimatedCostDollars;
-  return wouldBeOverage <= credits.onDemandLimitDollars;
+  return true;
 }
 
 /**

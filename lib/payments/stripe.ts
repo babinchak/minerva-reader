@@ -14,7 +14,6 @@ function getStripe(): Stripe | null {
 }
 
 const PRICE_ID_PRO = process.env.STRIPE_PRICE_ID_PRO;
-const PRICE_ID_OVERAGE = process.env.STRIPE_PRICE_ID_OVERAGE;
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
 /** Safely convert Unix timestamp to ISO string. Returns null if invalid. */
@@ -23,15 +22,6 @@ function unixToIso(unix: unknown): string | null {
   if (!Number.isFinite(n) || n <= 0) return null;
   const d = new Date(n * 1000);
   return isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-/** Find subscription item ID for overage (metered) price. */
-function findOverageSubscriptionItemId(
-  items: { id: string; price: { id: string } }[]
-): string | null {
-  if (!PRICE_ID_OVERAGE) return null;
-  const item = items.find((i) => i.price.id === PRICE_ID_OVERAGE);
-  return item?.id ?? null;
 }
 
 export async function createStripeCheckoutSession(
@@ -86,14 +76,23 @@ export async function createStripeCheckoutSession(
 
   if (params.mode === "subscription" && PRICE_ID_PRO) {
     sessionParams.mode = "subscription";
-    const lineItems: { price: string; quantity?: number }[] = [{ price: PRICE_ID_PRO, quantity: 1 }];
-    if (PRICE_ID_OVERAGE) {
-      lineItems.push({ price: PRICE_ID_OVERAGE }); // metered, no quantity
-    }
-    sessionParams.line_items = lineItems;
+    sessionParams.line_items = [{ price: PRICE_ID_PRO, quantity: 1 }];
     sessionParams.subscription_data = {
       metadata: { user_id: params.userId },
     };
+  } else if (params.mode === "top_up" && params.topUpDollars && params.topUpDollars > 0) {
+    sessionParams.mode = "payment";
+    sessionParams.metadata!.top_up_dollars = String(params.topUpDollars);
+    sessionParams.line_items = [
+      {
+        price_data: {
+          currency: "usd",
+          product_data: { name: "Extra usage balance" },
+          unit_amount: Math.round(params.topUpDollars * 100), // cents
+        },
+        quantity: 1,
+      },
+    ];
   } else {
     return null;
   }
@@ -139,11 +138,11 @@ export async function handleStripeWebhook(
       }
 
       if (session.mode === "subscription" && session.subscription) {
+        // Subscription checkout — upgrade to paid
         const sub = (await stripe.subscriptions.retrieve(
           session.subscription as string
         )) as unknown as { id: string; status?: string; current_period_end: number; items: { data: { id: string; price: { id: string } }[] } };
         log("retrieved subscription", { subId: sub.id, status: sub.status });
-        const overageItemId = findOverageSubscriptionItemId(sub.items.data);
 
         const resetAt = unixToIso(sub.current_period_end) ?? (() => {
           const d = new Date();
@@ -158,9 +157,8 @@ export async function handleStripeWebhook(
               user_id: userId,
               tier: "paid",
               allowance_dollars: ALLOWANCE_DOLLARS_PAID_MONTHLY,
-
+              included_balance: ALLOWANCE_DOLLARS_PAID_MONTHLY,
               stripe_subscription_id: sub.id,
-              stripe_subscription_item_overage: overageItemId,
               allowance_reset_at: resetAt,
               updated_at: new Date().toISOString(),
             },
@@ -172,6 +170,28 @@ export async function handleStripeWebhook(
         } else {
           log("→ UPGRADED to paid", { userId });
         }
+      } else if (session.mode === "payment") {
+        // One-time payment — top up extra usage balance
+        const topUpDollars = parseFloat(session.metadata?.top_up_dollars ?? "0");
+        if (topUpDollars > 0) {
+          const { data: current } = await supabase
+            .from("user_credits")
+            .select("extra_usage_balance")
+            .eq("user_id", userId)
+            .single();
+
+          const currentBalance = current?.extra_usage_balance ?? 0;
+
+          await supabase
+            .from("user_credits")
+            .update({
+              extra_usage_balance: currentBalance + topUpDollars,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("user_id", userId);
+
+          log("→ TOPPED UP extra usage", { userId, topUpDollars, newBalance: currentBalance + topUpDollars });
+        }
       }
       break;
     }
@@ -182,7 +202,6 @@ export async function handleStripeWebhook(
       log("subscription created", { subId: sub.id, status: sub.status, hasUserId: !!userId });
       if (!userId || !["active", "trialing"].includes(sub.status)) break;
 
-      const overageItemId = findOverageSubscriptionItemId(sub.items.data);
       const resetAt = unixToIso(sub.current_period_end) ?? (() => {
         const d = new Date();
         d.setMonth(d.getMonth() + 1);
@@ -196,8 +215,8 @@ export async function handleStripeWebhook(
             user_id: userId,
             tier: "paid",
             allowance_dollars: ALLOWANCE_DOLLARS_PAID_MONTHLY,
+            included_balance: ALLOWANCE_DOLLARS_PAID_MONTHLY,
             stripe_subscription_id: sub.id,
-            stripe_subscription_item_overage: overageItemId,
             allowance_reset_at: resetAt,
             updated_at: new Date().toISOString(),
           },
@@ -221,8 +240,6 @@ export async function handleStripeWebhook(
         break;
       }
 
-      // Only downgrade when subscription is definitively cancelled/failed.
-      // Do NOT downgrade for "incomplete" - payment may still be processing.
       const failedStatuses = ["canceled", "unpaid", "incomplete_expired", "past_due"];
       const shouldDowngrade =
         event.type === "customer.subscription.deleted" ||
@@ -234,21 +251,18 @@ export async function handleStripeWebhook(
           .update({
             tier: "free",
             allowance_dollars: ALLOWANCE_DOLLARS_FREE_DAILY,
+            included_balance: ALLOWANCE_DOLLARS_FREE_DAILY,
             stripe_subscription_id: null,
-            stripe_subscription_item_overage: null,
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", sub.id);
         log("→ DOWNGRADED to free", { subId: sub.id, reason: event.type === "customer.subscription.deleted" ? "deleted" : `status=${sub.status}` });
       } else if (["active", "trialing"].includes(sub.status)) {
-        const subWithItems = sub as Stripe.Subscription & { items: { data: { id: string; price: { id: string } }[] } };
-        const overageItemId = findOverageSubscriptionItemId(subWithItems.items.data);
         const resetAt = unixToIso(sub.current_period_end);
         await supabase
           .from("user_credits")
           .update({
             allowance_dollars: ALLOWANCE_DOLLARS_PAID_MONTHLY,
-            stripe_subscription_item_overage: overageItemId,
             allowance_reset_at: resetAt,
             updated_at: new Date().toISOString(),
           })
@@ -273,13 +287,13 @@ export async function handleStripeWebhook(
           await supabase
             .from("user_credits")
             .update({
-
               allowance_dollars: ALLOWANCE_DOLLARS_PAID_MONTHLY,
+              included_balance: ALLOWANCE_DOLLARS_PAID_MONTHLY,
               allowance_reset_at: resetAt,
-
               updated_at: new Date().toISOString(),
             })
             .eq("user_id", userId);
+          log("→ RENEWED included balance", { userId });
         }
       }
       break;
