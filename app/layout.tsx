@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import NextTopLoader from "nextjs-toploader";
@@ -9,6 +10,13 @@ import { ScrollLockRepair } from "@/components/scroll-lock-repair";
 import { ThemeVariantsProvider } from "@/components/theme-variants-provider";
 import { MobileConsoleMirror } from "@/components/mobile-console-mirror";
 import "./globals.css";
+
+const satoshi = localFont({
+  src: "../public/fonts/Satoshi-Variable.woff2",
+  variable: "--font-satoshi",
+  weight: "300 900",
+  display: "swap",
+});
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -57,7 +65,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={satoshi.variable} suppressHydrationWarning>
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <script
