@@ -4,12 +4,25 @@ import { BookReader } from "@/components/book-reader";
 import PdfReaderClient from "@/components/pdf-reader-client";
 import { EpubProcessingWait } from "@/components/epub-processing-wait";
 import { DEMO_DATA } from "@/lib/demo-chat-data";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 interface PageProps {
   params: Promise<{ bookId: string }>;
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { bookId } = await params;
+  const serviceSupabase = createServiceClient();
+  const { data: book } = await serviceSupabase
+    .from("books")
+    .select("title, file_name")
+    .eq("id", bookId)
+    .single();
+  const title = book?.title || book?.file_name || "Minerva Reader";
+  return { title };
 }
 
 export default async function ReadBookPage({ params }: PageProps) {
