@@ -46,12 +46,12 @@ export function UpgradeCta() {
   };
 
   return (
-    <Card className="w-full max-w-2xl">
+    <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
         <CardTitle>{tier === "paid" ? "Pro" : "Upgrade to Pro"}</CardTitle>
         <CardDescription>
           {tier === "paid"
-            ? "Unlimited uploads, best AI model, and included credits. Overage is billed in arrears."
+            ? "Unlimited uploads, best AI model, and included credits. Add extra usage balance anytime."
             : "Unlimited uploads, best AI model, and more credits."}
         </CardDescription>
       </CardHeader>
