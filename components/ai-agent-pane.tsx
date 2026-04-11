@@ -1439,7 +1439,7 @@ export function AIAgentPanel({
           contextHeader += "\n";
         }
         if (sendContextBlock || sendPageContextBlock || contextHeader) {
-          userContent = `${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendPageContextBlock ? `${sendPageContextBlock}` : ""}User question:\n${userInput}`;
+          userContent = `${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendPageContextBlock ? `${sendPageContextBlock}\n\n` : ""}User question:\n${userInput}`;
         }
       }
 
