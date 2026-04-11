@@ -7,6 +7,7 @@ import {
   ThI18nProvider,
   setTheme,
   setScroll,
+  setColumnCount,
   useAppDispatch,
   useAppSelector,
   usePreferences,
@@ -69,7 +70,7 @@ const FALLBACK_DARK = {
 };
 
 const DESKTOP_SETTINGS_REFLOW_ORDER = defaultPreferences.settings.reflowOrder.filter(
-  (k) => k !== ThSettingsKeys.theme
+  (k) => k !== ThSettingsKeys.theme && k !== ThSettingsKeys.columns
 );
 const MOBILE_SETTINGS_REFLOW_ORDER = DESKTOP_SETTINGS_REFLOW_ORDER.filter(
   (k) => k !== ThSettingsKeys.layout
@@ -105,7 +106,7 @@ function createThoriumPreferences(isMobile: boolean) {
     settings: {
       ...defaultPreferences.settings,
       reflowOrder: isMobile ? MOBILE_SETTINGS_REFLOW_ORDER : DESKTOP_SETTINGS_REFLOW_ORDER,
-      fxlOrder: defaultPreferences.settings.fxlOrder.filter((k) => k !== ThSettingsKeys.theme),
+      fxlOrder: defaultPreferences.settings.fxlOrder.filter((k) => k !== ThSettingsKeys.theme && k !== ThSettingsKeys.columns),
     },
     actions: {
       ...defaultPreferences.actions,
@@ -1035,6 +1036,7 @@ function ThoriumThemeSync() {
   const { resolvedTheme } = useTheme();
   const dispatch = useAppDispatch();
   const { preferences, updatePreferences } = usePreferences();
+  const { submitPreferences } = useEpubNavigator();
   const prefsRef = useRef(preferences);
   prefsRef.current = preferences;
 
@@ -1064,6 +1066,12 @@ function ThoriumThemeSync() {
     dispatch(setTheme({ key: "reflow", value: theme }));
     dispatch(setTheme({ key: "fxl", value: theme }));
   }, [resolvedTheme, dispatch]);
+
+  // Force single-column layout
+  useEffect(() => {
+    dispatch(setColumnCount("1"));
+    submitPreferences({ columnCount: 1 });
+  }, [dispatch, submitPreferences]);
 
   useEffect(() => {
     syncThemeColors();
