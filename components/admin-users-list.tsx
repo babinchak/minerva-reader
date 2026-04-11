@@ -11,6 +11,7 @@ import {
   Gauge,
   Loader2,
   MessageSquare,
+  MoreHorizontal,
   Users,
 } from "lucide-react";
 import { MinervaLogo } from "@/components/minerva-logo";
@@ -32,7 +33,12 @@ type User = {
   chatCount: number;
   tier: string;
   allowanceDollars: number;
+  includedBalance: number;
+  extraUsageBalance: number;
   allowanceResetAt: string | null;
+  onDemandLimitType: string;
+  onDemandLimitDollars: number;
+  uploadsThisWeek: number;
 };
 
 type SortType = "lastActive" | "signUp" | "bookCount" | "chatCount" | "email" | "balance";
@@ -125,30 +131,51 @@ export function AdminUsersList() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [sort, setSort] = useState<SortType>("lastActive");
   const [dir, setDir] = useState<SortDir>("desc");
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/admin/users");
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `HTTP ${res.status}`);
-        }
-        const data = (await res.json()) as { users: User[] };
-        setUsers(data.users ?? []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load users");
-      } finally {
-        setLoading(false);
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/users");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
       }
-    })();
-  }, []);
+      const data = (await res.json()) as { users: User[] };
+      setUsers(data.users ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load users");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchUsers(); }, []);
+
+  const handleAction = async (userId: string, action: string, dollars?: number) => {
+    setActionLoading(userId);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, action, dollars }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Action failed");
+      }
+      await fetchUsers();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const visibleUsers = useMemo(() => {
     let filtered = users;
@@ -281,22 +308,24 @@ export function AdminUsersList() {
         </div>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
-          <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-4 px-4 py-2.5 bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] gap-4 px-4 py-2.5 bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wider">
             <span>User</span>
             <span className="w-16 text-center">Tier</span>
-            <span className="w-24 text-center">Allowance</span>
+            <span className="w-28 text-center">Included</span>
+            <span className="w-28 text-center">Extra</span>
             <span className="w-20 text-center">Books</span>
+            <span className="w-20 text-center">Uploads</span>
             <span className="w-20 text-center">Chats</span>
-            <span className="w-28 text-right">Signed up</span>
             <span className="w-28 text-right">Last active</span>
+            <span className="w-10"></span>
           </div>
           {visibleUsers.map((u) => {
             const inactive = isUserInactive(u);
-            const allowanceDisplay = `$${u.allowanceDollars.toFixed(2)}`;
+            const isActioning = actionLoading === u.id;
             return (
               <div
                 key={u.id}
-                className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-1 sm:gap-4 items-center px-4 py-3 border-t border-border first:border-t-0 hover:bg-muted/30 transition-colors"
+                className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] gap-1 sm:gap-4 items-center px-4 py-3 border-t border-border first:border-t-0 hover:bg-muted/30 transition-colors"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -310,7 +339,8 @@ export function AdminUsersList() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground sm:hidden mt-0.5">
-                    {u.tier} · {allowanceDisplay} allowance · {u.bookCount} books · {u.chatCount} chats
+                    {u.tier} · ${u.includedBalance.toFixed(2)}/${u.allowanceDollars.toFixed(2)} incl · ${u.extraUsageBalance.toFixed(2)} extra ({u.onDemandLimitType === "disabled" ? "off" : u.onDemandLimitType === "unlimited" ? "no limit" : `$${u.onDemandLimitDollars} limit`}) · {u.bookCount} books · {u.chatCount} chats
+                    {u.tier !== "paid" && ` · ${u.uploadsThisWeek}/3 uploads`}
                   </p>
                 </div>
                 <span className="hidden sm:flex w-16 items-center justify-center">
@@ -322,22 +352,64 @@ export function AdminUsersList() {
                     {u.tier}
                   </span>
                 </span>
-                <span className="hidden sm:flex w-24 items-center justify-center text-sm text-muted-foreground">
-                  {allowanceDisplay}
+                <span className="hidden sm:flex w-28 flex-col items-center justify-center text-sm text-muted-foreground">
+                  <span>${u.includedBalance.toFixed(2)} / ${u.allowanceDollars.toFixed(2)}</span>
+                  {u.allowanceResetAt && (
+                    <span className="text-[10px]">resets {formatDate(u.allowanceResetAt)}</span>
+                  )}
+                </span>
+                <span className="hidden sm:flex w-28 flex-col items-center justify-center text-sm text-muted-foreground">
+                  <span>${u.extraUsageBalance.toFixed(2)}</span>
+                  <span className="text-[10px]">
+                    {u.onDemandLimitType === "disabled" ? "off" : u.onDemandLimitType === "unlimited" ? "no limit" : `$${u.onDemandLimitDollars}/mo limit`}
+                  </span>
                 </span>
                 <span className="hidden sm:flex w-20 items-center justify-center gap-1 text-sm">
                   <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
                   {u.bookCount}
+                </span>
+                <span className="hidden sm:flex w-20 items-center justify-center text-sm text-muted-foreground">
+                  {u.tier !== "paid" ? `${u.uploadsThisWeek}/3` : "—"}
                 </span>
                 <span className="hidden sm:flex w-20 items-center justify-center gap-1 text-sm">
                   <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
                   {u.chatCount}
                 </span>
                 <span className="hidden sm:block w-28 text-right text-sm text-muted-foreground">
-                  {formatDate(u.createdAt)}
-                </span>
-                <span className="hidden sm:block w-28 text-right text-sm text-muted-foreground">
                   {formatRelative(u.lastActiveAt ?? u.lastSignInAt)}
+                </span>
+                <span className="hidden sm:flex w-10 items-center justify-center">
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={isActioning}>
+                        {isActioning ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[180px]">
+                      <DropdownMenuItem onClick={() => handleAction(u.id, "reset_balance")}>
+                        Reset included balance
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleAction(u.id, "add_extra", 5)}>
+                        Add $5 extra balance
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleAction(u.id, "add_extra", 10)}>
+                        Add $10 extra balance
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleAction(u.id, "set_extra", 0)}>
+                        Clear extra balance
+                      </DropdownMenuItem>
+                      {u.tier !== "paid" && (
+                        <DropdownMenuItem onClick={() => handleAction(u.id, "set_paid")}>
+                          Set to paid
+                        </DropdownMenuItem>
+                      )}
+                      {u.tier === "paid" && (
+                        <DropdownMenuItem onClick={() => handleAction(u.id, "reset_to_free")} className="text-destructive">
+                          Reset to free
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </span>
               </div>
             );
