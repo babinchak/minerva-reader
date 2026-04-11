@@ -2,6 +2,61 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 
+export async function POST(
+  _request: NextRequest,
+  { params }: { params: Promise<{ bookId: string }> }
+) {
+  try {
+    const { bookId } = await params;
+    const supabase = await createClient();
+    const serviceSupabase = createServiceClient();
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check that the book exists
+    const { data: book } = await serviceSupabase
+      .from("books")
+      .select("id")
+      .eq("id", bookId)
+      .single();
+
+    if (!book) {
+      return NextResponse.json({ error: "Book not found" }, { status: 404 });
+    }
+
+    // Check if already in library
+    const { data: existing } = await serviceSupabase
+      .from("user_books")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("book_id", bookId)
+      .maybeSingle();
+
+    if (existing) {
+      return NextResponse.json({ ok: true, alreadyExists: true });
+    }
+
+    const { error } = await serviceSupabase
+      .from("user_books")
+      .insert({ user_id: user.id, book_id: bookId });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    revalidatePath("/");
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to add book" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ bookId: string }> }

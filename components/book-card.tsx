@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AlertCircle, BookOpen, Check, FileText, FolderOpen, Loader2, MoreVertical, Pencil, Trash2, User } from "lucide-react";
+import { AlertCircle, BookOpen, Check, FileText, FolderOpen, Library, Loader2, MoreVertical, Pencil, Trash2, User } from "lucide-react";
 import { hapticLight } from "@/lib/haptic";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,10 @@ interface BookCardProps {
   aiProcessing?: "processing" | "error" | null;
   /** Available collections for "Add to Collection" submenu. */
   collections?: CollectionSummary[];
+  /** Show "Add to library" option (for curated collection books). */
+  showAddToLibrary?: boolean;
+  /** Whether this book is already in the user's library. */
+  inLibrary?: boolean;
 }
 
 export function BookCard({
@@ -49,9 +53,13 @@ export function BookCard({
   epubNotReady,
   aiProcessing,
   collections,
+  showAddToLibrary,
+  inLibrary,
 }: BookCardProps) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isAddingToLibrary, setIsAddingToLibrary] = useState(false);
+  const [addedToLibrary, setAddedToLibrary] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryText, setSummaryText] = useState<string | null>(null);
@@ -91,6 +99,23 @@ export function BookCard({
       setSummaryText("Failed to load summary.");
     } finally {
       setSummaryLoading(false);
+    }
+  };
+
+  const handleAddToLibrary = async () => {
+    if (isAddingToLibrary || addedToLibrary || inLibrary) return;
+    setIsAddingToLibrary(true);
+    try {
+      const res = await fetch(`/api/books/${id}/library`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        hapticLight();
+        setAddedToLibrary(true);
+        router.refresh();
+      }
+    } finally {
+      setIsAddingToLibrary(false);
     }
   };
 
@@ -204,6 +229,21 @@ export function BookCard({
               <FileText className="h-4 w-4" />
               Book summary
             </DropdownMenuItem>
+            {showAddToLibrary && (
+              <DropdownMenuItem
+                onClick={handleAddToLibrary}
+                disabled={isAddingToLibrary || addedToLibrary || inLibrary}
+              >
+                {addedToLibrary || inLibrary ? (
+                  <Check className="h-4 w-4 text-green-500" />
+                ) : isAddingToLibrary ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Library className="h-4 w-4" />
+                )}
+                {addedToLibrary || inLibrary ? "In your library" : isAddingToLibrary ? "Adding…" : "Add to library"}
+              </DropdownMenuItem>
+            )}
             {showRemove && (
               <>
                 <DropdownMenuItem onClick={() => setEditOpen(true)}>

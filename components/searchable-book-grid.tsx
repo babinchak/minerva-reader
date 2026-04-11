@@ -14,13 +14,22 @@ interface GridBook {
   bookType: "epub" | "pdf" | null;
 }
 
+interface SearchableBookGridProps {
+  books: GridBook[];
+  /** When true, show "Add to library" on each book card. */
+  showAddToLibrary?: boolean;
+  /** Book IDs already in the user's library. */
+  userLibraryBookIds?: string[];
+}
+
 function formatAuthorDisplay(author: string | null): string {
   if (!author) return "";
   return author.split(AUTHOR_DELIMITER).map((a) => a.trim()).filter(Boolean).join(", ");
 }
 
-export function SearchableBookGrid({ books }: { books: GridBook[] }) {
+export function SearchableBookGrid({ books, showAddToLibrary, userLibraryBookIds }: SearchableBookGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const librarySet = useMemo(() => new Set(userLibraryBookIds ?? []), [userLibraryBookIds]);
 
   const filteredBooks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -50,6 +59,8 @@ export function SearchableBookGrid({ books }: { books: GridBook[] }) {
               coverUrl={book.coverUrl}
               bookType={book.bookType}
               showRemove={false}
+              showAddToLibrary={showAddToLibrary}
+              inLibrary={librarySet.has(book.id)}
             />
           ))}
         </div>

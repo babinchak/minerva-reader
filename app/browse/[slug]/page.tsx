@@ -40,6 +40,16 @@ export default async function BrowseCollectionPage({ params, searchParams }: Pag
   const userSupabase = await createClient();
   const { data: { user } } = await userSupabase.auth.getUser();
 
+  // Fetch the user's library book IDs so we can show "already in library" state
+  let userLibraryBookIds: string[] = [];
+  if (user) {
+    const { data: userBooks } = await supabase
+      .from("user_books")
+      .select("book_id")
+      .eq("user_id", user.id);
+    userLibraryBookIds = (userBooks ?? []).map((ub) => ub.book_id);
+  }
+
   // Fetch collection by slug
   const { data: collection, error: collError } = await supabase
     .from("curated_collections")
@@ -124,7 +134,11 @@ export default async function BrowseCollectionPage({ params, searchParams }: Pag
             {booksError ? (
               <p className="text-sm text-destructive">Error loading books: {booksError.message}</p>
             ) : (
-              <SearchableBookGrid books={books} />
+              <SearchableBookGrid
+                books={books}
+                showAddToLibrary={!!user}
+                userLibraryBookIds={userLibraryBookIds}
+              />
             )}
 
           </div>
