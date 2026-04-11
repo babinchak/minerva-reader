@@ -2,7 +2,7 @@
 create table if not exists public.usage_records (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  cost_cents integer not null default 0,
+  cost_dollars numeric not null default 0,
   usage_type text not null check (usage_type in ('chat', 'upload', 'summary_book', 'summary_chapter', 'embedding')),
   model text,
   input_tokens integer,
