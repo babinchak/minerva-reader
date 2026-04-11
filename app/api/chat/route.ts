@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import OpenAI from "openai";
+import { wrapOpenAI } from "langsmith/wrappers";
 import { createClient } from "@/lib/supabase/server";
 import {
   getTier,
@@ -8,9 +9,9 @@ import {
 } from "@/lib/credits";
 import { recordUsage, costDollarsFromTokens } from "@/lib/usage";
 
-const openai = new OpenAI({
+const openai = wrapOpenAI(new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-});
+}));
 
 type IncomingChatMessage = {
   role: "system" | "user" | "assistant";
