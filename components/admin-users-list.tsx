@@ -38,6 +38,7 @@ type User = {
   allowanceResetAt: string | null;
   onDemandLimitType: string;
   onDemandLimitDollars: number;
+  extraUsageSpent: number;
   uploadsThisWeek: number;
 };
 
@@ -353,7 +354,7 @@ export function AdminUsersList() {
                   </span>
                 </span>
                 <span className="hidden sm:flex w-28 flex-col items-center justify-center text-sm text-muted-foreground">
-                  <span>${u.includedBalance.toFixed(2)} / ${u.allowanceDollars.toFixed(2)}</span>
+                  <span>{u.allowanceDollars > 0 ? `${Math.round(((u.allowanceDollars - u.includedBalance) / u.allowanceDollars) * 100)}%` : "0%"} used</span>
                   {u.allowanceResetAt && (
                     <span className="text-[10px]">resets {formatDate(u.allowanceResetAt)}</span>
                   )}
@@ -361,7 +362,7 @@ export function AdminUsersList() {
                 <span className="hidden sm:flex w-28 flex-col items-center justify-center text-sm text-muted-foreground">
                   <span>${u.extraUsageBalance.toFixed(2)}</span>
                   <span className="text-[10px]">
-                    {u.onDemandLimitType === "disabled" ? "off" : u.onDemandLimitType === "unlimited" ? "no limit" : `$${u.onDemandLimitDollars}/mo limit`}
+                    {u.onDemandLimitType === "disabled" ? "off" : u.onDemandLimitType === "unlimited" ? "no limit" : `${u.onDemandLimitDollars > 0 ? Math.round((u.extraUsageSpent / u.onDemandLimitDollars) * 100) : 0}% of $${u.onDemandLimitDollars}`}
                   </span>
                 </span>
                 <span className="hidden sm:flex w-20 items-center justify-center gap-1 text-sm">

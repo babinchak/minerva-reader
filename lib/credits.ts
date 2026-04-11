@@ -23,6 +23,7 @@ export interface UserCredits {
   allowanceDollars: number;
   includedBalance: number;
   extraUsageBalance: number;
+  extraUsageSpent: number;
   allowanceResetAt: Date | null;
   onDemandLimitType: OnDemandLimitType;
   onDemandLimitDollars: number;
@@ -97,7 +98,7 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
 
   const { data, error } = await supabase
     .from("user_credits")
-    .select("tier, allowance_dollars, included_balance, extra_usage_balance, allowance_reset_at, on_demand_limit_type, on_demand_limit_dollars")
+    .select("tier, allowance_dollars, included_balance, extra_usage_balance, extra_usage_spent, allowance_reset_at, on_demand_limit_type, on_demand_limit_dollars")
     .eq("user_id", userId)
     .single();
 
@@ -110,6 +111,7 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
     allowanceDollars: data.allowance_dollars ?? allowanceDollarsForTier(tier),
     includedBalance: data.included_balance ?? 0,
     extraUsageBalance: data.extra_usage_balance ?? 0,
+    extraUsageSpent: data.extra_usage_spent ?? 0,
     allowanceResetAt: data.allowance_reset_at ? new Date(data.allowance_reset_at) : null,
     onDemandLimitType: (data.on_demand_limit_type as OnDemandLimitType) || "disabled",
     onDemandLimitDollars: data.on_demand_limit_dollars ?? 10,
@@ -165,6 +167,7 @@ export async function ensureUserCredits(userId: string): Promise<void> {
       .update({
         allowance_dollars: allowanceDollarsNow,
         included_balance: allowanceDollarsNow,
+        extra_usage_spent: 0,
         allowance_reset_at: nextResetDate(tier, now).toISOString(),
         updated_at: now.toISOString(),
       })
@@ -192,6 +195,11 @@ export async function canMakeRequest(
   // No included balance left — check extra usage
   if (credits.onDemandLimitType === "disabled") return false;
   if (credits.extraUsageBalance <= 0) return false;
+
+  // Check monthly limit
+  if (credits.onDemandLimitType === "fixed") {
+    return credits.extraUsageSpent < credits.onDemandLimitDollars;
+  }
 
   return true;
 }

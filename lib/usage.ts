@@ -107,7 +107,7 @@ export async function recordUsage(params: RecordUsageParams): Promise<{ success:
   // Get current balances
   const { data: credits } = await supabase
     .from("user_credits")
-    .select("included_balance, extra_usage_balance")
+    .select("included_balance, extra_usage_balance, extra_usage_spent")
     .eq("user_id", userId)
     .single();
 
@@ -157,6 +157,7 @@ export async function recordUsage(params: RecordUsageParams): Promise<{ success:
   }
   if (deductFromExtra > 0) {
     update.extra_usage_balance = Math.max(0, extraBalance - deductFromExtra);
+    update.extra_usage_spent = (credits?.extra_usage_spent ?? 0) + deductFromExtra;
   }
 
   await supabase

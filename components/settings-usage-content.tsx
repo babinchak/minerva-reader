@@ -17,6 +17,7 @@ interface CreditsInfo {
   allowanceDollars: number;
   includedBalance: number;
   extraUsageBalance: number;
+  extraUsageSpent: number;
   allowanceResetAt: string | null;
   booksUploadedThisWeek: number;
   booksUploadLimit: number;
@@ -140,9 +141,13 @@ export function UsageContent() {
   const allowanceDollars = info.allowanceDollars ?? 0;
   const includedBalance = info.includedBalance ?? 0;
   const extraUsageBalance = info.extraUsageBalance ?? 0;
-  const spentDollars = Math.max(0, allowanceDollars - includedBalance);
-  const usagePct = allowanceDollars > 0
-    ? Math.min(100, Math.round((spentDollars / allowanceDollars) * 100))
+  const extraUsageSpent = info.extraUsageSpent ?? 0;
+  const includedPct = allowanceDollars > 0
+    ? Math.min(100, Math.round(((allowanceDollars - includedBalance) / allowanceDollars) * 100))
+    : 0;
+  const extraLimitDollars = info.onDemandLimitDollars ?? 0;
+  const extraLimitPct = info.onDemandLimitType === "fixed" && extraLimitDollars > 0
+    ? Math.min(100, Math.round((extraUsageSpent / extraLimitDollars) * 100))
     : 0;
 
   return (
@@ -175,16 +180,16 @@ export function UsageContent() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
-                  ${spentDollars.toFixed(2)} / ${allowanceDollars.toFixed(2)} used
+                  {includedPct}% used
                 </span>
                 <span className="font-medium text-foreground">
-                  ${includedBalance.toFixed(2)} remaining
+                  {100 - includedPct}% remaining
                 </span>
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full bg-primary transition-all"
-                  style={{ width: `${usagePct}%` }}
+                  style={{ width: `${includedPct}%` }}
                 />
               </div>
             </div>
@@ -224,10 +229,29 @@ export function UsageContent() {
           <CardContent className="space-y-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Balance</span>
-              <span className="font-medium text-foreground text-lg">
+              <span className="font-medium text-foreground">
                 ${extraUsageBalance.toFixed(2)}
               </span>
             </div>
+
+            {info.onDemandLimitType === "fixed" && extraLimitDollars > 0 && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Monthly limit — {extraLimitPct}% used
+                  </span>
+                  <span className="font-medium text-foreground">
+                    {100 - extraLimitPct}% remaining
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${extraLimitPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 pt-2 border-t border-border">
               <Label className="text-sm font-medium">Add balance</Label>

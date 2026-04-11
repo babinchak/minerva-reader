@@ -158,6 +158,7 @@ export async function handleStripeWebhook(
               tier: "paid",
               allowance_dollars: ALLOWANCE_DOLLARS_PAID_MONTHLY,
               included_balance: ALLOWANCE_DOLLARS_PAID_MONTHLY,
+              extra_usage_spent: 0,
               stripe_subscription_id: sub.id,
               allowance_reset_at: resetAt,
               updated_at: new Date().toISOString(),
@@ -289,6 +290,7 @@ export async function handleStripeWebhook(
             .update({
               allowance_dollars: ALLOWANCE_DOLLARS_PAID_MONTHLY,
               included_balance: ALLOWANCE_DOLLARS_PAID_MONTHLY,
+              extra_usage_spent: 0,
               allowance_reset_at: resetAt,
               updated_at: new Date().toISOString(),
             })

@@ -52,7 +52,7 @@ export async function GET() {
     // Get billing data per user
     const { data: userCredits } = await serviceSupabase
       .from("user_credits")
-      .select("user_id, tier, allowance_dollars, included_balance, extra_usage_balance, allowance_reset_at, on_demand_limit_type, on_demand_limit_dollars");
+      .select("user_id, tier, allowance_dollars, included_balance, extra_usage_balance, extra_usage_spent, allowance_reset_at, on_demand_limit_type, on_demand_limit_dollars");
 
     // Aggregate counts
     const bookCountMap = new Map<string, number>();
@@ -81,13 +81,14 @@ export async function GET() {
     }
 
     // Billing data map
-    const creditsMap = new Map<string, { tier: string; allowanceDollars: number; includedBalance: number; extraUsageBalance: number; allowanceResetAt: string | null; onDemandLimitType: string; onDemandLimitDollars: number }>();
+    const creditsMap = new Map<string, { tier: string; allowanceDollars: number; includedBalance: number; extraUsageBalance: number; extraUsageSpent: number; allowanceResetAt: string | null; onDemandLimitType: string; onDemandLimitDollars: number }>();
     for (const row of userCredits ?? []) {
       creditsMap.set(row.user_id, {
         tier: row.tier ?? "free",
         allowanceDollars: row.allowance_dollars ?? 0,
         includedBalance: row.included_balance ?? 0,
         extraUsageBalance: row.extra_usage_balance ?? 0,
+        extraUsageSpent: row.extra_usage_spent ?? 0,
         allowanceResetAt: row.allowance_reset_at ?? null,
         onDemandLimitType: row.on_demand_limit_type ?? "disabled",
         onDemandLimitDollars: row.on_demand_limit_dollars ?? 10,
@@ -111,6 +112,7 @@ export async function GET() {
         allowanceResetAt: credits?.allowanceResetAt ?? null,
         onDemandLimitType: credits?.onDemandLimitType ?? "disabled",
         onDemandLimitDollars: credits?.onDemandLimitDollars ?? 10,
+        extraUsageSpent: credits?.extraUsageSpent ?? 0,
         uploadsThisWeek: uploadsThisWeekMap.get(u.id) ?? 0,
       };
     });
