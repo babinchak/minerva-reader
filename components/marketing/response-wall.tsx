@@ -87,10 +87,9 @@ function demosToCards(demos: ApiDemo[], seen: Set<string>): ResponseCard[] {
 /* ------------------------------------------------------------------ */
 
 const HEADLINES = [
-  "Don't just read. Viberead.",
-  "Stop copy-pasting passages into ChatGPT",
-  "Search across your entire book collection",
   "One tap to navigate to any reference",
+  "Search across your entire book collection",
+  "Stop copy-pasting passages into ChatGPT",
   "Search an author's entire body of work in seconds",
   "AI reading, done right",
   "RAG-tastic reading",
