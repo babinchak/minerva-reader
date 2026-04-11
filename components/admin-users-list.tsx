@@ -362,7 +362,8 @@ export function AdminUsersList() {
                 <span className="hidden sm:flex w-28 flex-col items-center justify-center text-sm text-muted-foreground">
                   <span>${u.extraUsageBalance.toFixed(2)}</span>
                   <span className="text-[10px]">
-                    {u.onDemandLimitType === "disabled" ? "off" : u.onDemandLimitType === "unlimited" ? "no limit" : `${u.onDemandLimitDollars > 0 ? Math.round((u.extraUsageSpent / u.onDemandLimitDollars) * 100) : 0}% of $${u.onDemandLimitDollars}`}
+                    ${u.extraUsageSpent.toFixed(2)} spent
+                    {u.onDemandLimitType === "fixed" ? ` / $${u.onDemandLimitDollars} limit` : u.onDemandLimitType === "unlimited" ? " · no limit" : " · off"}
                   </span>
                 </span>
                 <span className="hidden sm:flex w-20 items-center justify-center gap-1 text-sm">

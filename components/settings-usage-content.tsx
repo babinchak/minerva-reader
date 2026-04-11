@@ -238,7 +238,7 @@ export function UsageContent() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">
-                    Monthly limit — {extraLimitPct}% used
+                    Monthly limit — ${extraUsageSpent.toFixed(2)} / ${extraLimitDollars.toFixed(2)}
                   </span>
                   <span className="font-medium text-foreground">
                     {100 - extraLimitPct}% remaining
@@ -250,6 +250,11 @@ export function UsageContent() {
                     style={{ width: `${extraLimitPct}%` }}
                   />
                 </div>
+                {info.allowanceResetAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Resets {new Date(info.allowanceResetAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                )}
               </div>
             )}
 
