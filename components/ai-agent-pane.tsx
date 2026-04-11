@@ -1424,7 +1424,7 @@ export function AIAgentPanel({
         if (contextHeader) {
           contextHeader += "\n";
         }
-        userContent = `User question:\n${userInput}\n\n${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendLocalContextBlock ? `${sendLocalContextBlock}` : ""}Selected text (use as context):\n"${selectionForSend}"`;
+        userContent = `${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendLocalContextBlock ? `${sendLocalContextBlock}` : ""}Selected text (use as context):\n"${selectionForSend}"\n\nUser question:\n${userInput}`;
       } else if (!selectionForSend) {
         let contextHeader = "";
         const finalBookTitle = sendBookContext?.title ?? bookTitle;
@@ -1439,7 +1439,7 @@ export function AIAgentPanel({
           contextHeader += "\n";
         }
         if (sendContextBlock || sendPageContextBlock || contextHeader) {
-          userContent = `User question:\n${userInput}\n\n${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendPageContextBlock ? `${sendPageContextBlock}` : ""}`;
+          userContent = `${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendPageContextBlock ? `${sendPageContextBlock}` : ""}User question:\n${userInput}`;
         }
       }
 
