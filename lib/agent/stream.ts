@@ -296,8 +296,13 @@ export async function* streamAgentToSSE(
             }
             // Handle get_passages results (merged passages with chunks array)
             if (parsed.passages) {
+              const passageBookSections = new Map<string, { bookId: string; book: string; bookAuthor?: string | null; indices: number[]; resultCount: number }>();
               for (const passage of parsed.passages) {
                 if (!passage.chunks?.length || !passage.start_position) continue;
+                const bk = passage.book_id ?? "_unknown";
+                if (!passageBookSections.has(bk)) {
+                  passageBookSections.set(bk, { bookId: bk, book: passage.book ?? "Unknown", bookAuthor: passage.book_author, indices: [], resultCount: 0 });
+                }
                 for (const chunk of passage.chunks) {
                   refEnricher.addSection(chunk.section_id, {
                     startPosition: passage.start_position,
@@ -318,7 +323,24 @@ export async function* streamAgentToSSE(
                   if (passage.book_author) sectionEvent.bookAuthor = passage.book_author;
                   if (passage.book_type) sectionEvent.bookType = passage.book_type;
                   yield `data: ${JSON.stringify(sectionEvent)}\n\n`;
+                  if (typeof chunk.section_index === "number") {
+                    passageBookSections.get(bk)!.indices.push(chunk.section_index);
+                  }
                 }
+                passageBookSections.get(bk)!.resultCount++;
+              }
+              // Emit summary for get_passages so the UI can show section numbers
+              if (toolCallId && toolName === "get_passages" && passageBookSections.size > 0) {
+                const summary = [...passageBookSections.values()].sort((a, b) =>
+                  (a.bookAuthor ?? "").localeCompare(b.bookAuthor ?? "") || a.book.localeCompare(b.book)
+                ).map((b) => ({
+                  bookId: b.bookId,
+                  book: b.book,
+                  bookAuthor: b.bookAuthor ?? null,
+                  indices: [...new Set(b.indices)].sort((a, c) => a - c),
+                  resultCount: b.resultCount,
+                }));
+                yield `data: ${JSON.stringify({ type: "tool_result_summary", toolCallId, results: summary })}\n\n`;
               }
             }
           } catch {

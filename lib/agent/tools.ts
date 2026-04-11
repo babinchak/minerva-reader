@@ -106,6 +106,7 @@ export function createAgentTools(
         "Fetch surrounding context for a search result. Use when a quote or argument appears to continue beyond a chunk boundary, " +
         "or when you need surrounding text for a complete navigable reference. " +
         "Pass the section_id from a search result and specify how many chunks before/after to include. " +
+        "IMPORTANT: Always batch ALL sections into a SINGLE call — never make separate get_passages calls for each section. " +
         "The response includes a chunks array with section_id and char_offset for each chunk so you can reference the correct section when quoting.",
       schema: z.object({
         sections: z
@@ -116,7 +117,7 @@ export function createAgentTools(
               after: z.number().optional().describe("Number of chunks after this section to include (default 1, max 9)."),
             })
           )
-          .describe("Array of sections to expand context for."),
+          .describe("Array of sections to expand context for. Include ALL sections in one call."),
       }),
     }
   );
@@ -319,6 +320,7 @@ export function createLibraryAgentTools(
         "Fetch surrounding context for a search result. Use when a quote or argument appears to continue beyond a chunk boundary, " +
         "or when you need surrounding text for a complete navigable reference. " +
         "Pass the section_id from a search result and specify how many chunks before/after to include. " +
+        "IMPORTANT: Always batch ALL sections into a SINGLE call — never make separate get_passages calls for each section. " +
         "The response includes a chunks array with section_id and char_offset for referencing.",
       schema: z.object({
         sections: z
@@ -330,7 +332,7 @@ export function createLibraryAgentTools(
               after: z.number().optional().describe("Number of chunks after this section to include (default 1, max 9)."),
             })
           )
-          .describe("Array of sections to expand context for."),
+          .describe("Array of sections to expand context for. Include ALL sections in one call."),
       }),
     }
   );

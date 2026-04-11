@@ -34,15 +34,35 @@ export function formatToolLabel(toolName: string): string {
   return TOOL_LABELS[toolName] ?? toolName;
 }
 
+/** Collapse sorted indices into range strings: [10,11,12,50,51] → ["§10–12", "§50–51"] */
+function formatSectionRanges(indices: number[]): string {
+  if (indices.length === 0) return "";
+  const sorted = [...new Set(indices)].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let start = sorted[0];
+  let end = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === end + 1) {
+      end = sorted[i];
+    } else {
+      ranges.push(start === end ? `§${start}` : `§${start}–${end}`);
+      start = sorted[i];
+      end = sorted[i];
+    }
+  }
+  ranges.push(start === end ? `§${start}` : `§${start}–${end}`);
+  return ranges.join(", ");
+}
+
 export function getQueryPreview(tc: MessageToolCall, maxLen = 80): string {
   const query = tc.args?.query;
   if (typeof query === "string" && query.length > 0) {
     return query.length > maxLen ? `${query.slice(0, maxLen)}...` : query;
   }
   if (tc.toolName === "get_passages") {
-    const ranges = tc.args?.ranges;
-    const count = Array.isArray(ranges) ? ranges.length : 0;
-    return count > 0 ? `${count} range${count === 1 ? "" : "s"}` : "";
+    const sections = tc.args?.sections;
+    const count = Array.isArray(sections) ? sections.length : 0;
+    return count > 0 ? `${count} passage${count === 1 ? "" : "s"}` : "";
   }
   return "";
 }
@@ -53,7 +73,7 @@ export interface BookMapEntry {
 }
 
 /** Build a human-readable detail string for the expanded view. */
-function formatToolDetail(tc: MessageToolCall, bookMap?: Map<string, BookMapEntry>): string | null {
+function formatToolDetail(tc: MessageToolCall): string | null {
   const { toolName, args } = tc;
 
   if (toolName === "vector_search" || toolName === "text_search") {
@@ -77,8 +97,7 @@ function formatToolDetail(tc: MessageToolCall, bookMap?: Map<string, BookMapEntr
       if (isSingleBook) {
         const entry = tc.resultSummary[0];
         if (entry.indices.length > 0) {
-          const sorted = [...entry.indices].sort((a, c) => a - c);
-          parts.push(`Sections §${sorted.join(", §")}`);
+          parts.push(`Sections ${formatSectionRanges(entry.indices)}`);
         } else if (entry.resultCount && entry.resultCount > 0) {
           parts.push(`Found ${entry.resultCount} result${entry.resultCount === 1 ? "" : "s"}`);
         }
@@ -91,8 +110,7 @@ function formatToolDetail(tc: MessageToolCall, bookMap?: Map<string, BookMapEntr
             : rawTitle;
           const bookPart = b.bookAuthor ? `${b.bookAuthor} · ${title}` : title;
           if (b.indices.length > 0) {
-            const sorted = [...b.indices].sort((a, c) => a - c);
-            parts.push(`${bookPart} — §${sorted.join(", §")}`);
+            parts.push(`${bookPart} — ${formatSectionRanges(b.indices)}`);
           } else {
             parts.push(bookPart);
           }
@@ -103,35 +121,36 @@ function formatToolDetail(tc: MessageToolCall, bookMap?: Map<string, BookMapEntr
   }
 
   if (toolName === "get_passages") {
-    const ranges = Array.isArray(args.ranges) ? args.ranges as Array<Record<string, unknown>> : [];
-    if (ranges.length === 0) return null;
-    // Group ranges by book for cleaner display
-    const grouped = new Map<string, { label: string; chunks: { str: string; sort: number }[] }>();
-    const ungrouped: string[] = [];
-    for (const r of ranges) {
-      const start = typeof r.start === "number" ? r.start : "?";
-      const end = typeof r.end === "number" ? r.end : "?";
-      const chunkStr = start === end ? `${start}` : `${start}–${end}`;
-      const bookId = typeof r.book_id === "string" ? r.book_id : null;
-      const entry = bookId ? bookMap?.get(bookId) : undefined;
-      if (entry) {
-        const key = bookId!;
-        if (!grouped.has(key)) {
-          const bookPart = entry.author ? `${entry.author} · ${entry.label}` : entry.label;
-          grouped.set(key, { label: bookPart, chunks: [] });
+    // Use result summary (with section indices) if available
+    if (tc.resultSummary && tc.resultSummary.length > 0) {
+      const lines: string[] = [];
+      const isSingleBook = tc.resultSummary.length === 1 && tc.resultSummary[0].bookId === "_unknown";
+      if (isSingleBook) {
+        const entry = tc.resultSummary[0];
+        if (entry.indices.length > 0) {
+          lines.push(`Sections ${formatSectionRanges(entry.indices)}`);
+        } else if (entry.resultCount && entry.resultCount > 0) {
+          lines.push(`${entry.resultCount} passage${entry.resultCount === 1 ? "" : "s"}`);
         }
-        grouped.get(key)!.chunks.push({ str: chunkStr, sort: typeof r.start === "number" ? r.start : Infinity });
       } else {
-        ungrouped.push(`§${chunkStr}`);
+        for (const b of tc.resultSummary) {
+          const rawTitle = b.book;
+          const title = b.bookAuthor && rawTitle.endsWith(` by ${b.bookAuthor}`)
+            ? rawTitle.slice(0, -` by ${b.bookAuthor}`.length)
+            : rawTitle;
+          const bookPart = b.bookAuthor ? `${b.bookAuthor} · ${title}` : title;
+          if (b.indices.length > 0) {
+            lines.push(`${bookPart} — ${formatSectionRanges(b.indices)}`);
+          } else {
+            lines.push(bookPart);
+          }
+        }
       }
+      return lines.join("\n") || null;
     }
-    const lines: string[] = [];
-    for (const { label, chunks } of grouped.values()) {
-      const sorted = chunks.sort((a, b) => a.sort - b.sort).map((c) => c.str);
-      lines.push(`${label} — §${sorted.join(", §")}`);
-    }
-    lines.push(...ungrouped);
-    return lines.join("\n");
+    // Fallback: show count from args
+    const sections = Array.isArray(args.sections) ? args.sections : [];
+    return sections.length > 0 ? `${sections.length} passage${sections.length === 1 ? "" : "s"}` : null;
   }
 
   if (toolName === "web_search") {
@@ -142,12 +161,12 @@ function formatToolDetail(tc: MessageToolCall, bookMap?: Map<string, BookMapEntr
   return null;
 }
 
-export function ToolCallSteps({ toolCalls, bookMap }: { toolCalls: MessageToolCall[]; bookMap?: Map<string, BookMapEntry> }) {
+export function ToolCallSteps({ toolCalls }: { toolCalls: MessageToolCall[] }) {
   return (
     <div className="space-y-1 text-left">
       {toolCalls.map((tc, i) => {
         const Icon = TOOL_ICONS[tc.toolName] ?? Search;
-        const detail = formatToolDetail(tc, bookMap);
+        const detail = formatToolDetail(tc);
         return (
           <details key={tc.id ?? i} className="group">
             <summary className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer list-none [&::-webkit-details-marker]:hidden">
