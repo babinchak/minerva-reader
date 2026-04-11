@@ -1,8 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SiteFooter } from "@/components/site-footer";
 import { MinervaLogo } from "@/components/minerva-logo";
+
+export const metadata: Metadata = {
+  title: "Sign In - Minerva Reader",
+};
 
 export default async function Page({
   searchParams,

@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ForgotPasswordForm } from "@/components/forgot-password-form";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { MinervaLogo } from "@/components/minerva-logo";
+
+export const metadata: Metadata = {
+  title: "Forgot Password - Minerva Reader",
+};
 
 export default function Page() {
   return (

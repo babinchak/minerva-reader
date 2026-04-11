@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { SiteFooter } from "@/components/site-footer";
 import { AuthButton } from "@/components/auth-button";
@@ -16,6 +17,12 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Suspense } from "react";
 import { MinervaLogo } from "@/components/minerva-logo";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return { title: user ? "Library - Minerva Reader" : "Minerva Reader" };
+}
 
 /** Fetch a small batch of full demo responses for the response wall seed. */
 async function fetchResponseWallSeed(limit = 15) {

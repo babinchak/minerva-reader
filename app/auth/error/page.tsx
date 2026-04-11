@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MinervaLogo } from "@/components/minerva-logo";
 import { Suspense } from "react";
+
+export const metadata: Metadata = {
+  title: "Error - Minerva Reader",
+};
 
 async function ErrorContent({
   searchParams,

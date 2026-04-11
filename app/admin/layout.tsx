@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { ServerSiteNav } from "@/components/server-site-nav";
@@ -9,6 +10,10 @@ import { AdminSidebar } from "@/components/admin-sidebar";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminEmail } from "@/lib/admin";
 import { redirect } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Admin - Minerva Reader",
+};
 
 export const dynamic = "force-dynamic";
 

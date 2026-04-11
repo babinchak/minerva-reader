@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 export const metadata = {
-  title: "Terms of Service",
+  title: "Terms of Service - Minerva Reader",
   description: "Minerva Reader terms of service. Rules for using our reading and AI assistant.",
 };
 

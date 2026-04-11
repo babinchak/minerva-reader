@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   Card,
@@ -7,6 +8,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MinervaLogo } from "@/components/minerva-logo";
+
+export const metadata: Metadata = {
+  title: "Check Your Email - Minerva Reader",
+};
 
 export default function Page() {
   return (

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -13,6 +14,17 @@ import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("curated_collections")
+    .select("name")
+    .eq("slug", slug)
+    .single();
+  return { title: data?.name ? `${data.name} - Minerva Reader` : "Explore - Minerva Reader" };
+}
 
 interface PageProps {
   params: Promise<{ slug: string }>;

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { AuthButton } from "@/components/auth-button";
@@ -10,6 +11,9 @@ import { CollectionCard } from "@/components/collection-card";
 import { BrowseCollectionsGrid } from "@/components/browse-collections-grid";
 import { SiteFooter } from "@/components/site-footer";
 
+export const metadata: Metadata = {
+  title: "Explore - Minerva Reader",
+};
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

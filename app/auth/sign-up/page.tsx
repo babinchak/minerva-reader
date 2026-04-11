@@ -1,8 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SignUpForm } from "@/components/sign-up-form";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SiteFooter } from "@/components/site-footer";
 import { MinervaLogo } from "@/components/minerva-logo";
+
+export const metadata: Metadata = {
+  title: "Sign Up - Minerva Reader",
+};
 
 export default function Page() {
   return (
