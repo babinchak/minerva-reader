@@ -455,3 +455,169 @@ export async function getPassagesByRangeMulti(
     return { passages: [], error: msg };
   }
 }
+
+// --- Section-ID-based passage fetching (context expansion) ---
+
+export interface SectionIdRange {
+  section_id: string;
+  before?: number;
+  after?: number;
+}
+
+export interface MultiBookSectionIdRange extends SectionIdRange {
+  book_id: string;
+}
+
+/**
+ * Fetch passages by section_id with before/after context expansion for a single book.
+ * Looks up the section_index for the given section_id, then fetches surrounding chunks.
+ */
+export async function getPassagesBySectionId(
+  bookId: string,
+  ranges: SectionIdRange[],
+  userId: string | null
+): Promise<{ passages: PassageResult[]; error?: string }> {
+  if (ranges.length === 0) {
+    return { passages: [] };
+  }
+
+  try {
+    // Access check
+    if (userId) {
+      const userClient = await createClient();
+      const { data: userBook } = await userClient
+        .from("user_books")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("book_id", bookId)
+        .single();
+      if (!userBook) {
+        return { passages: [], error: "Access denied to this book" };
+      }
+    } else {
+      const serviceSupabase = createServiceClient();
+      const { data: book } = await serviceSupabase
+        .from("books")
+        .select("is_curated")
+        .eq("id", bookId)
+        .single();
+      if (!book?.is_curated) {
+        return { passages: [], error: "Access denied to this book" };
+      }
+    }
+
+    const supabase = createServiceClient();
+
+    // Look up section_index for each section_id
+    const sectionIds = ranges.map((r) => r.section_id);
+    const { data: lookupRows, error: lookupError } = await supabase
+      .from("embedding_sections")
+      .select("id, section_index")
+      .eq("book_id", bookId)
+      .in("id", sectionIds);
+
+    if (lookupError) {
+      console.error("[getPassagesBySectionId] Lookup error:", lookupError);
+      return { passages: [], error: lookupError.message };
+    }
+
+    const indexById = new Map<string, number>();
+    for (const row of lookupRows ?? []) {
+      indexById.set(row.id, row.section_index as number);
+    }
+
+    // Convert to index ranges
+    const indexRanges: IndexRange[] = [];
+    for (const r of ranges) {
+      const idx = indexById.get(r.section_id);
+      if (idx == null) continue;
+      const before = Math.min(r.before ?? 1, MAX_RANGE_WIDTH - 1);
+      const after = Math.min(r.after ?? 1, MAX_RANGE_WIDTH - 1);
+      const start = Math.max(0, idx - before);
+      const end = Math.min(idx + after, idx + MAX_RANGE_WIDTH - 1);
+      indexRanges.push({ start, end });
+    }
+
+    if (indexRanges.length === 0) {
+      return { passages: [], error: "No matching sections found" };
+    }
+
+    // Delegate to existing range fetcher
+    return getPassagesByRange(bookId, indexRanges, userId);
+  } catch (err) {
+    console.error("[getPassagesBySectionId] Unexpected error:", err);
+    const msg = err instanceof Error ? err.message : "Failed to fetch passages";
+    return { passages: [], error: msg };
+  }
+}
+
+/**
+ * Fetch passages by section_id with before/after context expansion across multiple books.
+ */
+export async function getPassagesBySectionIdMulti(
+  ranges: MultiBookSectionIdRange[],
+  userId: string | null,
+  allowedBookIds: string[]
+): Promise<{ passages: MultiBookPassageResult[]; error?: string }> {
+  if (ranges.length === 0) {
+    return { passages: [] };
+  }
+
+  try {
+    const allowedSet = new Set(allowedBookIds);
+    const supabase = createServiceClient();
+
+    // Group by book_id
+    const rangesByBook = new Map<string, SectionIdRange[]>();
+    for (const r of ranges) {
+      if (!allowedSet.has(r.book_id)) continue;
+      if (!rangesByBook.has(r.book_id)) rangesByBook.set(r.book_id, []);
+      rangesByBook.get(r.book_id)!.push({ section_id: r.section_id, before: r.before, after: r.after });
+    }
+
+    // Look up section_index for all section_ids across all books
+    const allSectionIds = ranges.filter((r) => allowedSet.has(r.book_id)).map((r) => r.section_id);
+    if (allSectionIds.length === 0) {
+      return { passages: [] };
+    }
+
+    const { data: lookupRows, error: lookupError } = await supabase
+      .from("embedding_sections")
+      .select("id, book_id, section_index")
+      .in("id", allSectionIds);
+
+    if (lookupError) {
+      console.error("[getPassagesBySectionIdMulti] Lookup error:", lookupError);
+      return { passages: [], error: lookupError.message };
+    }
+
+    const indexById = new Map<string, { bookId: string; sectionIndex: number }>();
+    for (const row of lookupRows ?? []) {
+      indexById.set(row.id, { bookId: row.book_id, sectionIndex: row.section_index as number });
+    }
+
+    // Convert to MultiBookIndexRange[]
+    const indexRanges: MultiBookIndexRange[] = [];
+    for (const r of ranges) {
+      if (!allowedSet.has(r.book_id)) continue;
+      const lookup = indexById.get(r.section_id);
+      if (!lookup) continue;
+      const before = Math.min(r.before ?? 1, MAX_RANGE_WIDTH - 1);
+      const after = Math.min(r.after ?? 1, MAX_RANGE_WIDTH - 1);
+      const start = Math.max(0, lookup.sectionIndex - before);
+      const end = Math.min(lookup.sectionIndex + after, lookup.sectionIndex + MAX_RANGE_WIDTH - 1);
+      indexRanges.push({ book_id: r.book_id, start, end });
+    }
+
+    if (indexRanges.length === 0) {
+      return { passages: [], error: "No matching sections found" };
+    }
+
+    // Delegate to existing multi-book range fetcher
+    return getPassagesByRangeMulti(indexRanges, userId, allowedBookIds);
+  } catch (err) {
+    console.error("[getPassagesBySectionIdMulti] Unexpected error:", err);
+    const msg = err instanceof Error ? err.message : "Failed to fetch passages";
+    return { passages: [], error: msg };
+  }
+}

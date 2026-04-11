@@ -20,7 +20,7 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- Use fenced code blocks with a language tag for code.\n" +
   "- Do NOT wrap the entire response in a single code block.\n" +
   "- Avoid raw HTML; prefer Markdown.\n" +
-  "\nYou have access to tools: vector_search (semantic search — returns full text chunks with section_index), text_search (keyword search in the book), and web_search (search the web). " +
+  "\nYou have access to tools: vector_search (semantic search — returns full text chunks), text_search (keyword search in the book), and web_search (search the web). " +
   "Use them when they would improve your answer. You can also answer directly from the context provided if it's sufficient.\n" +
   "\n## Multi-search strategy\n" +
   "Most questions need only ONE well-crafted vector_search call. A broad thematic question like \"What role does doubt play in the pursuit of knowledge?\" should be a single search, not split into multiple similar searches.\n" +
@@ -56,7 +56,7 @@ const LIBRARY_SYSTEM_PROMPT =
   "- Do NOT begin your response with a \"Short answer\" or summary line. Dive straight into the substance.\n" +
   "\nYou have access to tools that search across ALL books in the user's {scope}:\n" +
   "{list_books_hint}" +
-  "- vector_search: semantic search — returns full text chunks (~1200 chars) with section_index. " +
+  "- vector_search: semantic search — returns full text chunks (~1200 chars). " +
   "Supports `max_per_book` to cap results from any single book (use 2-3 when exploring broadly across books).\n" +
   "- text_search: keyword search across all books. Also supports `max_per_book`.\n" +
   "- web_search: search the web\n" +

@@ -1,5 +1,5 @@
 import type { BaseMessage } from "@langchain/core/messages";
-import { AIMessage } from "@langchain/core/messages";
+import { AIMessage, ToolMessage } from "@langchain/core/messages";
 import { StateGraph } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { ChatOpenAI } from "@langchain/openai";
@@ -44,8 +44,53 @@ export function createAgentGraph(
     model: modelId,
   }).bindTools(tools);
 
+  /** Fields to strip from tool result JSON before sending to the LLM.
+   *  These are only needed by the UI (stream.ts extracts them from the
+   *  original ToolMessage before this runs). */
+  const LLM_STRIP_FIELDS = new Set([
+    "section_index",
+    "start_position",
+    "end_position",
+    "page_breaks",
+    "xhtml_breaks",
+    "similarity",
+  ]);
+
+  function stripFieldsFromResult(obj: unknown): unknown {
+    if (Array.isArray(obj)) return obj.map(stripFieldsFromResult);
+    if (obj && typeof obj === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (LLM_STRIP_FIELDS.has(k)) continue;
+        out[k] = k === "chunks"
+          ? (v as Array<Record<string, unknown>>).map((chunk) => ({ section_id: chunk.section_id, char_offset: chunk.char_offset }))
+          : stripFieldsFromResult(v);
+      }
+      return out;
+    }
+    return obj;
+  }
+
+  /** Rewrite ToolMessage content to remove UI-only fields before the LLM sees them. */
+  function sanitizeMessages(messages: BaseMessage[]): BaseMessage[] {
+    return messages.map((msg) => {
+      if (!(msg instanceof ToolMessage) || typeof msg.content !== "string") return msg;
+      try {
+        const parsed = JSON.parse(msg.content);
+        const cleaned = stripFieldsFromResult(parsed);
+        return new ToolMessage({
+          content: JSON.stringify(cleaned),
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        });
+      } catch {
+        return msg;
+      }
+    });
+  }
+
   async function callModel(state: AgentState) {
-    const response = await model.invoke(state.messages);
+    const response = await model.invoke(sanitizeMessages(state.messages));
     return { messages: [response] };
   }
 
