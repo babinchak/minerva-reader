@@ -867,7 +867,7 @@ export function AIAgentPanel({
       }
     };
     loadMessages();
-  }, [activeChatId, isLoading, supabase, scrollToLastUserMessage, initialChatId, initialRefQuote, bookId, fetchSection]);
+  }, [activeChatId, supabase, scrollToLastUserMessage, initialChatId, initialRefQuote, bookId, fetchSection]);
 
   // Scroll to bottom when messages become visible (e.g. mobile drawer expanding).
   useEffect(() => {
