@@ -5,6 +5,7 @@ export interface ToolResultBook {
   book: string;
   bookAuthor?: string | null;
   indices: number[];
+  resultCount?: number;
 }
 
 export interface MessageToolCall {
@@ -71,18 +72,30 @@ function formatToolDetail(tc: MessageToolCall, bookMap?: Map<string, BookMapEntr
     // Append result summary if available
     if (tc.resultSummary && tc.resultSummary.length > 0) {
       parts.push(""); // blank line separator
-      for (const b of tc.resultSummary) {
-        // b.book may be "Title by Author" from formatBookLabel — strip author suffix
-        const rawTitle = b.book;
-        const title = b.bookAuthor && rawTitle.endsWith(` by ${b.bookAuthor}`)
-          ? rawTitle.slice(0, -` by ${b.bookAuthor}`.length)
-          : rawTitle;
-        const bookPart = b.bookAuthor ? `${b.bookAuthor} · ${title}` : title;
-        if (b.indices.length > 0) {
-          const sorted = [...b.indices].sort((a, c) => a - c);
-          parts.push(`${bookPart} — §${sorted.join(", §")}`);
-        } else {
-          parts.push(bookPart);
+      // In-book mode: single entry with no real book info — just show section numbers
+      const isSingleBook = tc.resultSummary.length === 1 && tc.resultSummary[0].bookId === "_unknown";
+      if (isSingleBook) {
+        const entry = tc.resultSummary[0];
+        if (entry.indices.length > 0) {
+          const sorted = [...entry.indices].sort((a, c) => a - c);
+          parts.push(`Sections §${sorted.join(", §")}`);
+        } else if (entry.resultCount && entry.resultCount > 0) {
+          parts.push(`Found ${entry.resultCount} result${entry.resultCount === 1 ? "" : "s"}`);
+        }
+      } else {
+        for (const b of tc.resultSummary) {
+          // b.book may be "Title by Author" from formatBookLabel — strip author suffix
+          const rawTitle = b.book;
+          const title = b.bookAuthor && rawTitle.endsWith(` by ${b.bookAuthor}`)
+            ? rawTitle.slice(0, -` by ${b.bookAuthor}`.length)
+            : rawTitle;
+          const bookPart = b.bookAuthor ? `${b.bookAuthor} · ${title}` : title;
+          if (b.indices.length > 0) {
+            const sorted = [...b.indices].sort((a, c) => a - c);
+            parts.push(`${bookPart} — §${sorted.join(", §")}`);
+          } else {
+            parts.push(bookPart);
+          }
         }
       }
     }

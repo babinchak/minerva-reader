@@ -247,7 +247,7 @@ export async function* streamAgentToSSE(
             // Handle vector_search / text_search results (each item has its own section_id)
             if (parsed.results) {
               // Build per-book summary for the tool result
-              const bookSections = new Map<string, { bookId: string; book: string; bookAuthor?: string | null; indices: number[] }>();
+              const bookSections = new Map<string, { bookId: string; book: string; bookAuthor?: string | null; indices: number[]; resultCount: number }>();
               for (const item of parsed.results) {
                 if (item.section_id && item.start_position) {
                   refEnricher.addSection(item.section_id, {
@@ -272,8 +272,9 @@ export async function* streamAgentToSSE(
                   // Accumulate for summary
                   const bk = item.book_id ?? "_unknown";
                   if (!bookSections.has(bk)) {
-                    bookSections.set(bk, { bookId: bk, book: item.book ?? "Unknown", bookAuthor: item.book_author, indices: [] });
+                    bookSections.set(bk, { bookId: bk, book: item.book ?? "Unknown", bookAuthor: item.book_author, indices: [], resultCount: 0 });
                   }
+                  bookSections.get(bk)!.resultCount++;
                   if (typeof item.section_index === "number") {
                     bookSections.get(bk)!.indices.push(item.section_index);
                   }
@@ -288,6 +289,7 @@ export async function* streamAgentToSSE(
                   book: b.book,
                   bookAuthor: b.bookAuthor ?? null,
                   indices: b.indices.sort((a, c) => a - c),
+                  resultCount: b.resultCount,
                 }));
                 yield `data: ${JSON.stringify({ type: "tool_result_summary", toolCallId, results: summary })}\n\n`;
               }

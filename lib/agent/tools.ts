@@ -36,6 +36,7 @@ export function createAgentTools(
             return JSON.stringify({
               results: textResults.map((r) => ({
                 content_text: r.content_text,
+                section_index: r.section_index,
                 start_position: r.start_position,
                 end_position: r.end_position,
                 page_breaks: r.page_breaks,
@@ -133,6 +134,7 @@ export function createAgentTools(
       return JSON.stringify({
         results: results.map((r) => ({
           snippet: r.content_text,
+          section_index: r.section_index,
           start_position: r.start_position,
           end_position: r.end_position,
           page_breaks: r.page_breaks,
@@ -233,6 +235,7 @@ export function createLibraryAgentTools(
             return JSON.stringify({
               results: textResults.map((r) => ({
                 content_text: r.content_text,
+                section_index: r.section_index,
                 start_position: r.start_position,
                 end_position: r.end_position,
                 page_breaks: r.page_breaks,
@@ -343,6 +346,7 @@ export function createLibraryAgentTools(
       return JSON.stringify({
         results: results.map((r) => ({
           snippet: r.content_text,
+          section_index: r.section_index,
           start_position: r.start_position,
           end_position: r.end_position,
           page_breaks: r.page_breaks,

@@ -14,6 +14,7 @@ export interface TextSearchResult {
   page_breaks: number[] | null;
   xhtml_breaks: number[] | null;
   section_id?: string;
+  section_index?: number;
 }
 
 export interface TextSearchOptions {
@@ -82,7 +83,7 @@ export async function textSearch(
   const db = userId ? supabase : serviceSupabase;
   let queryBuilder = db
     .from("embedding_sections")
-    .select("id, content_text, start_position, end_position, page_breaks, xhtml_breaks")
+    .select("id, section_index, content_text, start_position, end_position, page_breaks, xhtml_breaks")
     .eq("book_id", bookId);
 
   if (terms.length === 0) {
@@ -189,6 +190,7 @@ export async function textSearch(
       page_breaks: pageBreaks,
       xhtml_breaks: xhtmlBreaks,
       section_id: row.id,
+      section_index: typeof row.section_index === "number" ? row.section_index : undefined,
     });
     if (results.length >= maxResults) break;
   }
@@ -239,7 +241,7 @@ export async function textSearchMulti(
 
   let queryBuilder = serviceSupabase
     .from("embedding_sections")
-    .select("id, book_id, content_text, start_position, end_position, page_breaks, xhtml_breaks")
+    .select("id, book_id, section_index, content_text, start_position, end_position, page_breaks, xhtml_breaks")
     .in("book_id", bookIds);
 
   if (terms.length === 1) {
@@ -354,6 +356,7 @@ export async function textSearchMulti(
       page_breaks: pageBreaks,
       xhtml_breaks: xhtmlBreaks,
       section_id: row.id,
+      section_index: typeof row.section_index === "number" ? row.section_index : undefined,
       book_id: row.book_id,
       book_title: book?.title ?? null,
       book_author: book?.author ?? null,

@@ -15,6 +15,7 @@ returns table (
   start_position text,
   end_position text,
   page_breaks integer[],
+  xhtml_breaks integer[],
   similarity float,
   section_index integer
 )
@@ -27,6 +28,7 @@ as $$
     es.start_position,
     es.end_position,
     es.page_breaks,
+    es.xhtml_breaks,
     1 - (es.embedding <=> query_embedding) as similarity,
     es.section_index
   from public.embedding_sections es
