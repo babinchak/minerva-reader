@@ -1193,9 +1193,20 @@ export function AIAgentPanel({
         }
       } else if (!hasSelection && bookType === "epub") {
         const readingOrder = rawManifest?.readingOrder || [];
+        console.log("[ai-send] EPUB no-selection path. bookId:", bookId, "readingOrder length:", readingOrder.length);
         const visible = getEpubVisibleContextWithPosition(readingOrder, { maxChars: 30000 });
-        if (visible?.text) {
-          sendPageContextBlock = `Current view text for context:\n\n"${visible.text}"`;
+        console.log("[ai-send] getEpubVisibleContextWithPosition result:", visible ? { textLen: visible.text?.length, start: visible.startPosition, end: visible.endPosition } : null);
+
+        // Get visible text — fall back to simpler extraction without positions
+        const visibleText = visible?.text || getEpubVisibleContext({ maxChars: 30000 })?.text;
+        console.log("[ai-send] visibleText length:", visibleText?.length ?? 0);
+        if (visibleText) {
+          sendPageContextBlock = `Current view text for context:\n\n"${visibleText}"`;
+        }
+
+        // Fetch summaries if we have positions (even if visible text failed)
+        if (visible?.startPosition && visible?.endPosition) {
+          console.log("[ai-send] Fetching context API with positions:", visible.startPosition, "->", visible.endPosition);
           try {
             const contextRes = await fetch(`/api/books/${bookId}/context`, {
               method: "POST",
@@ -1206,17 +1217,21 @@ export function AIAgentPanel({
                 endPosition: visible.endPosition,
               }),
             });
+            console.log("[ai-send] Context API response status:", contextRes.status);
             if (contextRes.ok) {
               const contextData = (await contextRes.json()) as {
                 book?: { title?: string | null; author?: string | null } | null;
                 summaries?: ContextApiSummary[];
               };
+              console.log("[ai-send] Context API returned:", { book: contextData.book, summaryCount: contextData.summaries?.length ?? 0 });
               sendBookContext = contextData.book ?? null;
               appendContextSummaries(contextData.summaries ?? []);
             }
-          } catch {
-            // Best-effort context enrichment for typed sends.
+          } catch (err) {
+            console.error("[ai-send] Context API fetch error:", err);
           }
+        } else {
+          console.log("[ai-send] No positions available — skipping context API fetch");
         }
       }
     }

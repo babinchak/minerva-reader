@@ -211,6 +211,7 @@ export function getEpubVisibleContextWithPosition(
   const maxChars = clamp(options?.maxChars ?? 30000, 1000, 60000);
 
   const iframes = Array.from(document.querySelectorAll("iframe"));
+  console.log("[epub-ctx] Found", iframes.length, "iframes. Viewport:", window.innerWidth, "x", window.innerHeight);
   const viewportRect = new DOMRect(0, 0, window.innerWidth, window.innerHeight);
 
   let bestIdx: number | null = null;
@@ -220,6 +221,7 @@ export function getEpubVisibleContextWithPosition(
     const iframe = iframes[i];
     const rect = iframe.getBoundingClientRect();
     const area = rectIntersectionArea(rect, viewportRect);
+    console.log(`[epub-ctx] iframe[${i}] class="${iframe.className}" src="${(iframe.src || "").slice(0, 80)}" area=${area.toFixed(0)}`);
     if (area <= 0) continue;
     if (area > bestScore) {
       bestScore = area;
@@ -227,38 +229,108 @@ export function getEpubVisibleContextWithPosition(
     }
   }
 
-  if (bestIdx == null) return null;
+  if (bestIdx == null) {
+    console.log("[epub-ctx] No visible iframe found — returning null");
+    return null;
+  }
 
   const chosen = iframes[bestIdx];
+  console.log("[epub-ctx] Chose iframe[" + bestIdx + "]");
   try {
     const doc = chosen.contentDocument || chosen.contentWindow?.document;
     const win = chosen.contentWindow;
-    if (!doc || !win) return null;
+    if (!doc || !win) {
+      console.log("[epub-ctx] Cannot access contentDocument/contentWindow — returning null");
+      return null;
+    }
 
     const x = Math.floor(win.innerWidth / 2);
     const y = Math.floor(win.innerHeight / 2);
     const atPoint = doc.elementFromPoint(x, y);
+    console.log("[epub-ctx] elementFromPoint(" + x + "," + y + "):", atPoint?.tagName ?? "null");
     const anchor = closestBlockElement(atPoint) ?? closestBlockElement(doc.body);
-    if (!anchor) return null;
+    if (!anchor) {
+      console.log("[epub-ctx] No anchor block found — returning null");
+      return null;
+    }
+    console.log("[epub-ctx] Anchor:", anchor.tagName, "textLength:", (anchor as HTMLElement).innerText?.length ?? 0);
 
     const { text, blocks } = collectNearbyBlocksWithElements(anchor, maxChars);
-    if (!text || blocks.length === 0) return null;
+    console.log("[epub-ctx] Collected", blocks.length, "blocks, text length:", text.length);
+    if (!text || blocks.length === 0) {
+      console.log("[epub-ctx] No text collected — returning null");
+      return null;
+    }
 
-    const first = blocks[0];
-    const last = blocks[blocks.length - 1];
-    if (!first || !last) return null;
+    // Try to compute precise positions from the visible blocks
+    try {
+      const first = blocks[0];
+      const last = blocks[blocks.length - 1];
+      if (first && last) {
+        const range = doc.createRange();
+        range.setStart(first, 0);
+        range.setEnd(last, last.childNodes.length);
 
-    const range = doc.createRange();
-    range.setStart(first, 0);
-    range.setEnd(last, last.childNodes.length);
+        const positions = calculateSelectionPositions(range, readingOrder, doc, -1);
+        console.log("[epub-ctx] Precise positions:", positions.start, "->", positions.end);
+        return {
+          text,
+          startPosition: positions.start,
+          endPosition: positions.end,
+        };
+      }
+    } catch (err) {
+      console.warn("[epub-ctx] Position calculation failed, using fallback:", err);
+    }
 
-    const positions = calculateSelectionPositions(range, readingOrder, doc, -1);
+    // Fallback: derive position from the iframe URL matched to readingOrder
+    const roIndex = findReadingOrderIndex(doc, chosen, readingOrder);
+    console.log("[epub-ctx] Fallback roIndex:", roIndex);
     return {
       text,
-      startPosition: positions.start,
-      endPosition: positions.end,
+      startPosition: `${roIndex}/0/0`,
+      endPosition: `${roIndex}/9999/9999`,
     };
-  } catch {
+  } catch (err) {
+    console.error("[epub-ctx] Outer catch — returning null:", err);
     return null;
   }
+}
+
+/**
+ * Find the readingOrder index for an iframe by matching its URL against the manifest.
+ * Returns 0 if no match is found.
+ */
+function findReadingOrderIndex(
+  doc: Document,
+  iframe: HTMLIFrameElement,
+  readingOrder: Array<{ href?: string }>
+): number {
+  const getFilename = (url: string) => {
+    try { return new URL(url).pathname.split("/").pop() || ""; }
+    catch { return url.split("?")[0].split("#")[0].split("/").pop() || ""; }
+  };
+
+  // Try document URL, then iframe src
+  const urls: string[] = [];
+  try { if (doc.URL) urls.push(doc.URL); } catch { /* cross-origin */ }
+  try { if (doc.baseURI) urls.push(doc.baseURI); } catch { /* cross-origin */ }
+  if (iframe.src) urls.push(iframe.src);
+
+  for (const url of urls) {
+    const filename = getFilename(url);
+    if (!filename) continue;
+    for (let i = 0; i < readingOrder.length; i++) {
+      const itemHref = readingOrder[i]?.href || "";
+      const itemFilename = itemHref.split("/").pop() || "";
+      if (
+        filename === itemFilename ||
+        url.includes(itemHref) ||
+        itemHref.includes(filename)
+      ) {
+        return i;
+      }
+    }
+  }
+  return 0;
 }
