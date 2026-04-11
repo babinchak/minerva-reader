@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import {
-  getStoredThemeVariants,
-  setStoredThemeVariants,
-  type ThemeVariantId,
-} from "@/lib/theme-variants";
+import { getStoredThemeVariants } from "@/lib/theme-variants";
 
 /**
  * Applies stored theme variants to document.documentElement.

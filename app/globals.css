@@ -1056,7 +1056,7 @@
   }
   body {
     @apply text-foreground;
-    background: linear-gradient(
+    background-image: linear-gradient(
       to bottom,
       hsl(var(--gradient-from, var(--background))),
       hsl(var(--gradient-to, var(--background)))

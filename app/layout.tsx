@@ -74,7 +74,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased">
+      <body className="antialiased" style={{ backgroundColor: "hsl(var(--background))" }}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
