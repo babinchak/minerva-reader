@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff } from "lucide-react";
-import { Markdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
+import { StreamingMarkdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
 import { ToolCallSteps, formatToolLabel, getQueryPreview, type MessageToolCall, type BookMapEntry } from "@/components/tool-call-steps";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -2191,11 +2191,11 @@ export function AIAgentPanel({
             return groups.map((group, groupIndex) => {
               const isLastGroup = groupIndex === groups.length - 1;
               const assistantMsg = group.assistant;
-              const isStreaming =
+              const isLastAssistant =
                 isLoading &&
                 assistantMsg &&
-                filteredMessages[filteredMessages.length - 1]?.id === assistantMsg.id &&
-                !assistantMsg.content.trim();
+                filteredMessages[filteredMessages.length - 1]?.id === assistantMsg.id;
+              const isStreaming = isLastAssistant && !assistantMsg.content.trim();
 
               return (
                 <div
@@ -2235,7 +2235,7 @@ export function AIAgentPanel({
                       )}
                       <div className="w-full text-foreground select-text">
                         {assistantMsg.content.trim() ? (
-                          <Markdown content={assistantMsg.content} bookId={bookId} sectionBookMap={isLibraryMode ? sectionBookMap : undefined} onRefClick={handleRefClick} chatId={activeChatId} />
+                          <StreamingMarkdown isStreaming={!!isLastAssistant} content={assistantMsg.content} bookId={bookId} sectionBookMap={isLibraryMode ? sectionBookMap : undefined} onRefClick={handleRefClick} chatId={activeChatId} />
                         ) : isStreaming ? (
                           <div className="flex gap-1">
                             <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />

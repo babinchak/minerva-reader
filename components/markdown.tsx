@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExternalLink } from "lucide-react";
@@ -269,6 +269,55 @@ export function Markdown({ content, className, bookId, sectionBookMap, onRefClic
         {content}
       </ReactMarkdown>
     </div>
+  );
+}
+
+/**
+ * Memoized single block — only re-renders if its own content string changes.
+ */
+const FrozenBlock = React.memo(function FrozenBlock(props: MarkdownProps) {
+  return <Markdown {...props} />;
+});
+
+/**
+ * Split markdown into completed blocks (separated by \n\n) and the trailing
+ * incomplete block still being streamed.
+ */
+function splitBlocks(content: string): [blocks: string[], tail: string] {
+  const lastBreak = content.lastIndexOf("\n\n");
+  if (lastBreak === -1) return [[], content];
+  const stable = content.slice(0, lastBreak);
+  const tail = content.slice(lastBreak + 2);
+  return [stable.split("\n\n"), tail];
+}
+
+type StreamingMarkdownProps = MarkdownProps & {
+  isStreaming: boolean;
+};
+
+/**
+ * During streaming, splits content into individually-memoized completed blocks
+ * plus a small re-rendering tail. Each completed block keeps its own DOM nodes
+ * stable so references stay clickable. Once streaming ends, renders everything
+ * as a single Markdown block for consistent spacing.
+ */
+export function StreamingMarkdown({ isStreaming, content, ...rest }: StreamingMarkdownProps) {
+  const [blocks, tailContent] = useMemo(
+    () => (isStreaming ? splitBlocks(content) : [[], ""]),
+    [isStreaming, content]
+  );
+
+  if (!isStreaming) {
+    return <Markdown content={content} {...rest} />;
+  }
+
+  return (
+    <>
+      {blocks.map((block, i) => (
+        <FrozenBlock key={i} content={block} {...rest} />
+      ))}
+      {tailContent && <Markdown content={tailContent} {...rest} />}
+    </>
   );
 }
 
