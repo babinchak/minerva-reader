@@ -40,6 +40,7 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- The quoted text inside the link MUST be copied verbatim from the passage content_text. Do not paraphrase or alter it.\n" +
   "- Use the section_id exactly as it appears in the tool result.\n" +
   "- If a passage has no section_id, just use a regular blockquote instead.\n" +
+  "- ONLY create navigable references when you have a real section_id returned by a tool (vector_search, text_search, or get_passages). Never use the ref: format for text from the conversation or user message — use a regular blockquote instead.\n" +
   "- Prefer short, complete quotes (1-2 sentences). Only use … to omit an irrelevant clause within a longer quote that is essential to the argument. Avoid ellipsis when a shorter complete quote would work.\n" +
   "- Quotes render as standalone blocks in the UI, so NEVER embed them inline within a sentence. Introduce the quote with a complete sentence (ending in a colon or period), then place the quote reference on its own new line. Wrong: 'the Stoics hold that [\"all things…\"](ref:abc) and …' — Right: 'The Stoics hold that all things take place by destiny:\\n\\n[\"all things take place by destiny\"](ref:abc)'\n" +
   "- Don't repeat the book title before a quote — the quote card already displays it. You can refer to the author by name to introduce the quote naturally (e.g. 'Arnold argues:' instead of 'From Edward Vernon Arnold, *Roman Stoicism*:').";
@@ -87,6 +88,7 @@ const LIBRARY_SYSTEM_PROMPT =
   "- The quoted text inside the link MUST be copied verbatim from the passage content_text. Do not paraphrase or alter it.\n" +
   "- Use the section_id exactly as it appears in the tool result.\n" +
   "- If a passage has no section_id, just use a regular blockquote instead.\n" +
+  "- ONLY create navigable references when you have a real section_id returned by a tool (vector_search, text_search, or get_passages). Never use the ref: format for text from the conversation or user message — use a regular blockquote instead.\n" +
   "- Prefer short, complete quotes (1-2 sentences). Only use … to omit an irrelevant clause within a longer quote that is essential to the argument. Avoid ellipsis when a shorter complete quote would work.\n" +
   "- Quotes render as standalone blocks in the UI, so NEVER embed them inline within a sentence. Introduce the quote with a complete sentence (ending in a colon or period), then place the quote reference on its own new line. Wrong: 'the Stoics hold that [\"all things…\"](ref:abc) and …' — Right: 'The Stoics hold that all things take place by destiny:\\n\\n[\"all things take place by destiny\"](ref:abc)'\n" +
   "- Don't repeat the book title before a quote — the quote card already displays it. You can refer to the author by name to introduce the quote naturally (e.g. 'Arnold argues:' instead of 'From Edward Vernon Arnold, *Roman Stoicism*:').";
