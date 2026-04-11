@@ -47,22 +47,28 @@ function epubPositionsIntersect(
   sumStartRO: number,
   sumEndRO: number
 ): boolean {
-  const getRO = (pos: string) => {
-    const p = pos.split("/")[0];
-    const n = parseInt(p, 10);
-    return isNaN(n) ? null : n;
+  // Selection positions from client: "readingOrderIndex/elementPath.../charOffset"
+  //   e.g., "2/77/0" → RO=2, path=[77], charOffset=0
+  // Summary positions from lambda:  "elementPath..." (NO RO prefix)
+  //   e.g., "115" → path=[115], or "2/0" → path=[2,0]
+  //   RO stored separately in sumStartRO/sumEndRO columns.
+
+  /** Parse a selection position: first segment = RO, rest = element path */
+  const parseSelectionPos = (pos: string) => {
+    const parts = pos.split("/").map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
+    if (parts.length < 2) return null;
+    return { ro: parts[0]!, path: parts.slice(1) };
   };
-  const getPath = (pos: string) => {
-    const parts = pos.split("/").slice(1, -1);
-    const nums = parts.map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
-    return nums.length > 0 ? nums : null;
+
+  /** Parse a summary position: entire string is element path (no RO prefix) */
+  const parseSummaryPath = (pos: string): number[] => {
+    const parts = pos.split("/").map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
+    return parts.length > 0 ? parts : [0];
   };
-  const cmp = (ro1: number, path1: number[] | null, ro2: number, path2: number[] | null) => {
+
+  const cmp = (ro1: number, path1: number[], ro2: number, path2: number[]) => {
     if (ro1 < ro2) return -1;
     if (ro1 > ro2) return 1;
-    if (!path1 && !path2) return 0;
-    if (!path1) return -1;
-    if (!path2) return 1;
     const len = Math.min(path1.length, path2.length);
     for (let i = 0; i < len; i++) {
       if (path1[i]! < path2[i]!) return -1;
@@ -70,17 +76,19 @@ function epubPositionsIntersect(
     }
     return path1.length - path2.length;
   };
-  const selRO = getRO(selStart);
-  const selPath = getPath(selStart);
-  const endRO = getRO(selEnd);
-  const endPath = getPath(selEnd);
-  const sumPath = getPath(sumStart);
-  const sumEPath = sumEnd ? getPath(sumEnd) : null;
-  if (selRO === null || selPath === null || endRO === null || endPath === null || sumPath === null) return false;
+
+  const sel = parseSelectionPos(selStart);
+  const selE = parseSelectionPos(selEnd);
+  if (!sel || !selE) return false;
+
+  const sumPath = parseSummaryPath(sumStart);
+  const sumEPath = sumEnd ? parseSummaryPath(sumEnd) : null;
+
+  // Intersection: selection range overlaps summary range
   const beforeEnd = sumEPath === null
-    ? selRO <= sumEndRO
-    : cmp(selRO, selPath, sumEndRO, sumEPath) <= 0;
-  const afterStart = cmp(endRO, endPath, sumStartRO, sumPath) >= 0;
+    ? sel.ro <= sumEndRO
+    : cmp(sel.ro, sel.path, sumEndRO, sumEPath) <= 0;
+  const afterStart = cmp(selE.ro, selE.path, sumStartRO, sumPath) >= 0;
   return beforeEnd && afterStart;
 }
 

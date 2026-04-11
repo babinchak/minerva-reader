@@ -69,87 +69,47 @@ function calculatePositions(
   // Use readingOrder index from store if available
   let readingOrderIndex = readingOrderIndexFromStore;
 
-  // If not found in store, try to find by matching URL
   if (readingOrderIndex === -1) {
-    // Extract filename from URL
-    const urlParts = normalizedCurrentUrl.split("/");
-    const currentFilename = urlParts[urlParts.length - 1] || "";
-
-    for (let i = 0; i < readingOrder.length; i++) {
-      const item = readingOrder[i];
-      const itemHref = item.href || "";
-
-      // Normalize the item href
-      let normalizedItemHref = itemHref;
-      try {
-        // If itemHref is relative, we need to resolve it
-        if (!itemHref.startsWith("http") && !itemHref.startsWith("/")) {
-          // It's a relative path, use as-is
-          normalizedItemHref = itemHref;
-        } else {
-          normalizedItemHref = normalizeUrl(itemHref);
-        }
-      } catch {
-        // Keep original if normalization fails
-        normalizedItemHref = itemHref;
-      }
-
-      // Extract filename from item href
-      const itemParts = normalizedItemHref.split("/");
-      const itemFilename = itemParts[itemParts.length - 1] || "";
-
-      // Try multiple matching strategies
-      const matches =
-        // Exact filename match
-        currentFilename === itemFilename ||
-        // URL contains item href or vice versa
-        normalizedCurrentUrl.includes(normalizedItemHref) ||
-        normalizedItemHref.includes(normalizedCurrentUrl) ||
-        // Filename contains item filename or vice versa
-        currentFilename.includes(itemFilename) ||
-        itemFilename.includes(currentFilename) ||
-        // Ends with match
-        normalizedCurrentUrl.endsWith(normalizedItemHref) ||
-        normalizedItemHref.endsWith(currentFilename) ||
-        // Original URL matching (before normalization)
-        currentUrl.includes(itemHref) ||
-        itemHref.includes(currentUrl);
-
-      if (matches) {
-        readingOrderIndex = i;
-        break;
-      }
-    }
-
-    // If still not found, try to find by checking iframe src or other methods
-    if (readingOrderIndex === -1) {
-      // Look for iframe that might have the src
-      const iframes = document.querySelectorAll("iframe");
-      for (const iframe of iframes) {
-        try {
-          const iframeSrc = iframe.src || "";
-          const normalizedIframeSrc = normalizeUrl(iframeSrc);
-          const iframeFilename = normalizedIframeSrc.split("/").pop() || "";
-
-          for (let i = 0; i < readingOrder.length; i++) {
-            const item = readingOrder[i];
-            const itemHref = item.href || "";
+    // Primary: read Readium's locator from localStorage (most reliable — works with blob URLs)
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || !key.endsWith("-current-location")) continue;
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const locator = JSON.parse(raw) as { href?: string };
+        if (locator.href) {
+          const locFilename = locator.href.split("/").pop() || "";
+          if (!locFilename) continue;
+          for (let j = 0; j < readingOrder.length; j++) {
+            const itemHref = readingOrder[j]?.href || "";
             const itemFilename = itemHref.split("/").pop() || "";
-
-            if (
-              normalizedIframeSrc.includes(itemHref) ||
-              itemHref.includes(iframeFilename) ||
-              iframeFilename === itemFilename ||
-              iframeFilename.includes(itemFilename) ||
-              itemFilename.includes(iframeFilename)
-            ) {
-              readingOrderIndex = i;
+            if (itemFilename && locFilename === itemFilename) {
+              readingOrderIndex = j;
               break;
             }
           }
-          if (readingOrderIndex !== -1) break;
-        } catch {
-          // Can't access iframe src
+        }
+        if (readingOrderIndex !== -1) break;
+      }
+    } catch {
+      // localStorage not available or parse error
+    }
+  }
+
+  // Fallback: try matching document URL against reading order (works for non-blob URLs)
+  if (readingOrderIndex === -1) {
+    const urlParts = normalizedCurrentUrl.split("/");
+    const currentFilename = urlParts[urlParts.length - 1] || "";
+
+    // Only attempt URL matching if we have a meaningful filename (not empty, not a UUID-like blob)
+    if (currentFilename && !currentFilename.startsWith("blob:") && currentFilename.includes(".")) {
+      for (let i = 0; i < readingOrder.length; i++) {
+        const itemHref = readingOrder[i]?.href || "";
+        const itemFilename = itemHref.split("/").pop() || "";
+        if (itemFilename && currentFilename === itemFilename) {
+          readingOrderIndex = i;
+          break;
         }
       }
     }
