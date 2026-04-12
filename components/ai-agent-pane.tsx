@@ -117,10 +117,14 @@ export interface AIAgentPanelProps {
   initialRefQuote?: string | null;
   /** Available collections for the scope dropdown in library mode. */
   collections?: { id: string; name: string; bookCount: number; bookIds: string[] }[];
+  /** Available curated collections for the scope dropdown in library mode. */
+  curatedCollections?: { id: string; name: string; bookCount: number; bookIds: string[] }[];
+  /** All curated book IDs (for "Curated Library" scope). */
+  allCuratedBookIds?: string[];
   /** Current AI search scope. */
-  aiScope?: { type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] };
+  aiScope?: { type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] } | { type: "curated-library"; bookIds: string[] } | { type: "curated-collection"; id: string; name: string; bookIds: string[] };
   /** Called when user changes scope in the dropdown. */
-  onAiScopeChange?: (scope: { type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] }) => void;
+  onAiScopeChange?: (scope: { type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] } | { type: "curated-library"; bookIds: string[] } | { type: "curated-collection"; id: string; name: string; bookIds: string[] }) => void;
   /** Pre-fill the composer with this question on mount. */
   prefillQuestion?: string | null;
 }
@@ -216,6 +220,8 @@ export function AIAgentPanel({
   initialChatId,
   initialRefQuote,
   collections: collectionsProp,
+  curatedCollections: curatedCollectionsProp,
+  allCuratedBookIds,
   aiScope,
   onAiScopeChange,
   prefillQuestion,
@@ -1141,8 +1147,8 @@ export function AIAgentPanel({
         sendPositionTitle = formatted.title;
       }
     } else if (isLibraryMode) {
-      sendPositionLabel = aiScope?.type === "collection" ? aiScope.name : "Library";
-      sendPositionTitle = aiScope?.type === "collection" ? `Collection: ${aiScope.name}` : "Library";
+      sendPositionLabel = aiScope?.type === "collection" ? aiScope.name : aiScope?.type === "curated-library" ? "Curated Library" : aiScope?.type === "curated-collection" ? aiScope.name : "Library";
+      sendPositionTitle = aiScope?.type === "collection" ? `Collection: ${aiScope.name}` : aiScope?.type === "curated-library" ? "Curated Library" : aiScope?.type === "curated-collection" ? `Curated: ${aiScope.name}` : "Library";
     } else {
       sendPositionLabel = "(View)";
       sendPositionTitle = "EPUB visible context";
@@ -1479,7 +1485,7 @@ export function AIAgentPanel({
             bookId: bookId ?? undefined,
             bookIds: isLibraryMode ? bookIds : undefined,
             chatId: chatId ?? undefined,
-            scopeLabel: isLibraryMode && aiScope?.type === "collection" ? `collection "${aiScope.name}"` : undefined,
+            scopeLabel: isLibraryMode ? (aiScope?.type === "collection" ? `collection "${aiScope.name}"` : aiScope?.type === "curated-library" ? "the curated library" : aiScope?.type === "curated-collection" ? `curated collection "${aiScope.name}"` : undefined) : undefined,
           })
         : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 
@@ -1824,7 +1830,7 @@ export function AIAgentPanel({
             bookId: bookId ?? undefined,
             bookIds: isLibraryMode ? bookIds : undefined,
             chatId: chatId ?? undefined,
-            scopeLabel: isLibraryMode && aiScope?.type === "collection" ? `collection "${aiScope.name}"` : undefined,
+            scopeLabel: isLibraryMode ? (aiScope?.type === "collection" ? `collection "${aiScope.name}"` : aiScope?.type === "curated-library" ? "the curated library" : aiScope?.type === "curated-collection" ? `curated collection "${aiScope.name}"` : undefined) : undefined,
           })
         : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 
@@ -1997,7 +2003,7 @@ export function AIAgentPanel({
               )}
               <div className="flex items-center gap-1.5">
                 {isLibraryMode ? (
-                  collectionsProp && collectionsProp.length > 0 && onAiScopeChange ? (
+                  onAiScopeChange && ((collectionsProp && collectionsProp.length > 0) || (curatedCollectionsProp && curatedCollectionsProp.length > 0) || allCuratedBookIds) ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
@@ -2005,44 +2011,81 @@ export function AIAgentPanel({
                           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <Sparkles className="h-3 w-3 text-blue-500" />
-                          <span className="max-w-[120px] truncate">
-                            {aiScope?.type === "collection" ? aiScope.name : "Library"}
+                          <span className="max-w-[140px] truncate">
+                            {aiScope?.type === "collection" ? aiScope.name : aiScope?.type === "curated-library" ? "Curated Library" : aiScope?.type === "curated-collection" ? aiScope.name : "My Library"}
                           </span>
                           <ChevronRight className="h-3 w-3 rotate-90" />
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="min-w-[160px]">
-                        <DropdownMenuItem
-                          onClick={() => onAiScopeChange({ type: "library" })}
-                          className={aiScope?.type === "library" ? "bg-accent" : ""}
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />
-                          All library
-                        </DropdownMenuItem>
-                        {collectionsProp.map((col) => (
-                          <DropdownMenuItem
-                            key={col.id}
-                            onClick={() => {
-                              onAiScopeChange({
-                                type: "collection",
-                                id: col.id,
-                                name: col.name,
-                                bookIds: col.bookIds,
-                              });
-                            }}
-                            className={aiScope?.type === "collection" && aiScope.id === col.id ? "bg-accent" : ""}
-                          >
-                            <FolderOpen className="h-3.5 w-3.5" />
-                            <span className="truncate">{col.name}</span>
-                            <span className="ml-auto text-[10px] text-muted-foreground">{col.bookCount}</span>
-                          </DropdownMenuItem>
-                        ))}
+                      <DropdownMenuContent align="end" className="min-w-[180px] max-h-[320px] overflow-y-auto">
+                        {/* My Library section — shown when user collections are provided */}
+                        {collectionsProp && collectionsProp.length > 0 && (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => onAiScopeChange({ type: "library" })}
+                              className={aiScope?.type === "library" ? "bg-accent" : ""}
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              All library
+                            </DropdownMenuItem>
+                            {collectionsProp.map((col) => (
+                              <DropdownMenuItem
+                                key={col.id}
+                                onClick={() => {
+                                  onAiScopeChange({
+                                    type: "collection",
+                                    id: col.id,
+                                    name: col.name,
+                                    bookIds: col.bookIds,
+                                  });
+                                }}
+                                className={aiScope?.type === "collection" && aiScope.id === col.id ? "bg-accent" : ""}
+                              >
+                                <FolderOpen className="h-3.5 w-3.5" />
+                                <span className="truncate">{col.name}</span>
+                                <span className="ml-auto text-[10px] text-muted-foreground">{col.bookCount}</span>
+                              </DropdownMenuItem>
+                            ))}
+                          </>
+                        )}
+                        {/* Curated Library section — shown when curated data is provided */}
+                        {(allCuratedBookIds || (curatedCollectionsProp && curatedCollectionsProp.length > 0)) && (
+                          <>
+                            {allCuratedBookIds && (
+                              <DropdownMenuItem
+                                onClick={() => onAiScopeChange({ type: "curated-library", bookIds: allCuratedBookIds })}
+                                className={aiScope?.type === "curated-library" ? "bg-accent" : ""}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                All curated books
+                              </DropdownMenuItem>
+                            )}
+                            {curatedCollectionsProp?.map((col) => (
+                              <DropdownMenuItem
+                                key={`curated-${col.id}`}
+                                onClick={() => {
+                                  onAiScopeChange({
+                                    type: "curated-collection",
+                                    id: col.id,
+                                    name: col.name,
+                                    bookIds: col.bookIds,
+                                  });
+                                }}
+                                className={aiScope?.type === "curated-collection" && aiScope.id === col.id ? "bg-accent" : ""}
+                              >
+                                <FolderOpen className="h-3.5 w-3.5" />
+                                <span className="truncate">{col.name}</span>
+                                <span className="ml-auto text-[10px] text-muted-foreground">{col.bookCount}</span>
+                              </DropdownMenuItem>
+                            ))}
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   ) : (
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Sparkles className="h-3 w-3 text-blue-500" />
-                      {aiScope?.type === "collection" ? aiScope.name : "Library search"}
+                      {aiScope?.type === "collection" ? aiScope.name : aiScope?.type === "curated-library" ? "Curated Library" : aiScope?.type === "curated-collection" ? aiScope.name : "Library search"}
                     </span>
                   )
                 ) : !userId && creditsInfo && !creditsInfo.freeBetaMode ? (
@@ -2157,7 +2200,7 @@ export function AIAgentPanel({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask across ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+                  placeholder={isLibraryMode ? (aiScope?.type === "collection" || aiScope?.type === "curated-collection" ? `Ask across ${aiScope.name}...` : aiScope?.type === "curated-library" ? "Ask across curated library..." : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                   disabled={isLoading}
                   rows={1}
                   style={{ fieldSizing: "content" } as React.CSSProperties}
@@ -2326,7 +2369,7 @@ export function AIAgentPanel({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={isLibraryMode ? (aiScope?.type === "collection" ? `Ask across ${aiScope.name}...` : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+                placeholder={isLibraryMode ? (aiScope?.type === "collection" || aiScope?.type === "curated-collection" ? `Ask across ${aiScope.name}...` : aiScope?.type === "curated-library" ? "Ask across curated library..." : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
                 disabled={isLoading}
                 rows={1}
                 style={{ fieldSizing: "content" } as React.CSSProperties}

@@ -6,15 +6,19 @@ import { Sparkles, X } from "lucide-react";
 import { AIAgentPanel } from "@/components/ai-agent-pane";
 import { useIsMobile } from "@/lib/use-media-query";
 import { useResizePane } from "@/lib/use-resize-pane";
-import type { CollectionSummary } from "@/components/collections-view";
-
 export type AIScope =
   | { type: "library" }
-  | { type: "collection"; id: string; name: string; bookIds: string[] };
+  | { type: "collection"; id: string; name: string; bookIds: string[] }
+  | { type: "curated-library"; bookIds: string[] }
+  | { type: "curated-collection"; id: string; name: string; bookIds: string[] };
 
 interface LibraryAIAssistantProps {
   bookIds: string[];
-  collections?: CollectionSummary[];
+  collections?: { id: string; name: string; bookCount: number; bookIds: string[] }[];
+  /** Curated collections for the scope dropdown. */
+  curatedCollections?: { id: string; name: string; bookCount: number; bookIds: string[] }[];
+  /** All curated book IDs (for "Curated Library" scope). */
+  allCuratedBookIds?: string[];
   aiScope?: AIScope;
   onAiScopeChange?: (scope: AIScope) => void;
   /** When true, force open the AI pane (e.g. from a collection AI button). */
@@ -29,6 +33,8 @@ interface LibraryAIAssistantProps {
 export function LibraryAIAssistant({
   bookIds,
   collections,
+  curatedCollections,
+  allCuratedBookIds,
   aiScope,
   onAiScopeChange,
   forceOpen,
@@ -83,6 +89,8 @@ export function LibraryAIAssistant({
             <AIAgentPanel
               bookIds={bookIds}
               collections={collections}
+              curatedCollections={curatedCollections}
+              allCuratedBookIds={allCuratedBookIds}
               aiScope={aiScope}
               onAiScopeChange={onAiScopeChange}
               className="flex-1 flex flex-col min-h-0"
@@ -122,6 +130,8 @@ export function LibraryAIAssistant({
           <AIAgentPanel
             bookIds={bookIds}
             collections={collections}
+            curatedCollections={curatedCollections}
+            allCuratedBookIds={allCuratedBookIds}
             aiScope={aiScope}
             onAiScopeChange={onAiScopeChange}
             className="h-full w-full flex flex-col min-w-0"

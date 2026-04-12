@@ -9,7 +9,7 @@ import { BookCard } from "@/components/book-card";
 import { BookSearchInput } from "@/components/book-search-input";
 import { LibrarySortControls } from "@/components/library-sort-controls";
 import { UploadBookDialog } from "@/components/upload-book-dialog";
-import { LibraryAIAssistant } from "@/components/library-ai-assistant";
+import { LibraryAIAssistant, type AIScope } from "@/components/library-ai-assistant";
 import { CollectionsView, type CollectionSummary } from "@/components/collections-view";
 import {
   CreateCollectionDialog,
@@ -77,7 +77,7 @@ export function LibraryWithBooks({
   }
 
   // AI scope: which collection (or "library" for all books) to search
-  const [aiScope, setAiScope] = useState<{ type: "library" } | { type: "collection"; id: string; name: string; bookIds: string[] }>({ type: "library" });
+  const [aiScope, setAiScope] = useState<AIScope>({ type: "library" });
   const [aiOpenFromCollection, setAiOpenFromCollection] = useState(false);
 
   useEffect(() => {
@@ -151,7 +151,7 @@ export function LibraryWithBooks({
 
   const effectiveAIBookIds = aiScope.type === "library"
     ? books.map((b) => b.id)
-    : aiScope.bookIds;
+    : aiScope.bookIds ?? [];
 
   return (
     <div className="w-full max-w-7xl space-y-6">

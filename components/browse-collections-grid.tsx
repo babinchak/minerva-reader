@@ -1,13 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { createPortal } from "react-dom";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { BookOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AIAgentPanel } from "@/components/ai-agent-pane";
-import { useResizePane } from "@/lib/use-resize-pane";
-import type { AIScope } from "@/components/library-ai-assistant";
+import { LibraryAIAssistant, type AIScope } from "@/components/library-ai-assistant";
 
 interface CollectionItem {
   id: string;
@@ -20,15 +17,50 @@ interface CollectionItem {
 }
 
 export function BrowseCollectionsGrid({ collections }: { collections: CollectionItem[] }) {
-  const [aiCollection, setAiCollection] = useState<CollectionItem | null>(null);
-  const { width: paneWidth, handleProps } = useResizePane();
+  const allCuratedBookIds = useMemo(
+    () => [...new Set(collections.flatMap((c) => c.bookIds))],
+    [collections],
+  );
 
-  const scope: AIScope | undefined = aiCollection
-    ? { type: "collection", id: aiCollection.id, name: aiCollection.name, bookIds: aiCollection.bookIds }
-    : undefined;
+  const curatedCollections = useMemo(
+    () => collections.filter((c) => c.bookIds.length > 0).map((c) => ({
+      id: c.id,
+      name: c.name,
+      bookCount: c.bookCount,
+      bookIds: c.bookIds,
+    })),
+    [collections],
+  );
+
+  const [aiScope, setAiScope] = useState<AIScope>({ type: "curated-library", bookIds: allCuratedBookIds });
+  const [aiOpenFromCollection, setAiOpenFromCollection] = useState(false);
+
+  const effectiveBookIds = aiScope.type === "curated-collection"
+    ? aiScope.bookIds
+    : allCuratedBookIds;
 
   return (
     <>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
+            Curated Library
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Explore curated collections of public domain books you can read and discuss with AI.
+          </p>
+        </div>
+        <LibraryAIAssistant
+          bookIds={effectiveBookIds}
+          curatedCollections={curatedCollections}
+          allCuratedBookIds={allCuratedBookIds}
+          aiScope={aiScope}
+          onAiScopeChange={setAiScope}
+          forceOpen={aiOpenFromCollection}
+          onForceOpenConsumed={() => setAiOpenFromCollection(false)}
+          buttonLabel="Ask across library"
+        />
+      </div>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {collections.map((c) => (
           <div
@@ -65,7 +97,10 @@ export function BrowseCollectionsGrid({ collections }: { collections: Collection
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary"
-                  onClick={() => setAiCollection(c)}
+                  onClick={() => {
+                    setAiScope({ type: "curated-collection", id: c.id, name: c.name, bookIds: c.bookIds });
+                    setAiOpenFromCollection(true);
+                  }}
                   aria-label={`Ask AI across ${c.name}`}
                 >
                   <Sparkles className="h-4 w-4" />
@@ -75,30 +110,6 @@ export function BrowseCollectionsGrid({ collections }: { collections: Collection
           </div>
         ))}
       </div>
-
-      {aiCollection && scope && typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-y-0 right-0 z-[60] border-l border-border bg-background shadow-lg flex flex-col"
-            style={{ width: `${paneWidth}px` }}
-          >
-            <div
-              className="absolute -left-1 top-0 h-full w-2 cursor-col-resize touch-none z-50"
-              {...handleProps}
-              aria-label="Resize AI panel"
-              role="separator"
-              aria-orientation="vertical"
-            />
-            <AIAgentPanel
-              bookIds={aiCollection.bookIds}
-              aiScope={scope}
-              onAiScopeChange={() => {}}
-              className="h-full w-full flex flex-col min-w-0"
-              onClose={() => setAiCollection(null)}
-            />
-          </div>,
-          document.body,
-        )}
     </>
   );
 }

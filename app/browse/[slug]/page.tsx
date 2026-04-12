@@ -80,6 +80,34 @@ export default async function BrowseCollectionPage({ params, searchParams }: Pag
     .eq("curated_collection_id", collection.id)
     .order("sort_order");
 
+  // Fetch all curated collections for the scope dropdown
+  const { data: allCollections } = await supabase
+    .from("curated_collections")
+    .select("id, name, curated_collection_books(count)")
+    .order("sort_order");
+  const allCollectionIds = (allCollections ?? []).map((c) => c.id);
+  let curatedBookIdsByCollection: Record<string, string[]> = {};
+  if (allCollectionIds.length > 0) {
+    const { data: ccbRows } = await supabase
+      .from("curated_collection_books")
+      .select("curated_collection_id, book_id")
+      .in("curated_collection_id", allCollectionIds);
+    for (const row of ccbRows ?? []) {
+      const cid = row.curated_collection_id;
+      if (!curatedBookIdsByCollection[cid]) curatedBookIdsByCollection[cid] = [];
+      curatedBookIdsByCollection[cid].push(row.book_id);
+    }
+  }
+  const curatedCollections = (allCollections ?? [])
+    .filter((c) => (curatedBookIdsByCollection[c.id] ?? []).length > 0)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      bookCount: (curatedBookIdsByCollection[c.id] ?? []).length,
+      bookIds: curatedBookIdsByCollection[c.id] ?? [],
+    }));
+  const allCuratedBookIds = [...new Set(Object.values(curatedBookIdsByCollection).flat())];
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const books = (rows ?? []).map((r) => {
     const book = (r as any).books;
@@ -135,8 +163,11 @@ export default async function BrowseCollectionPage({ params, searchParams }: Pag
               </div>
               {user && books.length > 0 && (
                 <CuratedCollectionAI
+                  collectionId={collection.id}
                   collectionName={collection.name}
                   bookIds={books.map((b) => b.id)}
+                  curatedCollections={curatedCollections}
+                  allCuratedBookIds={allCuratedBookIds}
                   prefillQuestion={prefillQuestion}
                   forceOpen={shouldOpenChat}
                 />
