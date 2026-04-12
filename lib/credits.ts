@@ -318,5 +318,13 @@ export async function countInFlightProcessing(userId: string): Promise<number> {
   return inFlight;
 }
 
-/** Max concurrent books being processed per user. */
-export const MAX_CONCURRENT_PROCESSING = Number(process.env.MAX_CONCURRENT_PROCESSING) || 3;
+/** Max concurrent books being processed per free-tier user. */
+export const MAX_CONCURRENT_PROCESSING_FREE = Number(process.env.MAX_CONCURRENT_PROCESSING_FREE) || 3;
+
+/** Max concurrent books being processed per paid-tier user. */
+export const MAX_CONCURRENT_PROCESSING_PAID = Number(process.env.MAX_CONCURRENT_PROCESSING_PAID) || 5;
+
+/** Get the concurrent processing limit for a tier. */
+export function maxConcurrentProcessing(tier: UserTier): number {
+  return tier === "paid" ? MAX_CONCURRENT_PROCESSING_PAID : MAX_CONCURRENT_PROCESSING_FREE;
+}

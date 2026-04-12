@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,8 +17,16 @@ import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
 export function UploadBookDialog() {
   const [open, setOpen] = useState(false);
+  const [isPaid, setIsPaid] = useState(false);
   const abortRef = useRef(false);
   const router = useRouter();
+
+  useEffect(() => {
+    fetch(`/api/credits?t=${Date.now()}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setIsPaid(d.tier === "paid"); })
+      .catch(() => {});
+  }, []);
 
   const handleSuccess = () => {
     router.refresh();
@@ -42,9 +50,9 @@ export function UploadBookDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle>Add books</DialogTitle>
+          <DialogTitle>Add {isPaid ? "books" : "book"}</DialogTitle>
           <DialogDescription>
-            Upload EPUB or PDF files to add them to your library.
+            Upload {isPaid ? "EPUB or PDF files" : "an EPUB or PDF file"} to add to your library.
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 overflow-y-auto">

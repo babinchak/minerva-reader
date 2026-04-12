@@ -3,7 +3,9 @@ import { isSha256Hex } from "@/lib/file-hash";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import {
   countInFlightProcessing,
-  MAX_CONCURRENT_PROCESSING,
+  maxConcurrentProcessing,
+  getCredits,
+  getTier,
 } from "@/lib/credits";
 import { isAdminEmail } from "@/lib/admin";
 import { NextRequest, NextResponse } from "next/server";
@@ -62,10 +64,25 @@ export async function POST(request: NextRequest) {
 
   const admin = isAdminEmail(user.email);
 
-  // Check concurrent processing limit
   if (!admin) {
+    // Check balance — user must have some credit to upload
+    const credits = await getCredits(user.id);
+    const totalBalance = (credits?.includedBalance ?? 0) + (credits?.extraUsageBalance ?? 0);
+    if (totalBalance <= 0) {
+      return NextResponse.json(
+        {
+          error: "Insufficient balance",
+          message: "You don't have enough credits to upload books. Please wait for your allowance to reset or add more credits.",
+        },
+        { status: 402 },
+      );
+    }
+
+    // Check concurrent processing limit (tier-aware)
+    const tier = credits?.tier ?? await getTier(user.id);
+    const maxConcurrent = maxConcurrentProcessing(tier);
     const inFlight = await countInFlightProcessing(user.id);
-    if (inFlight >= MAX_CONCURRENT_PROCESSING) {
+    if (inFlight >= maxConcurrent) {
       return NextResponse.json(
         {
           error: "Processing limit reached",

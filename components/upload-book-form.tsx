@@ -456,6 +456,23 @@ export function UploadBookForm({
             </div>
           )}
 
+          <button
+            type="button"
+            onClick={() => {
+              fetch("/api/stripe/checkout", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: "subscription" }),
+              })
+                .then((r) => r.json())
+                .then((d) => { if (d.url) window.location.href = d.url; });
+            }}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Upload className="h-3 w-3" />
+            Want to upload your whole library at once? Upgrade to Pro
+          </button>
+
           <Dialog open={alreadyInLibraryOpen} onOpenChange={setAlreadyInLibraryOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
