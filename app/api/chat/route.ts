@@ -71,12 +71,19 @@ export async function POST(req: NextRequest) {
 
     // Included mode: allow. On-demand mode: check can afford ~$0.50 for fast request.
     if (user) {
-      const canAfford = await canMakeRequest(user.id, 0.50, user.email);
-      if (!canAfford) {
+      const usageCheck = await canMakeRequest(user.id, 0.50, user.email);
+      if (!usageCheck.allowed) {
         return new Response(
           JSON.stringify({
-            error: "Insufficient credits",
-            message: "You've run out of credits. Upgrade or add more to continue.",
+            error: "Usage limit reached",
+            usageDenied: true,
+            reason: usageCheck.reason,
+            resetAt: usageCheck.resetAt,
+            tier: usageCheck.tier,
+            extraUsageBalance: usageCheck.extraUsageBalance,
+            onDemandLimitType: usageCheck.onDemandLimitType,
+            onDemandLimitDollars: usageCheck.onDemandLimitDollars,
+            extraUsageSpent: usageCheck.extraUsageSpent,
           }),
           { status: 402, headers: { "Content-Type": "application/json" } }
         );

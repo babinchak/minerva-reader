@@ -175,33 +175,62 @@ export async function ensureUserCredits(userId: string): Promise<void> {
   }
 }
 
+export type UsageDeniedReason =
+  | "included_exhausted_extra_disabled"
+  | "included_exhausted_extra_empty"
+  | "included_exhausted_extra_limit_reached"
+  | "no_credits";
+
+export interface UsageCheckResult {
+  allowed: boolean;
+  reason?: UsageDeniedReason;
+  resetAt?: string | null;
+  tier?: UserTier;
+  extraUsageBalance?: number;
+  onDemandLimitType?: OnDemandLimitType;
+  onDemandLimitDollars?: number;
+  extraUsageSpent?: number;
+}
+
 /**
  * Check if user can make a request costing estimatedCostDollars.
- * - Free beta mode: always allow.
- * - Has included balance: allow.
- * - Has extra usage balance and on-demand enabled: allow.
+ * Returns structured result with denial reason when blocked.
  */
 export async function canMakeRequest(
   userId: string,
   estimatedCostDollars: number,
   userEmail?: string | null
-): Promise<boolean> {
-  if (isFreeBetaMode()) return true;
-  if (isAdminEmail(userEmail)) return true;
+): Promise<UsageCheckResult> {
+  if (isFreeBetaMode()) return { allowed: true };
+  if (isAdminEmail(userEmail)) return { allowed: true };
   const credits = await getCredits(userId);
-  if (!credits) return false;
-  if (credits.includedBalance > 0) return true;
+  if (!credits) return { allowed: false, reason: "no_credits" };
+
+  const base = {
+    resetAt: credits.allowanceResetAt?.toISOString() ?? null,
+    tier: credits.tier,
+    extraUsageBalance: credits.extraUsageBalance,
+    onDemandLimitType: credits.onDemandLimitType,
+    onDemandLimitDollars: credits.onDemandLimitDollars,
+    extraUsageSpent: credits.extraUsageSpent,
+  };
+
+  if (credits.includedBalance > 0) return { allowed: true, ...base };
 
   // No included balance left — check extra usage
-  if (credits.onDemandLimitType === "disabled") return false;
-  if (credits.extraUsageBalance <= 0) return false;
-
-  // Check monthly limit
-  if (credits.onDemandLimitType === "fixed") {
-    return credits.extraUsageSpent < credits.onDemandLimitDollars;
+  if (credits.onDemandLimitType === "disabled") {
+    return { allowed: false, reason: "included_exhausted_extra_disabled", ...base };
+  }
+  if (credits.extraUsageBalance <= 0) {
+    return { allowed: false, reason: "included_exhausted_extra_empty", ...base };
   }
 
-  return true;
+  // Check monthly limit
+  if (credits.onDemandLimitType === "fixed" && credits.extraUsageSpent >= credits.onDemandLimitDollars) {
+    return { allowed: false, reason: "included_exhausted_extra_limit_reached", ...base };
+  }
+
+  return { allowed: true, ...base };
 }
 
 /**

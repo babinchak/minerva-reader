@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff } from "lucide-react";
+import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff, ExternalLink } from "lucide-react";
 import { StreamingMarkdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
 import { ToolCallSteps, formatToolLabel, getQueryPreview, type MessageToolCall } from "@/components/tool-call-steps";
 import { createClient } from "@/lib/supabase/client";
@@ -355,10 +355,23 @@ export function AIAgentPanel({
         let message = response.statusText;
         try {
           const body = await response.json();
+          if (body?.usageDenied) {
+            setUsageDeniedInfo({
+              reason: body.reason ?? "no_credits",
+              resetAt: body.resetAt ?? null,
+              tier: body.tier ?? "free",
+              extraUsageBalance: body.extraUsageBalance ?? 0,
+              onDemandLimitType: body.onDemandLimitType ?? "disabled",
+              onDemandLimitDollars: body.onDemandLimitDollars ?? 0,
+              extraUsageSpent: body.extraUsageSpent ?? 0,
+            });
+            setCreditsExhaustedDialogOpen(true);
+            throw new Error("Usage limit reached");
+          }
           if (body?.message) message = body.message;
           else if (body?.error) message = body.error;
-        } catch {
-          // Ignore JSON parse errors
+        } catch (e) {
+          if (e instanceof Error && e.message === "Usage limit reached") throw e;
         }
         throw new Error(message);
       }
@@ -635,7 +648,17 @@ export function AIAgentPanel({
   } | null>(null);
 
   // Dialog shown when user runs out of usage
+  interface UsageDeniedInfo {
+    reason: string;
+    resetAt: string | null;
+    tier: string;
+    extraUsageBalance: number;
+    onDemandLimitType: string;
+    onDemandLimitDollars: number;
+    extraUsageSpent: number;
+  }
   const [creditsExhaustedDialogOpen, setCreditsExhaustedDialogOpen] = useState(false);
+  const [usageDeniedInfo, setUsageDeniedInfo] = useState<UsageDeniedInfo | null>(null);
   useEffect(() => {
     fetch(`/api/credits?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -1481,11 +1504,6 @@ export function AIAgentPanel({
       console.error("Chat API error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
-      const isCreditsError =
-        errorMessage.toLowerCase().includes("credits") || errorMessage.toLowerCase().includes("run out");
-      if (isCreditsError) {
-        setCreditsExhaustedDialogOpen(true);
-      }
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId ? { ...msg, content: errorMessage } : msg
@@ -1830,11 +1848,6 @@ export function AIAgentPanel({
       console.error("Chat API error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
-      const isCreditsError =
-        errorMessage.toLowerCase().includes("credits") || errorMessage.toLowerCase().includes("run out");
-      if (isCreditsError) {
-        setCreditsExhaustedDialogOpen(true);
-      }
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId ? { ...msg, content: errorMessage } : msg
@@ -2313,12 +2326,57 @@ export function AIAgentPanel({
       <Dialog open={creditsExhaustedDialogOpen} onOpenChange={setCreditsExhaustedDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Out of credits</DialogTitle>
-            <DialogDescription>
-              You&apos;ve run out of credits. Upgrade or add more to continue using the AI assistant.
+            <DialogTitle>Out of usage</DialogTitle>
+            <DialogDescription className="pt-2">
+              {(() => {
+                const info = usageDeniedInfo;
+                if (!info) return "You've used all your available usage.";
+                const resetLine = info.resetAt
+                  ? `Your included usage resets on ${new Date(info.resetAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}.`
+                  : null;
+                switch (info.reason) {
+                  case "included_exhausted_extra_disabled":
+                    return (
+                      <>
+                        You&apos;ve used all your included usage and extra usage is disabled.
+                        {resetLine && <> {resetLine}</>}
+                        {" "}You can enable extra usage to keep going.
+                      </>
+                    );
+                  case "included_exhausted_extra_empty":
+                    return (
+                      <>
+                        You&apos;ve used all your included usage and your extra usage balance is empty.
+                        {resetLine && <> {resetLine}</>}
+                        {" "}Add more balance to keep going.
+                      </>
+                    );
+                  case "included_exhausted_extra_limit_reached":
+                    return (
+                      <>
+                        You&apos;ve used all your included usage and reached your monthly extra usage limit
+                        (${info.extraUsageSpent?.toFixed(2)} / ${info.onDemandLimitDollars?.toFixed(2)}).
+                        {resetLine && <> Both reset on {new Date(info.resetAt!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}.</>}
+                        {" "}You can adjust your limit or wait for it to reset.
+                      </>
+                    );
+                  default:
+                    return "You've used all your available usage.";
+                }
+              })()}
             </DialogDescription>
           </DialogHeader>
-          <UpgradeCta />
+          {usageDeniedInfo?.tier !== "paid" && <UpgradeCta />}
+          {usageDeniedInfo?.tier === "paid" && (
+            <div className="flex justify-end">
+              <Button variant="outline" asChild>
+                <a href="/settings/usage" target="_blank" rel="noopener noreferrer">
+                  Manage usage
+                  <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                </a>
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

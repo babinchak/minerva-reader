@@ -147,12 +147,19 @@ export async function POST(req: NextRequest) {
 
     // Logged-in: check usage budget
     if (user) {
-      const canAfford = await canMakeRequest(user.id, AGENTIC_ESTIMATED_DOLLARS, user.email);
-      if (!canAfford) {
+      const usageCheck = await canMakeRequest(user.id, AGENTIC_ESTIMATED_DOLLARS, user.email);
+      if (!usageCheck.allowed) {
         return NextResponse.json(
           {
             error: "Usage limit reached",
-            message: "You've used your included usage. Upgrade to Pro or wait for your allowance to reset.",
+            usageDenied: true,
+            reason: usageCheck.reason,
+            resetAt: usageCheck.resetAt,
+            tier: usageCheck.tier,
+            extraUsageBalance: usageCheck.extraUsageBalance,
+            onDemandLimitType: usageCheck.onDemandLimitType,
+            onDemandLimitDollars: usageCheck.onDemandLimitDollars,
+            extraUsageSpent: usageCheck.extraUsageSpent,
           },
           { status: 402 }
         );
