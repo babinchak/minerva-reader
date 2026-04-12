@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X, Library, Settings, Home, Shield } from "lucide-react";
 import { useIsMobile } from "@/lib/use-media-query";
 import { Button } from "@/components/ui/button";
+import { MinervaLogo } from "@/components/minerva-logo";
 import { cn } from "@/lib/utils";
 
 interface SiteNavProps {
@@ -64,6 +65,7 @@ export function SiteNav({ rightSlot, showAdmin, isLoggedIn }: SiteNavProps) {
         <div className="w-full max-w-7xl flex justify-between items-center p-3 px-5 text-sm">
           <div className="flex gap-5 items-center font-semibold">
             <Link href="/" className="flex items-center gap-2 text-foreground">
+              <MinervaLogo size={24} />
               Minerva Reader
             </Link>
             {navLinks.filter((l) => l.href !== "/").map(({ href, label }) => (
@@ -112,6 +114,7 @@ export function SiteNav({ rightSlot, showAdmin, isLoggedIn }: SiteNavProps) {
             href="/"
             className="flex items-center gap-2 font-semibold text-foreground shrink-0"
           >
+            <MinervaLogo size={22} />
             Minerva Reader
           </Link>
 
