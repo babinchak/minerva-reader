@@ -260,13 +260,16 @@ export async function handleStripeWebhook(
         log("→ DOWNGRADED to free", { subId: sub.id, reason: event.type === "customer.subscription.deleted" ? "deleted" : `status=${sub.status}` });
       } else if (["active", "trialing"].includes(sub.status)) {
         const resetAt = unixToIso(sub.current_period_end);
+        const update: Record<string, unknown> = {
+          allowance_dollars: ALLOWANCE_DOLLARS_PAID_MONTHLY,
+          updated_at: new Date().toISOString(),
+        };
+        if (resetAt) {
+          update.allowance_reset_at = resetAt;
+        }
         await supabase
           .from("user_credits")
-          .update({
-            allowance_dollars: ALLOWANCE_DOLLARS_PAID_MONTHLY,
-            allowance_reset_at: resetAt,
-            updated_at: new Date().toISOString(),
-          })
+          .update(update)
           .eq("stripe_subscription_id", sub.id);
         log("→ updated allowance (kept paid)", { subId: sub.id, status: sub.status });
       } else {

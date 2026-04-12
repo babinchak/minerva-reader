@@ -262,7 +262,9 @@ export function UsageContent() {
             <CardDescription>
               {info.subscriptionCancelAtPeriodEnd
                 ? `Your subscription will end on ${new Date(info.subscriptionCancelAt!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
-                : "You're on the Pro plan"}
+                : info.allowanceResetAt
+                  ? `Pro plan · Renews ${new Date(info.allowanceResetAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} for $${allowanceDollars.toFixed(2)}/mo`
+                  : "You're on the Pro plan"}
             </CardDescription>
           </CardHeader>
           <CardContent>
