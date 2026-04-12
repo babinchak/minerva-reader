@@ -1,6 +1,7 @@
 /**
  * Cost-based usage tracking.
- * All costs stored in dollars (double precision). Balance is derived: allowance - SUM(cost since reset).
+ * All costs stored in dollars. Balance deduction is handled by a Postgres
+ * trigger (trg_deduct_usage_balance) on usage_records INSERT.
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
@@ -68,11 +69,11 @@ export interface RecordUsageParams {
 }
 
 /**
- * Record a usage event and deduct from the user's balances.
- * Deducts from included_balance first, then extra_usage_balance.
- * Returns whether the cost was included or drawn from extra usage.
+ * Record a usage event. Balance deduction is handled automatically by the
+ * database trigger `trg_deduct_usage_balance` on INSERT, which also sets
+ * the `included` flag. This function just inserts the row.
  */
-export async function recordUsage(params: RecordUsageParams): Promise<{ success: boolean; costDollars: number; included: boolean }> {
+export async function recordUsage(params: RecordUsageParams): Promise<{ success: boolean; costDollars: number }> {
   const {
     userId,
     costDollars,
@@ -84,57 +85,12 @@ export async function recordUsage(params: RecordUsageParams): Promise<{ success:
     referenceId,
   } = params;
 
-  if (costDollars <= 0) return { success: true, costDollars: 0, included: true };
-  if (!userId) {
-    // Anonymous usage — just insert the record, no balance to deduct
-    const supabase = createServiceClient();
-    await supabase.from("usage_records").insert({
-      user_id: null,
-      cost_dollars: costDollars,
-      usage_type: usageType,
-      model: model ?? null,
-      input_tokens: inputTokens ?? null,
-      output_tokens: outputTokens ?? null,
-      cached_input_tokens: cachedInputTokens ?? null,
-      reference_id: referenceId ?? null,
-      included: false,
-    });
-    return { success: true, costDollars, included: false };
-  }
+  if (costDollars <= 0) return { success: true, costDollars: 0 };
 
   const supabase = createServiceClient();
 
-  // Get current balances
-  const { data: credits } = await supabase
-    .from("user_credits")
-    .select("included_balance, extra_usage_balance, extra_usage_spent")
-    .eq("user_id", userId)
-    .single();
-
-  const includedBalance = credits?.included_balance ?? 0;
-  const extraBalance = credits?.extra_usage_balance ?? 0;
-
-  let included = true;
-  let deductFromIncluded = 0;
-  let deductFromExtra = 0;
-
-  if (includedBalance >= costDollars) {
-    // Fully covered by included balance
-    deductFromIncluded = costDollars;
-  } else if (includedBalance > 0) {
-    // Partially covered — use remaining included, rest from extra
-    deductFromIncluded = includedBalance;
-    deductFromExtra = costDollars - includedBalance;
-    included = false;
-  } else {
-    // Entirely from extra usage
-    deductFromExtra = costDollars;
-    included = false;
-  }
-
-  // Insert usage record
   const { error } = await supabase.from("usage_records").insert({
-    user_id: userId,
+    user_id: userId ?? null,
     cost_dollars: costDollars,
     usage_type: usageType,
     model: model ?? null,
@@ -142,28 +98,12 @@ export async function recordUsage(params: RecordUsageParams): Promise<{ success:
     output_tokens: outputTokens ?? null,
     cached_input_tokens: cachedInputTokens ?? null,
     reference_id: referenceId ?? null,
-    included,
   });
 
   if (error) {
     console.error("[usage] failed to insert usage_record:", error);
-    return { success: false, costDollars, included };
+    return { success: false, costDollars };
   }
 
-  // Deduct from balances
-  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (deductFromIncluded > 0) {
-    update.included_balance = Math.max(0, includedBalance - deductFromIncluded);
-  }
-  if (deductFromExtra > 0) {
-    update.extra_usage_balance = Math.max(0, extraBalance - deductFromExtra);
-    update.extra_usage_spent = (credits?.extra_usage_spent ?? 0) + deductFromExtra;
-  }
-
-  await supabase
-    .from("user_credits")
-    .update(update)
-    .eq("user_id", userId);
-
-  return { success: true, costDollars, included };
+  return { success: true, costDollars };
 }
