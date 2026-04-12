@@ -70,8 +70,7 @@ export interface RecordUsageParams {
 
 /**
  * Record a usage event. Balance deduction is handled automatically by the
- * database trigger `trg_deduct_usage_balance` on INSERT, which also sets
- * the `included` flag. This function just inserts the row.
+ * database trigger `trg_deduct_usage_balance` on INSERT.
  */
 export async function recordUsage(params: RecordUsageParams): Promise<{ success: boolean; costDollars: number }> {
   const {
