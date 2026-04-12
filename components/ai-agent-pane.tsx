@@ -2354,8 +2354,7 @@ export function AIAgentPanel({
                   case "included_exhausted_extra_limit_reached":
                     return (
                       <>
-                        You&apos;ve used all your included usage and reached your monthly extra usage limit
-                        (${info.extraUsageSpent?.toFixed(2)} / ${info.onDemandLimitDollars?.toFixed(2)}).
+                        You&apos;ve used all your included usage and reached your ${info.onDemandLimitDollars?.toFixed(2)} monthly extra usage limit.
                         {resetLine && <> Both reset on {new Date(info.resetAt!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}.</>}
                         {" "}You can adjust your limit or wait for it to reset.
                       </>
