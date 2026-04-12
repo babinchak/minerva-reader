@@ -18,7 +18,7 @@ function getLogoSrc(displaySize: number, variant: "default" | "large"): string {
   return "/favicon-32.png";
 }
 
-/** Owl face logo - transparent PNG works on light and dark backgrounds. */
+/** Owl face logo - black on transparent, inverts to white in dark mode. */
 export function MinervaLogo({ size = 32, className, variant = "default" }: MinervaLogoProps) {
   const src = getLogoSrc(size, variant);
   return (
@@ -27,7 +27,7 @@ export function MinervaLogo({ size = 32, className, variant = "default" }: Miner
       alt="Minerva Reader"
       width={size}
       height={size}
-      className={className}
+      className={`dark:invert ${className ?? ""}`}
       unoptimized
     />
   );
