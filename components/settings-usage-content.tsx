@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Upload, Zap, Plus } from "lucide-react";
+import { Loader2, Upload, Zap, Plus, AlertTriangle } from "lucide-react";
 import { UsageContentSkeleton } from "@/components/usage-content-skeleton";
 import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
@@ -23,13 +23,15 @@ interface CreditsInfo {
   booksUploadLimit: number;
   onDemandLimitType: OnDemandLimitType;
   onDemandLimitDollars: number;
+  subscriptionCancelAtPeriodEnd?: boolean;
+  subscriptionCancelAt?: string | null;
 }
 
 const TOP_UP_OPTIONS = [5, 10, 20, 50];
 
 export function UsageContent() {
   const [info, setInfo] = useState<CreditsInfo | null>(null);
-  const [loading, setLoading] = useState<"pro" | "limit" | "topup" | null>(null);
+  const [loading, setLoading] = useState<"pro" | "limit" | "topup" | "cancel" | "resume" | null>(null);
   const [limitType, setLimitType] = useState<OnDemandLimitType>("disabled");
   const [limitDollars, setLimitDollars] = useState<string>("10");
   const [customTopUp, setCustomTopUp] = useState<string>("");
@@ -115,6 +117,44 @@ export function UsageContent() {
       else throw new Error(data.error ?? "Top-up failed");
     } catch (err) {
       console.error(err);
+      setLoading(null);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    setLoading("cancel");
+    try {
+      const res = await fetch("/api/stripe/subscription", { method: "DELETE" });
+      if (res.ok) {
+        fetchCredits();
+      } else {
+        const data = await res.json();
+        console.error(data.error);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleResumeSubscription = async () => {
+    setLoading("resume");
+    try {
+      const res = await fetch("/api/stripe/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resume" }),
+      });
+      if (res.ok) {
+        fetchCredits();
+      } else {
+        const data = await res.json();
+        console.error(data.error);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
       setLoading(null);
     }
   };
@@ -209,6 +249,62 @@ export function UsageContent() {
                   )}
                 </Button>
               </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Subscription management */}
+      {isPaid && !freeBetaMode && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Subscription</CardTitle>
+            <CardDescription>
+              {info.subscriptionCancelAtPeriodEnd
+                ? `Your subscription will end on ${new Date(info.subscriptionCancelAt!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
+                : "You're on the Pro plan"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {info.subscriptionCancelAtPeriodEnd ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>Your subscription is set to cancel. You'll keep access until the end of your current period.</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResumeSubscription}
+                  disabled={!!loading}
+                >
+                  {loading === "resume" ? (
+                    <>
+                      <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                      Resuming...
+                    </>
+                  ) : (
+                    "Resume subscription"
+                  )}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelSubscription}
+                disabled={!!loading}
+                className="text-destructive hover:text-destructive"
+              >
+                {loading === "cancel" ? (
+                  <>
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                    Cancelling...
+                  </>
+                ) : (
+                  "Cancel subscription"
+                )}
+              </Button>
             )}
           </CardContent>
         </Card>

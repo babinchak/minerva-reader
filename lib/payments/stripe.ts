@@ -308,3 +308,94 @@ export async function handleStripeWebhook(
 
   return { handled: true };
 }
+
+/**
+ * Get subscription status for a user.
+ */
+export async function getSubscriptionStatus(
+  userId: string
+): Promise<{ active: boolean; cancelAtPeriodEnd: boolean; cancelAt: string | null } | null> {
+  const stripe = getStripe();
+  if (!stripe) return null;
+
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("user_credits")
+    .select("stripe_subscription_id")
+    .eq("user_id", userId)
+    .single();
+
+  const subId = data?.stripe_subscription_id;
+  if (!subId) return null;
+
+  try {
+    const sub = await stripe.subscriptions.retrieve(subId);
+    return {
+      active: ["active", "trialing"].includes(sub.status),
+      cancelAtPeriodEnd: sub.cancel_at_period_end,
+      cancelAt: sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() :
+                sub.cancel_at_period_end && sub.current_period_end
+                  ? new Date(sub.current_period_end * 1000).toISOString()
+                  : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cancel a subscription at period end (user keeps access until current period expires).
+ */
+export async function cancelSubscriptionAtPeriodEnd(
+  userId: string
+): Promise<{ success: boolean; error?: string; cancelAt?: string }> {
+  const stripe = getStripe();
+  if (!stripe) return { success: false, error: "Stripe not configured" };
+
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("user_credits")
+    .select("stripe_subscription_id")
+    .eq("user_id", userId)
+    .single();
+
+  const subId = data?.stripe_subscription_id;
+  if (!subId) return { success: false, error: "No active subscription found" };
+
+  const sub = await stripe.subscriptions.update(subId, {
+    cancel_at_period_end: true,
+  });
+
+  return {
+    success: true,
+    cancelAt: sub.current_period_end
+      ? new Date(sub.current_period_end * 1000).toISOString()
+      : undefined,
+  };
+}
+
+/**
+ * Resume a subscription that was set to cancel at period end.
+ */
+export async function resumeSubscription(
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const stripe = getStripe();
+  if (!stripe) return { success: false, error: "Stripe not configured" };
+
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("user_credits")
+    .select("stripe_subscription_id")
+    .eq("user_id", userId)
+    .single();
+
+  const subId = data?.stripe_subscription_id;
+  if (!subId) return { success: false, error: "No active subscription found" };
+
+  await stripe.subscriptions.update(subId, {
+    cancel_at_period_end: false,
+  });
+
+  return { success: true };
+}

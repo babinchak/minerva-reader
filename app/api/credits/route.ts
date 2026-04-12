@@ -7,6 +7,7 @@ import {
   isFreeBetaMode,
 } from "@/lib/credits";
 import { isAdminEmail } from "@/lib/admin";
+import { getSubscriptionStatus } from "@/lib/payments/stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,10 @@ export async function GET() {
 
     const admin = isAdminEmail(user.email);
     const tier = admin ? "paid" as const : await getTier(user.id);
-    const credits = await getCredits(user.id);
+    const [credits, subStatus] = await Promise.all([
+      getCredits(user.id),
+      tier === "paid" ? getSubscriptionStatus(user.id) : null,
+    ]);
     const booksUploadedThisWeek =
       tier === "free" ? await countBooksUploadedThisWeek(user.id) : 0;
 
@@ -49,6 +53,8 @@ export async function GET() {
         booksUploadLimit: tier === "free" ? 3 : 999999,
         onDemandLimitType: credits?.onDemandLimitType ?? "disabled",
         onDemandLimitDollars: credits?.onDemandLimitDollars ?? 10,
+        subscriptionCancelAtPeriodEnd: subStatus?.cancelAtPeriodEnd ?? false,
+        subscriptionCancelAt: subStatus?.cancelAt ?? null,
       },
       {
         headers: {
