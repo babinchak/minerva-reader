@@ -343,6 +343,33 @@ export function AIAgentPanel({
     chatMode?: string;
   };
 
+  // Credits/tier info. Fetch for both logged-in and anonymous (freeBetaMode).
+  const [creditsInfo, setCreditsInfo] = useState<{
+    tier: string;
+    includedBalance: number;
+    extraUsageBalance: number;
+    allowanceDollars: number;
+    freeBetaMode?: boolean;
+  } | null>(null);
+
+  const refreshCredits = useCallback(() => {
+    fetch(`/api/credits?t=${Date.now()}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) =>
+        d
+          ? {
+              tier: d.tier,
+              includedBalance: d.includedBalance ?? 0,
+              extraUsageBalance: d.extraUsageBalance ?? 0,
+              allowanceDollars: d.allowanceDollars ?? 0,
+              freeBetaMode: d.freeBetaMode ?? false,
+            }
+          : null
+      )
+      .then(setCreditsInfo)
+      .catch(() => setCreditsInfo(null));
+  }, []);
+
   // Helper function to handle streaming response
   const handleStreamingResponse = useCallback(
     async (
@@ -504,7 +531,7 @@ export function AIAgentPanel({
       setIsLoading(false);
       onActionComplete?.();
     },
-    [onActionComplete]
+    [onActionComplete, refreshCredits]
   );
 
   /** Resolve a section_id ref to a page number + quoted text, then delegate to parent handler. */
@@ -638,15 +665,6 @@ export function AIAgentPanel({
     }
   }, [userId, messages, anonChatKey]);
 
-  // Credits/tier info. Fetch for both logged-in and anonymous (freeBetaMode).
-  const [creditsInfo, setCreditsInfo] = useState<{
-    tier: string;
-    includedBalance: number;
-    extraUsageBalance: number;
-    allowanceDollars: number;
-    freeBetaMode?: boolean;
-  } | null>(null);
-
   // Dialog shown when user runs out of usage
   interface UsageDeniedInfo {
     reason: string;
@@ -659,23 +677,10 @@ export function AIAgentPanel({
   }
   const [creditsExhaustedDialogOpen, setCreditsExhaustedDialogOpen] = useState(false);
   const [usageDeniedInfo, setUsageDeniedInfo] = useState<UsageDeniedInfo | null>(null);
+
   useEffect(() => {
-    fetch(`/api/credits?t=${Date.now()}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) =>
-        d
-          ? {
-              tier: d.tier,
-              includedBalance: d.includedBalance ?? 0,
-              extraUsageBalance: d.extraUsageBalance ?? 0,
-              allowanceDollars: d.allowanceDollars ?? 0,
-              freeBetaMode: d.freeBetaMode ?? false,
-            }
-          : null
-      )
-      .then(setCreditsInfo)
-      .catch(() => setCreditsInfo(null));
-  }, [userId]);
+    refreshCredits();
+  }, [userId, refreshCredits]);
 
   // Anonymous: force fast mode only (unless FREE_BETA_MODE)
   useEffect(() => {
@@ -1514,6 +1519,7 @@ export function AIAgentPanel({
     }
     } finally {
       sendingRef.current = false;
+      refreshCredits();
     }
   };
 
@@ -2139,6 +2145,13 @@ export function AIAgentPanel({
                   </span>
                 </div>
               )}
+              {creditsInfo && creditsInfo.tier === "free" && creditsInfo.allowanceDollars > 0 && (
+                <div className="flex justify-center -mt-2 -mb-2.5">
+                  <span className="text-xs text-muted-foreground">
+                    {Math.max(0, Math.round((creditsInfo.includedBalance / creditsInfo.allowanceDollars) * 100))}% remaining today
+                  </span>
+                </div>
+              )}
               <div className="flex gap-2">
                 <Textarea
                   value={input}
@@ -2299,6 +2312,13 @@ export function AIAgentPanel({
                 <Highlighter className="h-4 w-4 mr-2" />
                 Explain selection
               </Button>
+            </div>
+          )}
+          {creditsInfo && creditsInfo.tier === "free" && creditsInfo.allowanceDollars > 0 && (
+            <div className="flex justify-center mb-1 -mt-2.5">
+              <span className="text-xs text-muted-foreground">
+                {Math.max(0, Math.round((creditsInfo.includedBalance / creditsInfo.allowanceDollars) * 100))}% remaining today
+              </span>
             </div>
           )}
           <div className="flex gap-2">
