@@ -42,13 +42,23 @@ export function UploadBookForm({
     bookType?: string | null;
   } | null>(null);
   const [isPaid, setIsPaid] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [allowanceResetAt, setAllowanceResetAt] = useState<string | null>(null);
+  const [exhaustedOpen, setExhaustedOpen] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const internalAbortRef = useRef(false);
   const abortRef = externalAbortRef ?? internalAbortRef;
 
   useEffect(() => {
     fetch(`/api/credits?t=${Date.now()}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setIsPaid(d.tier === 'paid'); })
+      .then((d) => {
+        if (d) {
+          setIsPaid(d.tier === 'paid');
+          setBalance((d.includedBalance ?? 0) + (d.extraUsageBalance ?? 0));
+          setAllowanceResetAt(d.allowanceResetAt ?? null);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -85,6 +95,11 @@ export function UploadBookForm({
   const handleSubmitSingle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
+
+    if (balance !== null && balance <= 0) {
+      setExhaustedOpen(true);
+      return;
+    }
 
     setUploading(true);
     setMessage(null);
@@ -534,6 +549,38 @@ export function UploadBookForm({
               <DialogFooter>
                 <Button onClick={() => setAlreadyInLibraryOpen(false)}>OK</Button>
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={exhaustedOpen} onOpenChange={setExhaustedOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Out of free usage for today</DialogTitle>
+              </DialogHeader>
+              <Button
+                onClick={() => {
+                  setCheckoutLoading(true);
+                  fetch("/api/stripe/checkout", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ mode: "subscription" }),
+                  })
+                    .then((r) => r.json())
+                    .then((d) => { if (d.url) window.location.href = d.url; })
+                    .catch(() => setCheckoutLoading(false));
+                }}
+                disabled={checkoutLoading}
+                className="w-full"
+              >
+                {checkoutLoading ? (
+                  <>
+                    <Loader2 className="animate-spin h-4 w-4" />
+                    Redirecting...
+                  </>
+                ) : (
+                  'Upgrade to Pro'
+                )}
+              </Button>
             </DialogContent>
           </Dialog>
         </form>
