@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `${protocol}://${host}`;
 
     const successUrl = `${baseUrl}/settings/usage?success=1${mode === "subscription" ? "&upgrade=1" : "&topup=1"}`;
-    const cancelUrl = `${baseUrl}/?canceled=1`;
+    const cancelUrl = `${baseUrl}/settings/usage`;
 
     const session = await createStripeCheckoutSession({
       userId: user.id,
