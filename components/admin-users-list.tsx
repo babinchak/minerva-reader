@@ -39,7 +39,6 @@ type User = {
   onDemandLimitType: string;
   onDemandLimitDollars: number;
   extraUsageSpent: number;
-  uploadsThisWeek: number;
 };
 
 type SortType = "lastActive" | "signUp" | "bookCount" | "chatCount" | "email" | "balance";
@@ -315,7 +314,6 @@ export function AdminUsersList() {
             <span className="w-28 text-center">Included</span>
             <span className="w-28 text-center">Extra</span>
             <span className="w-20 text-center">Books</span>
-            <span className="w-20 text-center">Uploads</span>
             <span className="w-20 text-center">Chats</span>
             <span className="w-28 text-right">Last active</span>
             <span className="w-10"></span>
@@ -341,7 +339,6 @@ export function AdminUsersList() {
                   </div>
                   <p className="text-xs text-muted-foreground sm:hidden mt-0.5">
                     {u.tier} · ${u.includedBalance.toFixed(2)}/${u.allowanceDollars.toFixed(2)} incl · ${u.extraUsageBalance.toFixed(2)} extra ({u.onDemandLimitType === "disabled" ? "off" : u.onDemandLimitType === "unlimited" ? "no limit" : `$${u.onDemandLimitDollars} limit`}) · {u.bookCount} books · {u.chatCount} chats
-                    {u.tier !== "paid" && ` · ${u.uploadsThisWeek}/3 uploads`}
                   </p>
                 </div>
                 <span className="hidden sm:flex w-16 items-center justify-center">
@@ -369,9 +366,6 @@ export function AdminUsersList() {
                 <span className="hidden sm:flex w-20 items-center justify-center gap-1 text-sm">
                   <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
                   {u.bookCount}
-                </span>
-                <span className="hidden sm:flex w-20 items-center justify-center text-sm text-muted-foreground">
-                  {u.tier !== "paid" ? `${u.uploadsThisWeek}/3` : "—"}
                 </span>
                 <span className="hidden sm:flex w-20 items-center justify-center gap-1 text-sm">
                   <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />

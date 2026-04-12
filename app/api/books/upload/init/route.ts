@@ -2,9 +2,6 @@ import { tryResolveDuplicateUpload, parseBookFileMeta } from "@/lib/book-upload-
 import { isSha256Hex } from "@/lib/file-hash";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import {
-  countBooksUploadedThisWeek,
-  getTier,
-  isFreeBetaMode,
   countInFlightProcessing,
   MAX_CONCURRENT_PROCESSING,
 } from "@/lib/credits";
@@ -64,20 +61,6 @@ export async function POST(request: NextRequest) {
   if (duplicateResponse) return duplicateResponse;
 
   const admin = isAdminEmail(user.email);
-  const tier = await getTier(user.id);
-  if (!admin && tier === "free" && !isFreeBetaMode()) {
-    const uploadedThisWeek = await countBooksUploadedThisWeek(user.id);
-    if (uploadedThisWeek >= 3) {
-      return NextResponse.json(
-        {
-          error: "Upload limit reached",
-          message:
-            "Free tier allows 3 new books per week. Upgrade to Pro for unlimited uploads.",
-        },
-        { status: 403 },
-      );
-    }
-  }
 
   // Check concurrent processing limit
   if (!admin) {

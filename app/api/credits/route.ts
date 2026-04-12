@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import {
   getCredits,
   getTier,
-  countBooksUploadedThisWeek,
   isFreeBetaMode,
 } from "@/lib/credits";
 import { isAdminEmail } from "@/lib/admin";
@@ -25,7 +24,6 @@ export async function GET() {
         extraUsageBalance: 0,
         extraUsageSpent: 0,
         allowanceResetAt: null,
-        booksUploadedThisWeek: 0,
         onDemandLimitType: "disabled",
         onDemandLimitDollars: 10,
       });
@@ -37,8 +35,6 @@ export async function GET() {
       getCredits(user.id),
       tier === "paid" ? getSubscriptionStatus(user.id) : null,
     ]);
-    const booksUploadedThisWeek =
-      tier === "free" ? await countBooksUploadedThisWeek(user.id) : 0;
 
     return NextResponse.json(
       {
@@ -49,8 +45,6 @@ export async function GET() {
         extraUsageBalance: credits?.extraUsageBalance ?? 0,
         extraUsageSpent: credits?.extraUsageSpent ?? 0,
         allowanceResetAt: credits?.allowanceResetAt?.toISOString() ?? null,
-        booksUploadedThisWeek,
-        booksUploadLimit: tier === "free" ? 3 : 999999,
         onDemandLimitType: credits?.onDemandLimitType ?? "disabled",
         onDemandLimitDollars: credits?.onDemandLimitDollars ?? 10,
         subscriptionCancelAtPeriodEnd: subStatus?.cancelAtPeriodEnd ?? false,

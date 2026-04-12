@@ -29,14 +29,6 @@ export async function GET() {
       .from("user_books")
       .select("user_id");
 
-    // Get books uploaded this week per user (for free tier upload limit)
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const { data: recentBooks } = await serviceSupabase
-      .from("books")
-      .select("uploaded_by, created_at")
-      .gte("created_at", weekAgo.toISOString());
-
     // Get chat counts per user
     const { data: chatCounts } = await serviceSupabase
       .from("chats")
@@ -65,12 +57,7 @@ export async function GET() {
       chatCountMap.set(row.user_id, (chatCountMap.get(row.user_id) ?? 0) + 1);
     }
 
-    const uploadsThisWeekMap = new Map<string, number>();
-    for (const row of recentBooks ?? []) {
-      if (row.uploaded_by) {
-        uploadsThisWeekMap.set(row.uploaded_by, (uploadsThisWeekMap.get(row.uploaded_by) ?? 0) + 1);
-      }
-    }
+
 
     // Last activity: first occurrence per user (already sorted desc)
     const lastActivityMap = new Map<string, string>();
@@ -113,7 +100,6 @@ export async function GET() {
         onDemandLimitType: credits?.onDemandLimitType ?? "disabled",
         onDemandLimitDollars: credits?.onDemandLimitDollars ?? 10,
         extraUsageSpent: credits?.extraUsageSpent ?? 0,
-        uploadsThisWeek: uploadsThisWeekMap.get(u.id) ?? 0,
       };
     });
 

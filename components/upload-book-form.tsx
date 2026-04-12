@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Upload, CheckCircle2, XCircle, Loader2, BookOpen, User, X, FileText } from 'lucide-react';
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { CREDITS_REFRESH_EVENT } from '@/lib/credits-refresh';
 import { uploadBookViaDirectStorage } from '@/lib/upload-book-client';
@@ -42,44 +41,16 @@ export function UploadBookForm({
     coverUrl?: string | null;
     bookType?: string | null;
   } | null>(null);
-  const [uploadLimit, setUploadLimit] = useState<{
-    booksUploadedThisWeek: number;
-    booksUploadLimit: number;
-  } | null>(null);
+  const [isPaid, setIsPaid] = useState(false);
   const internalAbortRef = useRef(false);
   const abortRef = externalAbortRef ?? internalAbortRef;
 
-  const isPaid = !uploadLimit || uploadLimit.booksUploadLimit >= 999;
-
-  const fetchCredits = useCallback(() => {
+  useEffect(() => {
     fetch(`/api/credits?t=${Date.now()}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) =>
-        d
-          ? {
-              booksUploadedThisWeek: d.booksUploadedThisWeek ?? 0,
-              booksUploadLimit: d.booksUploadLimit ?? 3,
-            }
-          : null
-      )
-      .then(setUploadLimit)
-      .catch(() => setUploadLimit(null));
+      .then((d) => { if (d) setIsPaid(d.tier === 'paid'); })
+      .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    fetchCredits();
-  }, [fetchCredits, message]);
-
-  useEffect(() => {
-    const handler = () => fetchCredits();
-    window.addEventListener(CREDITS_REFRESH_EVENT, handler);
-    return () => window.removeEventListener(CREDITS_REFRESH_EVENT, handler);
-  }, [fetchCredits]);
-
-  const limitReached =
-    uploadLimit &&
-    uploadLimit.booksUploadLimit < 999 &&
-    uploadLimit.booksUploadedThisWeek >= uploadLimit.booksUploadLimit;
 
   const isValidFile = (f: File) => {
     const lower = f.name.toLowerCase();
@@ -113,7 +84,7 @@ export function UploadBookForm({
   // Single file upload (free tier)
   const handleSubmitSingle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || limitReached) return;
+    if (!file) return;
 
     setUploading(true);
     setMessage(null);
@@ -392,14 +363,6 @@ export function UploadBookForm({
     </form>
   ) : (
     <form onSubmit={handleSubmitSingle} className="space-y-4">
-          {compact && uploadLimit && uploadLimit.booksUploadLimit < 999 && (
-            <p className="text-sm text-muted-foreground dark:text-foreground/80">
-              {uploadLimit.booksUploadedThisWeek}/{uploadLimit.booksUploadLimit} books this week.
-              {limitReached && (
-                <> <Link href="/?upgrade=1" className="text-primary hover:underline">Upgrade</Link> for unlimited.</>
-              )}
-            </p>
-          )}
           <p className="text-xs text-muted-foreground dark:text-foreground/80">
             Only upload content you own or are authorized to use.
           </p>
@@ -463,7 +426,7 @@ export function UploadBookForm({
 
           <Button
             type="submit"
-            disabled={!file || uploading || !!limitReached}
+            disabled={!file || uploading}
             className="w-full"
           >
             {uploading ? (
@@ -568,16 +531,7 @@ export function UploadBookForm({
       <CardHeader>
         <CardTitle>Upload {isPaid ? 'Books' : 'Book'}</CardTitle>
         <CardDescription>
-          {uploadLimit && uploadLimit.booksUploadLimit < 999 ? (
-            <>
-              Upload an EPUB or PDF file. {uploadLimit.booksUploadedThisWeek}/{uploadLimit.booksUploadLimit} books this week.
-              {uploadLimit.booksUploadedThisWeek >= uploadLimit.booksUploadLimit && (
-                <> <Link href="/?upgrade=1" className="text-primary hover:underline">Upgrade</Link> for unlimited.</>
-              )}
-            </>
-          ) : (
-            'Upload EPUB or PDF files to add them to your library.'
-          )}
+          Upload EPUB or PDF files to add them to your library.
         </CardDescription>
       </CardHeader>
       <CardContent>

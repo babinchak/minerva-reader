@@ -282,24 +282,6 @@ export async function updateOnDemandLimit(
   return !error;
 }
 
-/**
- * Count books uploaded by user in the last 7 days.
- */
-export async function countBooksUploadedThisWeek(userId: string): Promise<number> {
-  const supabase = createServiceClient();
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-
-  const { count, error } = await supabase
-    .from("books")
-    .select("id", { count: "exact", head: true })
-    .eq("uploaded_by", userId)
-    .gte("created_at", weekAgo.toISOString());
-
-  if (error) return 0;
-  return count ?? 0;
-}
-
 
 /**
  * Count books currently being processed (started but not completed/failed) for a user.

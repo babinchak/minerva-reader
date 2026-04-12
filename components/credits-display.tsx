@@ -10,8 +10,6 @@ interface CreditsInfo {
   allowanceDollars: number;
   includedBalance: number;
   extraUsageBalance: number;
-  booksUploadedThisWeek: number;
-  booksUploadLimit: number;
 }
 
 export function CreditsDisplay() {
