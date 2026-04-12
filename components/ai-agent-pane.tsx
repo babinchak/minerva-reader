@@ -2004,7 +2004,7 @@ export function AIAgentPanel({
               <div className="flex items-center gap-1.5">
                 {isLibraryMode ? (
                   onAiScopeChange && ((collectionsProp && collectionsProp.length > 0) || (curatedCollectionsProp && curatedCollectionsProp.length > 0) || allCuratedBookIds) ? (
-                    <DropdownMenu>
+                    <DropdownMenu modal={false}>
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
