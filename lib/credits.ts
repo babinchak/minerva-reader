@@ -45,7 +45,12 @@ export function allowanceDollarsForTier(tier: UserTier): number {
 function nextResetDate(tier: UserTier, from: Date = new Date()): Date {
   const next = new Date(from);
   if (tier === "paid") {
+    const day = next.getDate();
     next.setMonth(next.getMonth() + 1);
+    // If the day overflowed (e.g. Jan 31 → Mar 3), clamp to last day of target month
+    if (next.getDate() !== day) {
+      next.setDate(0); // sets to last day of the previous month
+    }
   } else {
     next.setDate(next.getDate() + 1);
     next.setHours(0, 0, 0, 0);
@@ -125,11 +130,15 @@ export async function getCredits(userId: string): Promise<UserCredits | null> {
 export async function ensureUserCredits(userId: string): Promise<void> {
   const supabase = createServiceClient();
 
-  const { data: existing } = await supabase
+  const { data: existing, error: selectError } = await supabase
     .from("user_credits")
-    .select("id, tier, allowance_reset_at")
+    .select("user_id, tier, allowance_reset_at")
     .eq("user_id", userId)
     .single();
+
+  if (selectError && selectError.code !== "PGRST116") {
+    console.error("[credits] ensureUserCredits select error:", selectError);
+  }
 
   const now = new Date();
   const tier = (existing?.tier as UserTier) || "free";
@@ -162,13 +171,20 @@ export async function ensureUserCredits(userId: string): Promise<void> {
   if (resetAt && now >= resetAt) {
     const allowanceDollarsNow = allowanceDollarsForTier(tier);
 
+    // Step forward from the original reset date to maintain a fixed cadence
+    // (e.g. paid user renewing on the 1st stays on the 1st, not drifting)
+    let nextReset = new Date(resetAt);
+    while (nextReset <= now) {
+      nextReset = nextResetDate(tier, nextReset);
+    }
+
     await supabase
       .from("user_credits")
       .update({
         allowance_dollars: allowanceDollarsNow,
         included_balance: allowanceDollarsNow,
         extra_usage_spent: 0,
-        allowance_reset_at: nextResetDate(tier, now).toISOString(),
+        allowance_reset_at: nextReset.toISOString(),
         updated_at: now.toISOString(),
       })
       .eq("user_id", userId);
