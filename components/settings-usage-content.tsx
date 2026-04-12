@@ -310,7 +310,44 @@ export function UsageContent() {
         </Card>
       )}
 
-      {/* Extra usage balance card */}
+      {/* Extra usage balance card — paused state for free users with balance */}
+      {!isPaid && !freeBetaMode && extraUsageBalance > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              Extra usage
+            </CardTitle>
+            <CardDescription>
+              Paused — resubscribe to Pro to use this balance.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Balance</span>
+              <span className="font-medium text-foreground">
+                ${extraUsageBalance.toFixed(2)}
+              </span>
+            </div>
+            <Button
+              onClick={handleCheckout}
+              disabled={!!loading}
+              className="w-full"
+            >
+              {loading === "pro" ? (
+                <>
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  Redirecting...
+                </>
+              ) : (
+                "Resubscribe to Pro"
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Extra usage balance card — full controls for paid users */}
       {isPaid && !freeBetaMode && (
         <Card>
           <CardHeader>
