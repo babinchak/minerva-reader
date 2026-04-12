@@ -258,6 +258,7 @@ export async function POST(req: NextRequest) {
       vectorsReady,
       model,
       bookIds: validatedBookIds,
+      includeListBooks: !bookListBlock,
     });
     const listBooksHint = isLibraryMode && !bookListBlock
       ? "- list_books: see all available books (title, author, book_id). Call this first if you need to know what's in the {scope}.\n"

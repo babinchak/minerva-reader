@@ -26,6 +26,8 @@ export interface AgentGraphOptions {
   model?: string;
   /** When set, uses library-wide multi-book tools instead of single-book tools. */
   bookIds?: string[];
+  /** Whether to include the list_books tool (default true). Set false when the book list is already in the system prompt. */
+  includeListBooks?: boolean;
 }
 
 export function createAgentGraph(
@@ -36,7 +38,7 @@ export function createAgentGraph(
   const vectorsReady = options?.vectorsReady ?? false;
   const modelId = options?.model ?? process.env.OPENAI_MODEL ?? "gpt-5.4-mini";
   const tools = options?.bookIds?.length
-    ? createLibraryAgentTools(options.bookIds, userId, { vectorsReady }) as StructuredToolInterface[]
+    ? createLibraryAgentTools(options.bookIds, userId, { vectorsReady, includeListBooks: options.includeListBooks ?? true }) as StructuredToolInterface[]
     : createAgentTools(bookId, userId, { vectorsReady }) as StructuredToolInterface[];
   const toolNode = new ToolNode<AgentState>(tools);
 

@@ -194,6 +194,7 @@ export function createAgentTools(
 
 export interface LibraryAgentToolsOptions {
   vectorsReady?: boolean;
+  includeListBooks?: boolean;
 }
 
 export function createLibraryAgentTools(
@@ -202,6 +203,7 @@ export function createLibraryAgentTools(
   options?: LibraryAgentToolsOptions
 ) {
   const vectorsReady = options?.vectorsReady ?? false;
+  const includeListBooks = options?.includeListBooks ?? true;
 
   const formatBookLabel = (title: string | null, author: string | null) => {
     if (title && author) return `${title} by ${author}`;
@@ -434,7 +436,7 @@ export function createLibraryAgentTools(
   );
 
   const tools = vectorsReady
-    ? [vectorSearchTool, getPassagesTool, textSearchTool, listBooksTool, webSearchTool]
-    : [getPassagesTool, textSearchTool, listBooksTool, webSearchTool];
+    ? [vectorSearchTool, getPassagesTool, textSearchTool, ...(includeListBooks ? [listBooksTool] : []), webSearchTool]
+    : [getPassagesTool, textSearchTool, ...(includeListBooks ? [listBooksTool] : []), webSearchTool];
   return tools as ReturnType<typeof tool>[];
 }
