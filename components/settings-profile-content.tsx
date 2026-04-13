@@ -175,8 +175,8 @@ export function ProfileContent({
             />
           ) : (
             <div
-              className="flex size-16 items-center justify-center rounded-full text-xl font-medium text-white"
-              style={{ backgroundColor: emailToColor(email) }}
+              className="flex size-16 items-center justify-center rounded-full text-xl font-medium"
+              style={{ backgroundColor: emailToColor(email), color: "#fff" }}
             >
               {email[0].toUpperCase()}
             </div>

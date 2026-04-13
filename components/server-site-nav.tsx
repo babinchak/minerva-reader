@@ -12,5 +12,21 @@ export async function ServerSiteNav({
     data: { user },
   } = await supabase.auth.getUser();
   const showAdmin = !!user && isAdminEmail(user.email);
-  return <SiteNav rightSlot={rightSlot} showAdmin={showAdmin} />;
+
+  const userInfo = user
+    ? {
+        email: user.email!,
+        displayName:
+          user.user_metadata?.full_name || user.email!.split("@")[0],
+        avatarUrl: user.user_metadata?.avatar_url as string | undefined,
+      }
+    : undefined;
+
+  return (
+    <SiteNav
+      rightSlot={rightSlot}
+      showAdmin={showAdmin}
+      userInfo={userInfo}
+    />
+  );
 }

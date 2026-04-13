@@ -2,16 +2,33 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Menu, X, Library, Home, Shield } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Menu, X, Library, Home, Shield, Settings, LogOut, Sun, Moon, Laptop } from "lucide-react";
 import { useIsMobile } from "@/lib/use-media-query";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { MinervaLogo } from "@/components/minerva-logo";
+import { UserMenu } from "@/components/user-menu";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 interface SiteNavProps {
   rightSlot: React.ReactNode;
   showAdmin?: boolean;
+  userInfo?: {
+    email: string;
+    displayName: string;
+    avatarUrl?: string;
+  };
+}
+
+function emailToColor(email: string) {
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) {
+    hash = email.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = ((hash >> 0) & 0xff) * 1.41;
+  return `hsl(${hue}, 55%, 45%)`;
 }
 
 const navLinks = [
@@ -21,22 +38,21 @@ const navLinks = [
 
 const adminLink = { href: "/admin", label: "Admin", icon: Shield } as const;
 
-export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
+export function SiteNav({ rightSlot, showAdmin, userInfo }: SiteNavProps) {
   const isMobile = useIsMobile();
   const pathname = usePathname();
+  const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  // Defer mobile layout until after mount to avoid hydration mismatch (server has no window).
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
-  // Close drawer on route change (navigation)
   useEffect(() => {
     closeDrawer();
   }, [pathname, closeDrawer]);
 
-  // Lock body scroll when drawer is open
   useEffect(() => {
     if (!drawerOpen) return;
     const prev = document.body.style.overflow;
@@ -46,7 +62,6 @@ export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
     };
   }, [drawerOpen]);
 
-  // Close on escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeDrawer();
@@ -55,7 +70,13 @@ export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [closeDrawer]);
 
-  // Before mount: render desktop layout so server and client match (avoids hydration error).
+  const logout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/");
+  };
+
+  // Before mount: render desktop layout so server and client match.
   if (!mounted || !isMobile) {
     return (
       <nav className="w-full flex justify-center border-b border-border h-16 shrink-0">
@@ -100,6 +121,8 @@ export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
   }
 
   // Mobile: compact top bar + slide-out drawer
+  const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Laptop;
+
   return (
     <>
       <nav
@@ -153,12 +176,41 @@ export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
           <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
-            <span className="font-semibold text-foreground">Menu</span>
+            {userInfo ? (
+              <div className="flex items-center gap-3 min-w-0">
+                {userInfo.avatarUrl ? (
+                  <img
+                    src={userInfo.avatarUrl}
+                    alt=""
+                    className="h-8 w-8 min-w-8 shrink-0 rounded-full"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div
+                    className="flex h-8 w-8 min-w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium"
+                    style={{ backgroundColor: emailToColor(userInfo.email), color: "#fff" }}
+                  >
+                    {userInfo.email[0].toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-foreground truncate">
+                    {userInfo.displayName}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {userInfo.email}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <span className="font-semibold text-foreground">Menu</span>
+            )}
             <Button
               variant="ghost"
               size="icon"
               onClick={closeDrawer}
               aria-label="Close menu"
+              className="shrink-0"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -202,8 +254,59 @@ export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
                 {adminLink.label}
               </Link>
             )}
-            <div className="mt-4 pt-4 border-t border-border flex flex-col gap-3">
-              {rightSlot}
+
+            {userInfo && (
+              <div className="mt-4 pt-4 border-t border-border flex flex-col gap-1">
+                <Link
+                  href="/settings"
+                  onClick={closeDrawer}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-base font-medium transition-colors",
+                    pathname.startsWith("/settings")
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  )}
+                >
+                  <Settings className="h-5 w-5 shrink-0" />
+                  Settings
+                </Link>
+                <button
+                  onClick={() => { closeDrawer(); logout(); }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-base font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors w-full text-left"
+                >
+                  <LogOut className="h-5 w-5 shrink-0" />
+                  Log out
+                </button>
+              </div>
+            )}
+
+            {!userInfo && (
+              <div className="mt-4 pt-4 border-t border-border flex flex-col gap-3">
+                {rightSlot}
+              </div>
+            )}
+
+            <div className="mt-auto pt-4 pb-2 flex justify-center">
+              <div className="flex rounded-lg border border-border p-0.5">
+                {([
+                  { value: "light", icon: Sun },
+                  { value: "dark", icon: Moon },
+                  { value: "system", icon: Laptop },
+                ] as const).map(({ value, icon: Icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => setTheme(value)}
+                    className={cn(
+                      "rounded-md p-1.5 transition-colors",
+                      theme === value
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </button>
+                ))}
+              </div>
             </div>
           </nav>
         </div>

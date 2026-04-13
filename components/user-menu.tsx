@@ -9,13 +9,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { Settings, LogOut, Sun, Moon, Laptop } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
@@ -51,18 +47,18 @@ export function UserMenu({
 
   return (
     <DropdownMenu modal={false}>
-      <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent transition-colors outline-none">
+      <DropdownMenuTrigger className="flex w-fit items-center gap-2 rounded-md px-2 py-1 hover:bg-accent transition-colors outline-none">
         {avatarUrl ? (
           <img
             src={avatarUrl}
             alt=""
-            className="size-7 rounded-full"
+            className="size-7 shrink-0 rounded-full"
             referrerPolicy="no-referrer"
           />
         ) : (
           <div
-            className="flex size-7 items-center justify-center rounded-full text-xs font-medium text-white"
-            style={{ backgroundColor: emailToColor(email) }}
+            className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium"
+            style={{ backgroundColor: emailToColor(email), color: "#fff" }}
           >
             {email[0].toUpperCase()}
           </div>
@@ -78,38 +74,37 @@ export function UserMenu({
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>
-        {mounted && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              {theme === "dark" ? (
-                <Moon className="mr-2 h-4 w-4" />
-              ) : theme === "light" ? (
-                <Sun className="mr-2 h-4 w-4" />
-              ) : (
-                <Laptop className="mr-2 h-4 w-4" />
-              )}
-              Theme
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
-                <DropdownMenuRadioItem value="light">
-                  <Sun className="mr-2 h-4 w-4" /> Light
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="dark">
-                  <Moon className="mr-2 h-4 w-4" /> Dark
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="system">
-                  <Laptop className="mr-2 h-4 w-4" /> System
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        )}
-        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={logout}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </DropdownMenuItem>
+        {mounted && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="flex justify-center py-1.5">
+              <div className="flex rounded-lg border border-border p-0.5">
+                {([
+                  { value: "light", icon: Sun },
+                  { value: "dark", icon: Moon },
+                  { value: "system", icon: Laptop },
+                ] as const).map(({ value, icon: Icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => setTheme(value)}
+                    className={cn(
+                      "rounded-md p-1.5 transition-colors",
+                      theme === value
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
