@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
 
     const session = await createStripeCheckoutSession({
       userId: user.id,
+      userEmail: user.email ?? undefined,
       successUrl,
       cancelUrl,
       mode,

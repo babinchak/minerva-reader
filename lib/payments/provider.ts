@@ -4,6 +4,7 @@
 
 export interface CheckoutSessionParams {
   userId: string;
+  userEmail?: string;
   successUrl: string;
   cancelUrl: string;
   mode: "subscription" | "top_up";
