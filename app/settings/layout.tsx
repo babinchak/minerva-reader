@@ -25,9 +25,9 @@ export default function SettingsLayout({
         }
       />
 
-      <div className="flex-1 flex min-h-0 w-full max-w-5xl mx-auto self-center">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0 w-full max-w-5xl mx-auto self-center">
         <SettingsSidebar />
-        <div className="flex-1 min-w-0 p-6 overflow-auto">
+        <div className="flex-1 min-w-0 p-4 md:p-6 overflow-auto">
           {children}
         </div>
       </div>
