@@ -2,7 +2,7 @@
 
 
 import { MinervaLogo } from "@/components/minerva-logo";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
 import { BookCard } from "@/components/book-card";
@@ -18,6 +18,7 @@ import {
 } from "@/components/collection-dialogs";
 import { Button } from "@/components/ui/button";
 import { Library, FolderOpen } from "lucide-react";
+import { VirtualizedBookGrid, LIBRARY_BREAKPOINTS } from "@/components/virtualized-book-grid";
 import type {
   LibraryBookFilter,
   LibrarySortDir,
@@ -234,22 +235,27 @@ export function LibraryWithBooks({
       {viewMode === "library" ? (
         <>
           {visibleBooks.length > 0 ? (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {visibleBooks.map((book) => (
-                <BookCard
-                  key={book.id}
-                  id={book.id}
-                  title={book.title ?? ""}
-                  authorDisplay={formatAuthorDisplay(book.author)}
-                  author={book.author}
-                  coverUrl={book.coverUrl}
-                  bookType={book.bookType}
-                  epubNotReady={book.epubNotReady}
-                  aiProcessing={book.aiProcessing}
-                  collections={collections}
-                />
-              ))}
-            </div>
+            <VirtualizedBookGrid
+              itemCount={visibleBooks.length}
+              breakpoints={LIBRARY_BREAKPOINTS}
+              renderItem={(index) => {
+                const book = visibleBooks[index];
+                return (
+                  <BookCard
+                    key={book.id}
+                    id={book.id}
+                    title={book.title ?? ""}
+                    authorDisplay={formatAuthorDisplay(book.author)}
+                    author={book.author}
+                    coverUrl={book.coverUrl}
+                    bookType={book.bookType}
+                    epubNotReady={book.epubNotReady}
+                    aiProcessing={book.aiProcessing}
+                    collections={collections}
+                  />
+                );
+              }}
+            />
           ) : (
             <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-8 flex flex-col items-center gap-4 text-center">
               <MinervaLogo size={48} />

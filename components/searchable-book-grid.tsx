@@ -5,6 +5,7 @@ import { BookCard } from "@/components/book-card";
 import { BookSearchInput } from "@/components/book-search-input";
 import { MinervaLogo } from "@/components/minerva-logo";
 import { AUTHOR_DELIMITER } from "@/lib/pdf-metadata";
+import { VirtualizedBookGrid, LIBRARY_BREAKPOINTS } from "@/components/virtualized-book-grid";
 
 interface GridBook {
   id: string;
@@ -49,21 +50,26 @@ export function SearchableBookGrid({ books, showAddToLibrary, userLibraryBookIds
         className="w-48"
       />
       {filteredBooks.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {filteredBooks.map((book) => (
-            <BookCard
-              key={book.id}
-              id={book.id}
-              title={book.title ?? ""}
-              authorDisplay={formatAuthorDisplay(book.author)}
-              coverUrl={book.coverUrl}
-              bookType={book.bookType}
-              showRemove={false}
-              showAddToLibrary={showAddToLibrary}
-              inLibrary={librarySet.has(book.id)}
-            />
-          ))}
-        </div>
+        <VirtualizedBookGrid
+          itemCount={filteredBooks.length}
+          breakpoints={LIBRARY_BREAKPOINTS}
+          renderItem={(index) => {
+            const book = filteredBooks[index];
+            return (
+              <BookCard
+                key={book.id}
+                id={book.id}
+                title={book.title ?? ""}
+                authorDisplay={formatAuthorDisplay(book.author)}
+                coverUrl={book.coverUrl}
+                bookType={book.bookType}
+                showRemove={false}
+                showAddToLibrary={showAddToLibrary}
+                inLibrary={librarySet.has(book.id)}
+              />
+            );
+          }}
+        />
       ) : (
         <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-8 flex flex-col items-center gap-4 text-center">
           <MinervaLogo size={48} />
