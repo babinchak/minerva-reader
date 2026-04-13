@@ -11,7 +11,14 @@ import { BrowseCollectionsGrid } from "@/components/browse-collections-grid";
 import { SiteFooter } from "@/components/site-footer";
 
 export const metadata: Metadata = {
-  title: "Explore - Minerva Reader",
+  title: "Explore",
+  description:
+    "Browse curated collections of classic public domain books. Read online and discuss with AI.",
+  openGraph: {
+    title: "Explore Curated Collections",
+    description:
+      "Browse curated collections of classic public domain books. Read online and discuss with AI.",
+  },
 };
 
 export const dynamic = "force-dynamic";

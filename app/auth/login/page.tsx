@@ -6,7 +6,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { MinervaLogo } from "@/components/minerva-logo";
 
 export const metadata: Metadata = {
-  title: "Sign In - Minerva Reader",
+  title: "Sign In",
 };
 
 export default async function Page({

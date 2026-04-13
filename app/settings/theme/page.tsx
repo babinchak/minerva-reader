@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ThemeSettingsContent } from "@/components/settings-theme-content";
 
 export const metadata: Metadata = {
-  title: "Theme - Minerva Reader",
+  title: "Theme",
 };
 
 export default function ThemeSettingsPage() {

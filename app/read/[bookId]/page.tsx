@@ -18,11 +18,37 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const serviceSupabase = createServiceClient();
   const { data: book } = await serviceSupabase
     .from("books")
-    .select("title, file_name")
+    .select("title, author, file_name, is_curated")
     .eq("id", bookId)
     .single();
+
   const title = book?.title || book?.file_name || "Minerva Reader";
-  return { title };
+  const author = book?.author;
+
+  if (!book?.is_curated) {
+    return { title, robots: { index: false, follow: false } };
+  }
+
+  const description = author
+    ? `Read "${title}" by ${author} online. Highlight passages for AI explanations and deep search.`
+    : `Read "${title}" online. Highlight passages for AI explanations and deep search.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title: author ? `${title} by ${author}` : title,
+      description,
+      type: "article",
+      images: [{ url: `/api/og?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author ?? "")}&type=book`, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: author ? `${title} by ${author}` : title,
+      description,
+      images: [`/api/og?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author ?? "")}&type=book`],
+    },
+  };
 }
 
 export default async function ReadBookPage({ params }: PageProps) {
@@ -35,7 +61,7 @@ export default async function ReadBookPage({ params }: PageProps) {
   // Fetch the book with service client so anonymous users can access curated books (RLS blocks user client when not logged in)
   const { data: book, error: bookError } = await serviceSupabase
     .from("books")
-    .select("id, uploaded_by, book_type, storage_path, file_name, title, is_curated")
+    .select("id, uploaded_by, book_type, storage_path, file_name, title, author, is_curated")
     .eq("id", bookId)
     .single();
 
@@ -89,6 +115,20 @@ export default async function ReadBookPage({ params }: PageProps) {
   const isDemoMode = !user && !!book.is_curated;
   const demoEntries = isDemoMode ? (DEMO_DATA[bookId] ?? undefined) : undefined;
 
+  // JSON-LD structured data for curated books (SEO)
+  const jsonLd = book.is_curated
+    ? {
+        "@context": "https://schema.org",
+        "@type": "Book",
+        name: book.title ?? book.file_name ?? "",
+        ...(book.author ? { author: { "@type": "Person", name: book.author } } : {}),
+        url: `${process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:4000"}/read/${bookId}`,
+        inLanguage: "en",
+        isAccessibleForFree: true,
+        bookFormat: "https://schema.org/EBook",
+      }
+    : null;
+
   const bookType = book.book_type || "epub";
 
   if (bookType === "pdf") {
@@ -128,16 +168,21 @@ export default async function ReadBookPage({ params }: PageProps) {
       "";
 
     return (
-      <PdfReaderClient
-        pdfUrl={signedUrl.signedUrl}
-        fileName={displayTitle}
-        bookId={bookId}
-        initialPage={userBook?.current_page ?? undefined}
-        initialBookmarks={userBook?.bookmarks ?? undefined}
-        isLoggedIn={!!user}
-        demoMode={isDemoMode}
-        demoEntries={demoEntries}
-      />
+      <>
+        {jsonLd && (
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+        )}
+        <PdfReaderClient
+          pdfUrl={signedUrl.signedUrl}
+          fileName={displayTitle}
+          bookId={bookId}
+          initialPage={userBook?.current_page ?? undefined}
+          initialBookmarks={userBook?.bookmarks ?? undefined}
+          isLoggedIn={!!user}
+          demoMode={isDemoMode}
+          demoEntries={demoEntries}
+        />
+      </>
     );
   }
 
@@ -185,14 +230,19 @@ export default async function ReadBookPage({ params }: PageProps) {
   const epubTitle = book.title ?? book.file_name ?? "";
 
   return (
-    <BookReader
-      rawManifest={manifest}
-      selfHref={selfHref}
-      bookTitle={epubTitle}
-      initialReadingPosition={(userBook?.reading_position as Record<string, unknown> | null | undefined) ?? undefined}
-      isLoggedIn={!!user}
-      demoMode={isDemoMode}
-      demoEntries={demoEntries}
-    />
+    <>
+      {jsonLd && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      )}
+      <BookReader
+        rawManifest={manifest}
+        selfHref={selfHref}
+        bookTitle={epubTitle}
+        initialReadingPosition={(userBook?.reading_position as Record<string, unknown> | null | undefined) ?? undefined}
+        isLoggedIn={!!user}
+        demoMode={isDemoMode}
+        demoEntries={demoEntries}
+      />
+    </>
   );
 }

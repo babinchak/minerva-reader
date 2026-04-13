@@ -21,7 +21,21 @@ import { MinervaLogo } from "@/components/minerva-logo";
 export async function generateMetadata(): Promise<Metadata> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  return { title: user ? "Library - Minerva Reader" : "Minerva Reader" };
+  if (user) {
+    return { title: "Library" };
+  }
+  return {
+    title: {
+      absolute: "Minerva Reader — Read books with AI-powered insights",
+    },
+    description:
+      "Upload EPUBs and PDFs to your personal library. Highlight any passage for instant AI explanations, or explore curated public domain collections.",
+    openGraph: {
+      title: "Minerva Reader — Read books with AI-powered insights",
+      description:
+        "Upload EPUBs and PDFs to your personal library. Highlight any passage for instant AI explanations, or explore curated public domain collections.",
+    },
+  };
 }
 
 /** Fetch a small batch of full demo responses for the response wall seed. */
@@ -173,8 +187,29 @@ export default async function Home({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  const baseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:4000";
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Minerva Reader",
+    url: baseUrl,
+    description:
+      "Your personal EPUB and PDF library. Upload and read your books in one place, with AI-powered insights.",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: `${baseUrl}/browse?q={search_term_string}`,
+      "query-input": "required name=search_term_string",
+    },
+  };
+
   return (
     <main className="min-h-screen flex flex-col items-center text-foreground">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
         <div className="flex-1 w-full flex flex-col gap-4 items-center">
         {freeBetaMode && (
           <div className="w-full bg-primary/10 border-b border-primary/20 py-2 px-4 text-center text-sm text-foreground">

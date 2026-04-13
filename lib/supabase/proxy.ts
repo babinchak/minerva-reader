@@ -73,7 +73,11 @@ export async function updateSession(request: NextRequest) {
     // Admin API (returns 401/403 for non-admin; needs to reach handler for JSON response)
     !request.nextUrl.pathname.startsWith("/api/admin/") &&
     // Collection demos (public landing page content)
-    !request.nextUrl.pathname.startsWith("/api/collection-demos")
+    !request.nextUrl.pathname.startsWith("/api/collection-demos") &&
+    // SEO: robots.txt, sitemap.xml, and OG image generation
+    request.nextUrl.pathname !== "/robots.txt" &&
+    request.nextUrl.pathname !== "/sitemap.xml" &&
+    !request.nextUrl.pathname.startsWith("/api/og")
   ) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();

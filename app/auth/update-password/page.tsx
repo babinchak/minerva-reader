@@ -5,7 +5,7 @@ import { ThemeSwitcher } from "@/components/theme-switcher";
 import { MinervaLogo } from "@/components/minerva-logo";
 
 export const metadata: Metadata = {
-  title: "Update Password - Minerva Reader",
+  title: "Update Password",
 };
 
 export default function Page() {

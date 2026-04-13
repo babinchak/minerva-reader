@@ -24,11 +24,29 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Minerva Reader",
+  title: {
+    default: "Minerva Reader",
+    template: "%s - Minerva Reader",
+  },
   description:
-    "Your personal EPUB and PDF library. Upload and read your books in one place.",
+    "Your personal EPUB and PDF library. Upload and read your books in one place, with AI-powered insights.",
   applicationName: "Minerva Reader",
   manifest: "/manifest.webmanifest",
+  openGraph: {
+    type: "website",
+    siteName: "Minerva Reader",
+    title: "Minerva Reader",
+    description:
+      "Your personal EPUB and PDF library. Upload and read your books in one place, with AI-powered insights.",
+    images: [{ url: "/api/og", width: 1200, height: 630, alt: "Minerva Reader" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Minerva Reader",
+    description:
+      "Your personal EPUB and PDF library. Upload and read your books in one place, with AI-powered insights.",
+    images: ["/api/og"],
+  },
   appleWebApp: {
     capable: true,
     title: "Minerva Reader",

@@ -5,7 +5,7 @@ import { MinervaLogo } from "@/components/minerva-logo";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
-  title: "Error - Minerva Reader",
+  title: "Error",
 };
 
 async function ErrorContent({

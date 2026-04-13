@@ -11,7 +11,7 @@ import { isAdminEmail } from "@/lib/admin";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "Admin - Minerva Reader",
+  title: "Admin",
 };
 
 export const dynamic = "force-dynamic";

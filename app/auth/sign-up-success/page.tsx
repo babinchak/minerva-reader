@@ -10,7 +10,7 @@ import {
 import { MinervaLogo } from "@/components/minerva-logo";
 
 export const metadata: Metadata = {
-  title: "Check Your Email - Minerva Reader",
+  title: "Check Your Email",
 };
 
 export default function Page() {

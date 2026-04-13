@@ -19,10 +19,30 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("curated_collections")
-    .select("name")
+    .select("name, description")
     .eq("slug", slug)
     .single();
-  return { title: data?.name ? `${data.name} - Minerva Reader` : "Explore - Minerva Reader" };
+
+  const title = data?.name ?? "Explore";
+  const description = data?.description
+    ? `${data.description} Read and discuss these books with AI on Minerva Reader.`
+    : "Explore this curated collection of classic books on Minerva Reader.";
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title: `${title} — Curated Collection`,
+      description,
+      images: [{ url: `/api/og?title=${encodeURIComponent(title)}&type=collection`, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${title} — Curated Collection`,
+      description,
+      images: [`/api/og?title=${encodeURIComponent(title)}&type=collection`],
+    },
+  };
 }
 
 interface PageProps {
@@ -127,8 +147,38 @@ export default async function BrowseCollectionPage({ params, searchParams }: Pag
     };
   });
 
+  const baseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:4000";
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: collection.name,
+    description: collection.description ?? `A curated collection of books on ${collection.name}.`,
+    url: `${baseUrl}/browse/${slug}`,
+    isPartOf: { "@type": "WebSite", name: "Minerva Reader", url: baseUrl },
+    mainEntity: {
+      "@type": "ItemList",
+      numberOfItems: books.length,
+      itemListElement: books.map((b, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        item: {
+          "@type": "Book",
+          name: b.title ?? "Untitled",
+          ...(b.author ? { author: { "@type": "Person", name: b.author } } : {}),
+          url: `${baseUrl}/read/${b.id}`,
+        },
+      })),
+    },
+  };
+
   return (
     <main className="min-h-screen flex flex-col items-center text-foreground">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <div className="flex-1 w-full flex flex-col gap-4 items-center">
         <ServerSiteNav
           rightSlot={

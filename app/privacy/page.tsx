@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 export const metadata = {
-  title: "Privacy Policy - Minerva Reader",
+  title: "Privacy Policy",
   description: "Minerva Reader privacy policy. How we collect, use, and protect your data.",
 };
 

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { ProfileContent } from "@/components/settings-profile-content";
 
 export const metadata: Metadata = {
-  title: "Profile - Minerva Reader",
+  title: "Profile",
 };
 
 export const dynamic = "force-dynamic";
