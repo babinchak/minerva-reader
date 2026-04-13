@@ -24,6 +24,7 @@
   z-index: 60 !important;
 }
 
+
 /* Top loader uses theme primary for all theme variants */
 #nprogress .bar,
 #nprogress .peg {

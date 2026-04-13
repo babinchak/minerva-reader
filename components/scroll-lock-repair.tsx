@@ -22,44 +22,55 @@ function clearScrollLock() {
   }
 }
 
-function setScrollUnlockClass(pathname: string) {
-  if (typeof document === "undefined") return;
-  const isReaderRoute = pathname.startsWith("/read/");
-  const unlock = !isReaderRoute;
-  document.body.classList.toggle("scroll-unlock", unlock);
-  document.documentElement.classList.toggle("scroll-unlock", unlock);
-}
-
 /**
- * Repairs stray scroll lock when navigating away from reader pages.
- * Reader components may set overflow:hidden, position:fixed, etc. on body/html.
+ * Repairs stray scroll lock when navigating away from Thorium reader pages.
+ * Thorium sets overflow:hidden, position:fixed, etc. on body/html.
  * If the user navigates back before cleanup runs, the lock can persist.
- * On home/browse we also add a CSS class that forces scrollability as fallback.
+ *
+ * Only applies the scroll-unlock class on non-reader routes AND only when
+ * navigating away from a reader route (to clean up Thorium's styles).
+ * This avoids permanently fighting Radix modal scroll-lock on normal pages.
  */
 export function ScrollLockRepair() {
   const pathname = usePathname();
 
   useLayoutEffect(() => {
-    clearScrollLock();
-    setScrollUnlockClass(pathname);
+    const isReaderRoute = pathname.startsWith("/read/");
 
-    const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) {
-        clearScrollLock();
-        setScrollUnlockClass(window.location.pathname);
-      }
-    };
-    const onPopState = () => {
+    if (!isReaderRoute) {
+      // Clear any stray inline styles Thorium may have left behind
       clearScrollLock();
-      setScrollUnlockClass(window.location.pathname);
+      // Temporarily add scroll-unlock to force override Thorium CSS,
+      // then remove it so it doesn't interfere with Radix modals
+      document.body.classList.add("scroll-unlock");
+      document.documentElement.classList.add("scroll-unlock");
+
+      // Remove the class after a frame — Thorium's styles are inline so
+      // clearScrollLock() already handled them; the class is just a safety net
+      // for any Thorium CSS rules that target body. Once cleared, remove it
+      // so Radix Dialog can manage scroll-lock normally.
+      const raf = requestAnimationFrame(() => {
+        document.body.classList.remove("scroll-unlock");
+        document.documentElement.classList.remove("scroll-unlock");
+      });
+
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [pathname]);
+
+  useLayoutEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) clearScrollLock();
     };
+    const onPopState = () => clearScrollLock();
+
     window.addEventListener("pageshow", onPageShow);
     window.addEventListener("popstate", onPopState);
     return () => {
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("popstate", onPopState);
     };
-  }, [pathname]);
+  }, []);
 
   return null;
 }
