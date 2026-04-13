@@ -6,18 +6,15 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { GoogleIcon } from "@/components/google-icon";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { hapticLight } from "@/lib/haptic";
+import { useState } from "react";
 
 export function SignUpForm({
   className,
@@ -26,27 +23,12 @@ export function SignUpForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [shakeTerms, setShakeTerms] = useState(false);
   const router = useRouter();
-  const termsRef = useRef<HTMLDivElement>(null);
-
-  const nudgeTerms = () => {
-    setError("Please accept the Terms of Service and Privacy Policy");
-    hapticLight();
-    setShakeTerms(true);
-    setTimeout(() => setShakeTerms(false), 400);
-  };
 
   const handleGoogleSignUp = async () => {
-    if (!acceptedTerms) {
-      nudgeTerms();
-      return;
-    }
-
     const supabase = createClient();
     setIsGoogleLoading(true);
     setError(null);
@@ -76,12 +58,6 @@ export function SignUpForm({
       return;
     }
 
-    if (!acceptedTerms) {
-      nudgeTerms();
-      setIsLoading(false);
-      return;
-    }
-
     try {
       const { error } = await supabase.auth.signUp({
         email,
@@ -100,11 +76,10 @@ export function SignUpForm({
   };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
+    <div className={cn("flex flex-col gap-6 w-full", className)} {...props}>
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Sign up</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>
@@ -143,42 +118,6 @@ export function SignUpForm({
                   onChange={(e) => setRepeatPassword(e.target.value)}
                 />
               </div>
-              <div
-                ref={termsRef}
-                className={cn("flex items-start gap-2", shakeTerms && "animate-shake")}
-              >
-                <Checkbox
-                  id="terms"
-                  checked={acceptedTerms}
-                  onCheckedChange={(checked) =>
-                    setAcceptedTerms(checked === true)
-                  }
-                  className="mt-0.5"
-                />
-                <label
-                  htmlFor="terms"
-                  className="text-sm text-muted-foreground leading-tight cursor-pointer"
-                >
-                  I agree to the{" "}
-                  <Link
-                    href="/terms"
-                    className="underline underline-offset-4 hover:text-foreground"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Terms of Service
-                  </Link>{" "}
-                  and{" "}
-                  <Link
-                    href="/privacy"
-                    className="underline underline-offset-4 hover:text-foreground"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Privacy Policy
-                  </Link>
-                </label>
-              </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Creating an account..." : "Sign up"}
@@ -199,7 +138,27 @@ export function SignUpForm({
                 {isGoogleLoading ? "Redirecting..." : "Continue with Google"}
               </Button>
             </div>
-            <div className="mt-4 text-center text-sm">
+            <p className="mt-4 text-xs text-center text-muted-foreground">
+              By signing up, you agree to our{" "}
+              <Link
+                href="/terms"
+                className="underline underline-offset-4 hover:text-foreground"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="/privacy"
+                className="underline underline-offset-4 hover:text-foreground"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Privacy Policy
+              </Link>
+            </p>
+            <div className="mt-2 text-center text-sm">
               Already have an account?{" "}
               <Link href="/auth/login" className="underline underline-offset-4">
                 Login
