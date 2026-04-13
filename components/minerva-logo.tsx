@@ -26,7 +26,6 @@ export function MinervaLogo({ size = 32, className, variant = "default" }: Miner
       width={size}
       height={size}
       className={`dark:invert ${className ?? ""}`}
-      unoptimized
     />
   );
 }
