@@ -15,7 +15,7 @@ import { UploadBookForm } from "@/components/upload-book-form";
 import { Upload } from "lucide-react";
 import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 
-export function UploadBookDialog() {
+export function UploadBookDialog({ iconOnly }: { iconOnly?: boolean } = {}) {
   const [open, setOpen] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
   const abortRef = useRef(false);
@@ -43,10 +43,16 @@ export function UploadBookDialog() {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm">
-          <Upload className="h-4 w-4" />
-          Add book
-        </Button>
+        {iconOnly ? (
+          <Button size="sm" variant="outline" aria-label="Add book" className="h-9 w-9 p-0">
+            <Upload className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button size="sm">
+            <Upload className="h-4 w-4" />
+            Add book
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>

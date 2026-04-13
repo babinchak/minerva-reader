@@ -120,6 +120,16 @@ export function SiteNav({ rightSlot, showAdmin, userInfo }: SiteNavProps) {
     );
   }
 
+  // Derive a page title from the current route for the mobile navbar.
+  // Fundamental/marketing pages keep "Minerva Reader".
+  const mobileTitle = (() => {
+    if (pathname === "/") return "Library";
+    if (pathname.startsWith("/browse")) return "Explore";
+    if (pathname.startsWith("/admin")) return "Admin";
+    if (pathname.startsWith("/settings")) return "Settings";
+    return null; // null = show "Minerva Reader"
+  })();
+
   // Mobile: compact top bar + slide-out drawer
   const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Laptop;
 
@@ -130,13 +140,22 @@ export function SiteNav({ rightSlot, showAdmin, userInfo }: SiteNavProps) {
         style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
         <div className="w-full max-w-7xl flex justify-between items-center px-4 text-sm">
-          <Link
-            href="/"
-            className="flex items-center gap-2 font-semibold text-foreground shrink-0"
-          >
-            <MinervaLogo size={22} />
-            Minerva Reader
-          </Link>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Link
+              href="/"
+              className="shrink-0 text-foreground"
+              aria-label="Home"
+            >
+              <MinervaLogo size={22} />
+            </Link>
+            {mobileTitle ? (
+              <h1 className="font-semibold text-foreground text-base truncate">
+                {mobileTitle}
+              </h1>
+            ) : (
+              <span className="font-semibold text-foreground">Minerva Reader</span>
+            )}
+          </div>
 
           <div className="flex items-center gap-1">
             <Button

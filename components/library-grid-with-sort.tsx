@@ -10,6 +10,8 @@ import { BookSearchInput } from "@/components/book-search-input";
 import { LibrarySortControls } from "@/components/library-sort-controls";
 import { UploadBookDialog } from "@/components/upload-book-dialog";
 import { LibraryAIAssistant, type AIScope } from "@/components/library-ai-assistant";
+import { AIAgentPanel } from "@/components/ai-agent-pane";
+import { Sparkles, X } from "lucide-react";
 import { CollectionsView, type CollectionSummary } from "@/components/collections-view";
 import {
   CreateCollectionDialog,
@@ -17,8 +19,10 @@ import {
   AddBooksToCollectionDialog,
 } from "@/components/collection-dialogs";
 import { Button } from "@/components/ui/button";
-import { Library, FolderOpen } from "lucide-react";
+import { Library, FolderOpen, SlidersHorizontal } from "lucide-react";
 import { VirtualizedBookGrid, LIBRARY_BREAKPOINTS } from "@/components/virtualized-book-grid";
+import { MobileFilterSortSheet } from "@/components/mobile-filter-sort-sheet";
+import { useIsMobile } from "@/lib/use-media-query";
 import type {
   LibraryBookFilter,
   LibrarySortDir,
@@ -63,6 +67,9 @@ export function LibraryWithBooks({
   const [filter, setFilter] = useState<LibraryBookFilter>(initialFilter);
   const [viewMode, setViewMode] = useState<"library" | "collections">("library");
   const [searchQuery, setSearchQuery] = useState("");
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [aiMobileOpen, setAiMobileOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   // Collection dialog state
   const [createCollectionOpen, setCreateCollectionOpen] = useState(false);
@@ -147,7 +154,11 @@ export function LibraryWithBooks({
   const handleOpenCollectionAI = async (collectionId: string, bookIds: string[]) => {
     const col = collections.find((c) => c.id === collectionId);
     setAiScope({ type: "collection", id: collectionId, name: col?.name ?? "Collection", bookIds });
-    setAiOpenFromCollection(true);
+    if (isMobile) {
+      setAiMobileOpen(true);
+    } else {
+      setAiOpenFromCollection(true);
+    }
   };
 
   const effectiveAIBookIds = aiScope.type === "library"
@@ -155,80 +166,177 @@ export function LibraryWithBooks({
     : aiScope.bookIds ?? [];
 
   return (
-    <div className="w-full max-w-7xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
-            Library
-          </h1>
-          {/* Library / Collections view toggle */}
-          <div
-            className="inline-flex h-8 items-stretch overflow-hidden rounded-md border border-input bg-background"
-            role="group"
-            aria-label="View mode"
-          >
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setViewMode("library")}
-              aria-pressed={viewMode === "library"}
-              className={
-                viewMode === "library"
-                  ? "h-full rounded-none gap-1.5 border-0 bg-accent px-3 text-accent-foreground shadow-none hover:bg-accent"
-                  : "h-full rounded-none gap-1.5 border-0 px-3 text-muted-foreground shadow-none hover:text-foreground"
-              }
+    <div className="w-full max-w-7xl space-y-4 sm:space-y-6">
+      {/* ── Mobile layout ── */}
+      {isMobile ? (
+        <div className="space-y-3">
+          {/* Row 1: View toggle + action buttons */}
+          <div className="flex items-center justify-between gap-2">
+            <div
+              className="inline-flex h-9 items-stretch overflow-hidden rounded-md border border-input bg-background"
+              role="group"
+              aria-label="View mode"
             >
-              <Library className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Books</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setViewMode("collections")}
-              aria-pressed={viewMode === "collections"}
-              className={
-                viewMode === "collections"
-                  ? "h-full rounded-none gap-1.5 border-0 bg-accent px-3 text-accent-foreground shadow-none hover:bg-accent"
-                  : "h-full rounded-none gap-1.5 border-0 px-3 text-muted-foreground shadow-none hover:text-foreground"
-              }
-            >
-              <FolderOpen className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Collections</span>
-            </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode("library")}
+                aria-pressed={viewMode === "library"}
+                className={
+                  viewMode === "library"
+                    ? "h-full rounded-none gap-1.5 border-0 bg-accent px-3 text-accent-foreground shadow-none hover:bg-accent"
+                    : "h-full rounded-none gap-1.5 border-0 px-3 text-muted-foreground shadow-none hover:text-foreground"
+                }
+              >
+                <Library className="h-3.5 w-3.5" />
+                Books
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode("collections")}
+                aria-pressed={viewMode === "collections"}
+                className={
+                  viewMode === "collections"
+                    ? "h-full rounded-none gap-1.5 border-0 bg-accent px-3 text-accent-foreground shadow-none hover:bg-accent"
+                    : "h-full rounded-none gap-1.5 border-0 px-3 text-muted-foreground shadow-none hover:text-foreground"
+                }
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                Collections
+              </Button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <UploadBookDialog iconOnly />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setAiOpenFromCollection(false);
+                  setAiScope({ type: "library" });
+                  setAiMobileOpen(true);
+                }}
+                className="gap-1.5 h-9"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Ask
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+
+          {/* Row 2: Search + Filter/Sort */}
           {viewMode === "library" && (
-            <LibrarySortControls
-              sort={sort}
-              dir={dir}
-              filter={filter}
-              onSortChange={(s, d) => {
-                setSort(s);
-                setDir(d);
-              }}
-              onFilterChange={setFilter}
+            <div className="flex items-center gap-2">
+              <BookSearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                className="flex-1 min-w-0"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMobileFilterOpen(true)}
+                className="shrink-0 gap-1.5 h-9"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ── Desktop layout ── */
+        <>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-foreground">Library</h1>
+              <div
+                className="inline-flex h-8 items-stretch overflow-hidden rounded-md border border-input bg-background"
+                role="group"
+                aria-label="View mode"
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setViewMode("library")}
+                  aria-pressed={viewMode === "library"}
+                  className={
+                    viewMode === "library"
+                      ? "h-full rounded-none gap-1.5 border-0 bg-accent px-3 text-accent-foreground shadow-none hover:bg-accent"
+                      : "h-full rounded-none gap-1.5 border-0 px-3 text-muted-foreground shadow-none hover:text-foreground"
+                  }
+                >
+                  <Library className="h-3.5 w-3.5" />
+                  Books
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setViewMode("collections")}
+                  aria-pressed={viewMode === "collections"}
+                  className={
+                    viewMode === "collections"
+                      ? "h-full rounded-none gap-1.5 border-0 bg-accent px-3 text-accent-foreground shadow-none hover:bg-accent"
+                      : "h-full rounded-none gap-1.5 border-0 px-3 text-muted-foreground shadow-none hover:text-foreground"
+                  }
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  Collections
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {viewMode === "library" && (
+                <LibrarySortControls
+                  sort={sort}
+                  dir={dir}
+                  filter={filter}
+                  onSortChange={(s, d) => {
+                    setSort(s);
+                    setDir(d);
+                  }}
+                  onFilterChange={setFilter}
+                />
+              )}
+              <UploadBookDialog />
+              <LibraryAIAssistant
+                bookIds={effectiveAIBookIds}
+                collections={collections}
+                aiScope={aiScope}
+                onAiScopeChange={setAiScope}
+                forceOpen={aiOpenFromCollection}
+                onForceOpenConsumed={() => setAiOpenFromCollection(false)}
+                mobileMode="none"
+              />
+            </div>
+          </div>
+
+          {viewMode === "library" && (
+            <BookSearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              className="max-w-sm"
             />
           )}
-          <UploadBookDialog />
-          <LibraryAIAssistant
-            bookIds={effectiveAIBookIds}
-            collections={collections}
-            aiScope={aiScope}
-            onAiScopeChange={setAiScope}
-            forceOpen={aiOpenFromCollection}
-            onForceOpenConsumed={() => setAiOpenFromCollection(false)}
-          />
-        </div>
-      </div>
+        </>
+      )}
 
-      {viewMode === "library" && (
-        <BookSearchInput
-          value={searchQuery}
-          onChange={setSearchQuery}
-          className="max-w-sm"
+      {/* Mobile filter/sort bottom sheet */}
+      {isMobile && (
+        <MobileFilterSortSheet
+          open={mobileFilterOpen}
+          onOpenChange={setMobileFilterOpen}
+          sort={sort}
+          dir={dir}
+          filter={filter}
+          onSortChange={(s, d) => {
+            setSort(s);
+            setDir(d);
+          }}
+          onFilterChange={setFilter}
         />
       )}
 
@@ -273,6 +381,35 @@ export function LibraryWithBooks({
           onOpenCollectionAI={handleOpenCollectionAI}
           onAddBooksToCollection={setAddBooksCollection}
         />
+      )}
+
+      {/* Mobile AI full-screen panel */}
+      {isMobile && aiMobileOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-background">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Sparkles className="h-4 w-4 text-blue-500" />
+              Library AI
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setAiMobileOpen(false)}
+              className="h-8 w-8"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <AIAgentPanel
+            bookIds={effectiveAIBookIds}
+            collections={collections}
+            aiScope={aiScope}
+            onAiScopeChange={setAiScope}
+            className="flex-1 flex flex-col min-h-0"
+            showHeader={false}
+          />
+        </div>
       )}
 
       {/* Collection dialogs */}

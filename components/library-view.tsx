@@ -195,7 +195,7 @@ export async function LibraryView() {
       ) : (
         <>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
+            <h1 className="hidden text-foreground sm:block sm:text-3xl sm:font-bold">
               Library
             </h1>
             <div className="flex flex-wrap items-center gap-2">

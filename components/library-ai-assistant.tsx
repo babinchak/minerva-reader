@@ -28,6 +28,12 @@ interface LibraryAIAssistantProps {
   buttonLabel?: string;
   /** Pre-fill the AI composer with this question. */
   prefillQuestion?: string | null;
+  /**
+   * Controls mobile rendering behavior:
+   * - "inline": shows an inline button + full-screen panel (default)
+   * - "none": parent handles mobile AI (e.g. library page integrates it into search bar)
+   */
+  mobileMode?: "inline" | "none";
 }
 
 export function LibraryAIAssistant({
@@ -41,6 +47,7 @@ export function LibraryAIAssistant({
   onForceOpenConsumed,
   buttonLabel = "Ask across library",
   prefillQuestion,
+  mobileMode = "inline",
 }: LibraryAIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -56,17 +63,22 @@ export function LibraryAIAssistant({
 
   if (bookIds.length === 0) return null;
 
+  // Parent handles mobile AI rendering (e.g. library page integrates into search bar)
+  if (isMobile && mobileMode === "none") return null;
+
+  // Mobile: inline button + full-screen panel (used by browse/curated pages)
   if (isMobile) {
     return (
       <>
         {!isOpen && (
           <Button
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full shadow-lg"
-            size="icon"
-            aria-label="Search across library with AI"
+            variant="outline"
+            className="gap-2"
+            size="sm"
           >
-            <Sparkles className="h-6 w-6" />
+            <Sparkles className="h-4 w-4" />
+            {buttonLabel}
           </Button>
         )}
         {isOpen && (
@@ -103,6 +115,7 @@ export function LibraryAIAssistant({
     );
   }
 
+  // Desktop: inline button + resizable sidebar panel
   return (
     <>
       {!isOpen && (
