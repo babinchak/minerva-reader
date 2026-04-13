@@ -37,7 +37,7 @@ export async function uploadBookViaDirectStorage(file: File): Promise<DirectUplo
     if (!initRes.ok) {
       return {
         ok: false,
-        error: initData.error || initData.message || "Upload failed",
+        error: initData.message || initData.error || "Upload failed",
       };
     }
 

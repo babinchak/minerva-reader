@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Processing limit reached",
-          message: `You have ${inFlight} books currently being processed. Please wait for them to finish before uploading more.`,
+          message: `You can only process ${maxConcurrent} book${maxConcurrent === 1 ? '' : 's'} at a time. Please wait for your current ${inFlight === 1 ? 'book' : 'books'} to finish processing.${tier === 'free' ? ' Upgrade to Pro for higher limits.' : ''}`,
         },
         { status: 429 },
       );
