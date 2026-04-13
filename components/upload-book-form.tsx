@@ -12,14 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Upload, CheckCircle2, XCircle, Loader2, BookOpen, User, X, FileText } from 'lucide-react';
+import { Upload, CheckCircle2, XCircle, Loader2, BookOpen, User, X, FileText, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CREDITS_REFRESH_EVENT } from '@/lib/credits-refresh';
 import { uploadBookViaDirectStorage } from '@/lib/upload-book-client';
 
 type QueuedFile = {
   file: File;
-  status: 'pending' | 'uploading' | 'done' | 'error' | 'duplicate';
+  status: 'pending' | 'uploading' | 'waiting' | 'done' | 'error' | 'duplicate';
   message?: string;
 };
 
@@ -141,12 +141,27 @@ export function UploadBookForm({
       );
 
       try {
-        const result = await uploadBookViaDirectStorage(queue[i].file);
+        let result = await uploadBookViaDirectStorage(queue[i].file);
+
+        // If rate-limited, wait for in-flight books to finish and retry
+        if (!result.ok && result.rateLimited) {
+          setQueue((prev) =>
+            prev.map((q, idx) =>
+              idx === i ? { ...q, status: 'waiting', message: 'Waiting for other books to finish processing...' } : q
+            )
+          );
+          while (!result.ok && result.rateLimited && !abortRef.current) {
+            await new Promise((r) => setTimeout(r, 10_000));
+            if (abortRef.current) break;
+            result = await uploadBookViaDirectStorage(queue[i].file);
+          }
+          if (abortRef.current) break;
+        }
 
         if (!result.ok) {
           setQueue((prev) =>
             prev.map((q, idx) =>
-              idx === i ? { ...q, status: 'error', message: result.error } : q
+              idx === i ? { ...q, status: 'error', message: result.ok ? undefined : result.error } : q
             )
           );
           continue;
@@ -196,12 +211,12 @@ export function UploadBookForm({
   };
 
   const clearCompleted = () => {
-    setQueue((prev) => prev.filter((q) => q.status === 'pending' || q.status === 'uploading'));
+    setQueue((prev) => prev.filter((q) => q.status === 'pending' || q.status === 'uploading' || q.status === 'waiting'));
   };
 
   const pendingCount = queue.filter((q) => q.status === 'pending').length;
   const doneCount = queue.filter((q) => q.status === 'done').length;
-  const hasCompleted = queue.some((q) => q.status !== 'pending' && q.status !== 'uploading');
+  const hasCompleted = queue.some((q) => q.status !== 'pending' && q.status !== 'uploading' && q.status !== 'waiting');
 
   const formContent = isPaid ? (
     <form onSubmit={handleSubmitBulk} className="space-y-4">
@@ -283,10 +298,12 @@ export function UploadBookForm({
                   item.status === 'error' && 'bg-destructive/5 text-destructive',
                   item.status === 'duplicate' && 'bg-muted/50 text-muted-foreground',
                   item.status === 'uploading' && 'bg-primary/5',
+                  item.status === 'waiting' && 'bg-amber-500/5 text-amber-700 dark:text-amber-400',
                   item.status === 'pending' && 'text-foreground',
                 )}
               >
                 {item.status === 'uploading' && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+                {item.status === 'waiting' && <Clock className="h-4 w-4 shrink-0 animate-pulse" />}
                 {item.status === 'done' && <CheckCircle2 className="h-4 w-4 shrink-0" />}
                 {item.status === 'error' && <XCircle className="h-4 w-4 shrink-0" />}
                 {item.status === 'duplicate' && <BookOpen className="h-4 w-4 shrink-0" />}

@@ -12,7 +12,7 @@ export type DirectUploadResult =
       book_cover_url?: string | null;
       book_type?: string | null;
     }
-  | { ok: false; error: string };
+  | { ok: false; error: string; rateLimited?: boolean };
 
 /**
  * Uploads a book without sending file bytes through Next/Vercel (avoids ~4.5MB function payload limit).
@@ -38,6 +38,7 @@ export async function uploadBookViaDirectStorage(file: File): Promise<DirectUplo
       return {
         ok: false,
         error: initData.message || initData.error || "Upload failed",
+        rateLimited: initRes.status === 429,
       };
     }
 
