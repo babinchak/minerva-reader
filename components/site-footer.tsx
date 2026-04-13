@@ -1,9 +1,18 @@
+"use client";
+
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { MinervaLogo } from "@/components/minerva-logo";
 import { FeedbackDialog } from "@/components/feedback-dialog";
+import { Sun, Moon, Laptop } from "lucide-react";
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 
 export function SiteFooter({ className }: { className?: string }) {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   return (
     <footer
       className={cn(
@@ -32,6 +41,28 @@ export function SiteFooter({ className }: { className?: string }) {
           Feedback
         </button>
       </FeedbackDialog>
+      {mounted && (
+        <div className="flex rounded-lg border border-border p-0.5">
+          {([
+            { value: "light", icon: Sun },
+            { value: "dark", icon: Moon },
+            { value: "system", icon: Laptop },
+          ] as const).map(({ value, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setTheme(value)}
+              className={cn(
+                "rounded-md p-1.5 transition-colors",
+                theme === value
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </button>
+          ))}
+        </div>
+      )}
     </footer>
   );
 }
