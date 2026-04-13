@@ -1,7 +1,6 @@
 import { ServerSiteNav } from "@/components/server-site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { AuthButton } from "@/components/auth-button";
-import { ThemeSwitcher } from "@/components/theme-switcher";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -16,12 +15,9 @@ export default function TermsPage() {
       <div className="flex-1 w-full flex flex-col gap-4 items-center">
         <ServerSiteNav
           rightSlot={
-            <>
-              <Suspense>
-                <AuthButton />
-              </Suspense>
-              <ThemeSwitcher />
-            </>
+            <Suspense>
+              <AuthButton />
+            </Suspense>
           }
         />
 

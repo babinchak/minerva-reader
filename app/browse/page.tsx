@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { AuthButton } from "@/components/auth-button";
-import { ThemeSwitcher } from "@/components/theme-switcher";
 import { ServerSiteNav } from "@/components/server-site-nav";
 import { hasEnvVars } from "@/lib/utils";
 import { EnvVarWarning } from "@/components/env-var-warning";
@@ -22,7 +21,7 @@ export default async function BrowsePage() {
   if (!hasEnvVars) {
     return (
       <main className="min-h-screen flex flex-col items-center text-foreground">
-        <ServerSiteNav rightSlot={<><EnvVarWarning /><ThemeSwitcher /></>} />
+        <ServerSiteNav rightSlot={<EnvVarWarning />} />
         <div className="flex-1 flex items-center justify-center p-8">
           <p className="text-muted-foreground">Configure environment variables to continue.</p>
         </div>
@@ -74,12 +73,9 @@ export default async function BrowsePage() {
       <div className="flex-1 w-full flex flex-col gap-4 items-center">
         <ServerSiteNav
           rightSlot={
-            <>
-              <Suspense>
-                <AuthButton />
-              </Suspense>
-              <ThemeSwitcher />
-            </>
+            <Suspense>
+              <AuthButton />
+            </Suspense>
           }
         />
 

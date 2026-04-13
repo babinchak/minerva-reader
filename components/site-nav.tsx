@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Library, Settings, Home, Shield } from "lucide-react";
+import { Menu, X, Library, Home, Shield } from "lucide-react";
 import { useIsMobile } from "@/lib/use-media-query";
 import { Button } from "@/components/ui/button";
 import { MinervaLogo } from "@/components/minerva-logo";
@@ -12,19 +12,16 @@ import { cn } from "@/lib/utils";
 interface SiteNavProps {
   rightSlot: React.ReactNode;
   showAdmin?: boolean;
-  isLoggedIn?: boolean;
 }
 
-const allNavLinks = [
+const navLinks = [
   { href: "/", label: "Home", icon: Home },
   { href: "/browse", label: "Explore", icon: Library },
-  { href: "/settings", label: "Settings", icon: Settings, requiresAuth: true },
 ] as const;
 
 const adminLink = { href: "/admin", label: "Admin", icon: Shield } as const;
 
-export function SiteNav({ rightSlot, showAdmin, isLoggedIn }: SiteNavProps) {
-  const navLinks = allNavLinks.filter((l) => !("requiresAuth" in l) || isLoggedIn);
+export function SiteNav({ rightSlot, showAdmin }: SiteNavProps) {
   const isMobile = useIsMobile();
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { AuthButton } from "@/components/auth-button";
-import { ThemeSwitcher } from "@/components/theme-switcher";
 import { ServerSiteNav } from "@/components/server-site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { hasEnvVars } from "@/lib/utils";
@@ -36,16 +35,13 @@ export default async function AdminLayout({
     <main className="min-h-screen flex flex-col text-foreground">
       <ServerSiteNav
         rightSlot={
-          <>
-            {!hasEnvVars ? (
-              <EnvVarWarning />
-            ) : (
-              <Suspense>
-                <AuthButton />
-              </Suspense>
-            )}
-            <ThemeSwitcher />
-          </>
+          !hasEnvVars ? (
+            <EnvVarWarning />
+          ) : (
+            <Suspense>
+              <AuthButton />
+            </Suspense>
+          )
         }
       />
 

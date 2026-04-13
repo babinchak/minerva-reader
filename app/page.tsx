@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { SiteFooter } from "@/components/site-footer";
 import { AuthButton } from "@/components/auth-button";
-import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LibraryView } from "@/components/library-view";
 import { UpgradeCta } from "@/components/upgrade-cta";
 import { HeroReplay } from "@/components/marketing/hero-replay";
@@ -178,16 +177,13 @@ export default async function Home({
         )}
         <ServerSiteNav
           rightSlot={
-            <>
-              {!hasEnvVars ? (
-                <EnvVarWarning />
-              ) : (
-                <Suspense>
-                  <AuthButton />
-                </Suspense>
-              )}
-              <ThemeSwitcher />
-            </>
+            !hasEnvVars ? (
+              <EnvVarWarning />
+            ) : (
+              <Suspense>
+                <AuthButton />
+              </Suspense>
+            )
           }
         />
         <div className="flex-1 w-full flex flex-col gap-6 max-w-7xl px-6 pt-2 pb-8 items-center">
