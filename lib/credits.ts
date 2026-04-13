@@ -168,11 +168,12 @@ export async function ensureUserCredits(userId: string): Promise<void> {
     ? new Date(existing.allowance_reset_at)
     : null;
 
-  if (resetAt && now >= resetAt) {
+  // Only lazy-reset free tier. Paid tier resets are handled by Stripe
+  // invoice.paid webhook to ensure payment actually succeeded.
+  if (tier === "free" && resetAt && now >= resetAt) {
     const allowanceDollarsNow = allowanceDollarsForTier(tier);
 
     // Step forward from the original reset date to maintain a fixed cadence
-    // (e.g. paid user renewing on the 1st stays on the 1st, not drifting)
     let nextReset = new Date(resetAt);
     while (nextReset <= now) {
       nextReset = nextResetDate(tier, nextReset);
