@@ -41,6 +41,12 @@ export function SiteFooter({ className }: { className?: string }) {
           Feedback
         </button>
       </FeedbackDialog>
+      <span className="text-muted-foreground/70">
+        Thanks to{" "}
+        <a href="https://www.gutenberg.org" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline-offset-4 hover:underline">Project Gutenberg</a>
+        {" & "}
+        <a href="https://readium.org" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline-offset-4 hover:underline">Readium Foundation</a>
+      </span>
       {mounted && (
         <div className="flex rounded-lg border border-border p-0.5">
           {([
