@@ -15,10 +15,7 @@ function emailToColor(email: string) {
 export async function AuthButton() {
   const supabase = await createClient();
 
-  // You can also use getUser() which will be slower.
-  const { data } = await supabase.auth.getClaims();
-
-  const user = data?.claims;
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
     return (
@@ -33,12 +30,9 @@ export async function AuthButton() {
     );
   }
 
-  const meta = (user as Record<string, unknown>).user_metadata as
-    | { avatar_url?: string; full_name?: string }
-    | undefined;
-  const email = user.email as string;
-  const displayName = meta?.full_name || email.split("@")[0];
-  const avatarUrl = meta?.avatar_url;
+  const email = user.email!;
+  const displayName = user.user_metadata?.full_name || email.split("@")[0];
+  const avatarUrl = user.user_metadata?.avatar_url;
 
   return (
     <div className="flex items-center gap-2 text-foreground">

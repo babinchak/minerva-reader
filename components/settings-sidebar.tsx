@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Palette } from "lucide-react";
+import { BarChart3, Palette, User } from "lucide-react";
 import { MinervaLogo } from "@/components/minerva-logo";
 import { cn } from "@/lib/utils";
 
 const SETTINGS_NAV = [
+  { href: "/settings/profile", label: "Profile", icon: User },
   { href: "/settings/usage", label: "Usage", icon: BarChart3 },
   { href: "/settings/theme", label: "Theme", icon: Palette },
 ] as const;
