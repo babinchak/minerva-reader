@@ -10,6 +10,7 @@ import { LibraryPageSkeleton } from "@/components/library-grid-skeleton";
 import { HomeContentSkeleton } from "@/components/home-content-skeleton";
 import { ResponseWall, RotatingHeadline } from "@/components/marketing/response-wall";
 import { LandingSearch } from "@/components/marketing/landing-search";
+import { PricingCards } from "@/components/marketing/pricing-cards";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
@@ -146,6 +147,11 @@ async function HomeContent({
       {/* 3. In-book demo — shows the reading experience */}
       <section className="w-full">
         <HeroReplay />
+      </section>
+
+      {/* 4. Pricing */}
+      <section className="w-full">
+        <PricingCards />
       </section>
     </div>
   );
