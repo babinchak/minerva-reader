@@ -124,28 +124,27 @@ export function BookCard({
 
   const cardContent = (
     <>
-      <div className={`relative mb-3 aspect-[2/3] w-full flex-none overflow-hidden rounded-md bg-muted shadow-sm ${isBlocked ? "opacity-50" : ""}`}>
+      <div className={`relative aspect-[2/3] w-full flex-none overflow-hidden rounded-md bg-muted shadow-md ${isBlocked ? "opacity-50" : ""}`}>
         {coverUrl ? (
           <img
             src={coverUrl}
             alt={`Cover of ${title}`}
             loading="lazy"
-            className={`absolute inset-0 h-full w-full object-cover ${isBlocked ? "" : "transition-transform group-hover:scale-[1.02]"}`}
+            className={`absolute inset-0 h-full w-full object-cover ${isBlocked ? "" : "transition-transform group-hover:scale-[1.03]"}`}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <BookOpen className="h-12 w-12 text-muted-foreground" />
+            <BookOpen className="h-10 w-10 text-muted-foreground" />
           </div>
         )}
       </div>
-      <div className="flex-1">
-        <h3 className={`min-h-[2.75rem] line-clamp-2 font-medium ${isBlocked ? "text-muted-foreground" : "text-foreground group-hover:text-primary"}`}>
+      <div className="mt-2 flex-1">
+        <h3 className={`line-clamp-2 text-sm font-medium leading-snug ${isBlocked ? "text-muted-foreground" : "text-foreground group-hover:text-primary"}`}>
           {title}
         </h3>
         {authorDisplay && (
-          <p className="mt-0 line-clamp-1 flex items-center gap-1 text-xs text-muted-foreground">
-            <User className="h-3 w-3 shrink-0" />
-            <span className="truncate">{authorDisplay}</span>
+          <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+            {authorDisplay}
           </p>
         )}
       </div>
@@ -194,7 +193,7 @@ export function BookCard({
 
   return (
     <div
-      className={`group flex h-full flex-col rounded-lg border bg-card px-3 pt-3 pb-2 transition-colors ${isBlocked ? "" : "hover:bg-accent/50"} transition-opacity ${
+      className={`group relative flex h-full flex-col transition-opacity ${
         isRemoving ? "pointer-events-none opacity-0" : ""
       }`}
     >
@@ -211,17 +210,17 @@ export function BookCard({
           {cardContent}
         </a>
       )}
-      <div className="mt-1 flex h-8 items-center justify-between">
+      <div className="mt-1 flex h-6 items-center justify-between">
         {statusBadge}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 -mr-1"
+              className="h-7 w-7 shrink-0 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:data-[state=open]:opacity-100"
               aria-label="Book options"
             >
-              <MoreVertical className="h-4 w-4" />
+              <MoreVertical className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">

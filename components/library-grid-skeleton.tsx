@@ -1,11 +1,11 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { BookCardSkeleton } from "@/components/book-card-skeleton";
 
-const DEFAULT_CARD_COUNT = 10;
+const DEFAULT_CARD_COUNT = 12;
 
 export function LibraryGridSkeleton({ count = DEFAULT_CARD_COUNT }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {Array.from({ length: count }).map((_, i) => (
         <BookCardSkeleton key={i} />
       ))}
