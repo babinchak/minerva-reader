@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,9 @@ export function UploadBookForm({
   onSuccess,
   abortRef: externalAbortRef,
   compact = false,
-}: { onSuccess?: () => void; abortRef?: React.MutableRefObject<boolean>; compact?: boolean } = {}) {
+  isPaid = false,
+  balance = null,
+}: { onSuccess?: () => void; abortRef?: React.MutableRefObject<boolean>; compact?: boolean; isPaid?: boolean; balance?: number | null } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -41,26 +43,10 @@ export function UploadBookForm({
     coverUrl?: string | null;
     bookType?: string | null;
   } | null>(null);
-  const [isPaid, setIsPaid] = useState(false);
-  const [balance, setBalance] = useState<number | null>(null);
-  const [allowanceResetAt, setAllowanceResetAt] = useState<string | null>(null);
   const [exhaustedOpen, setExhaustedOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const internalAbortRef = useRef(false);
   const abortRef = externalAbortRef ?? internalAbortRef;
-
-  useEffect(() => {
-    fetch(`/api/credits?t=${Date.now()}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d) {
-          setIsPaid(d.tier === 'paid');
-          setBalance((d.includedBalance ?? 0) + (d.extraUsageBalance ?? 0));
-          setAllowanceResetAt(d.allowanceResetAt ?? null);
-        }
-      })
-      .catch(() => {});
-  }, []);
 
   const isValidFile = (f: File) => {
     const lower = f.name.toLowerCase();

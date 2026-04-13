@@ -18,13 +18,19 @@ import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 export function UploadBookDialog({ iconOnly }: { iconOnly?: boolean } = {}) {
   const [open, setOpen] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
   const abortRef = useRef(false);
   const router = useRouter();
 
   useEffect(() => {
     fetch(`/api/credits?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setIsPaid(d.tier === "paid"); })
+      .then((d) => {
+        if (d) {
+          setIsPaid(d.tier === "paid");
+          setBalance((d.includedBalance ?? 0) + (d.extraUsageBalance ?? 0));
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -62,7 +68,7 @@ export function UploadBookDialog({ iconOnly }: { iconOnly?: boolean } = {}) {
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 overflow-y-auto">
-          <UploadBookForm onSuccess={handleSuccess} abortRef={abortRef} compact />
+          <UploadBookForm onSuccess={handleSuccess} abortRef={abortRef} compact isPaid={isPaid} balance={balance} />
         </div>
       </DialogContent>
     </Dialog>
