@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { AuthButton } from "@/components/auth-button";
 import { ServerSiteNav } from "@/components/server-site-nav";
@@ -10,40 +9,6 @@ import { CuratedCollectionAI } from "@/components/curated-collection-ai";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
-
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const { slug } = await params;
-  const supabase = createServiceClient();
-  const { data } = await supabase
-    .from("curated_collections")
-    .select("name, description")
-    .eq("slug", slug)
-    .single();
-
-  const title = data?.name ?? "Explore";
-  const description = data?.description
-    ? `${data.description} Read and discuss these books with AI on Minerva Reader.`
-    : "Explore this curated collection of classic books on Minerva Reader.";
-
-  return {
-    title,
-    description,
-    openGraph: {
-      title: `${title} — Curated Collection`,
-      description,
-      images: [{ url: `/api/og?title=${encodeURIComponent(title)}&type=collection`, width: 1200, height: 630 }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: `${title} — Curated Collection`,
-      description,
-      images: [`/api/og?title=${encodeURIComponent(title)}&type=collection`],
-    },
-  };
-}
 
 interface PageProps {
   params: Promise<{ slug: string }>;

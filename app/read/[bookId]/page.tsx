@@ -4,51 +4,9 @@ import { BookReader } from "@/components/book-reader";
 import PdfReaderClient from "@/components/pdf-reader-client";
 import { EpubProcessingWait } from "@/components/epub-processing-wait";
 import { DEMO_DATA } from "@/lib/demo-chat-data";
-import type { Metadata } from "next";
-
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 interface PageProps {
   params: Promise<{ bookId: string }>;
-}
-
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { bookId } = await params;
-  const serviceSupabase = createServiceClient();
-  const { data: book } = await serviceSupabase
-    .from("books")
-    .select("title, author, file_name, is_curated")
-    .eq("id", bookId)
-    .single();
-
-  const title = book?.title || book?.file_name || "Minerva Reader";
-  const author = book?.author;
-
-  if (!book?.is_curated) {
-    return { title, robots: { index: false, follow: false } };
-  }
-
-  const description = author
-    ? `Read "${title}" by ${author} online. Highlight passages for AI explanations and deep search.`
-    : `Read "${title}" online. Highlight passages for AI explanations and deep search.`;
-
-  return {
-    title,
-    description,
-    openGraph: {
-      title: author ? `${title} by ${author}` : title,
-      description,
-      type: "article",
-      images: [{ url: `/api/og?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author ?? "")}&type=book`, width: 1200, height: 630 }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: author ? `${title} by ${author}` : title,
-      description,
-      images: [`/api/og?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author ?? "")}&type=book`],
-    },
-  };
 }
 
 export default async function ReadBookPage({ params }: PageProps) {
