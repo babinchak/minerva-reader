@@ -90,8 +90,13 @@ export async function GET() {
           if (startingAfter) params.starting_after = startingAfter;
           const list = await stripe.subscriptions.list(params);
           for (const sub of list.data) {
+            // In Stripe SDK v20+ (API 2026+), current_period_end moved to items.data[0]
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const rawPeriodEnd = (sub as any).current_period_end as number | null;
+            const rawSub = sub as any;
+            const rawPeriodEnd: number | null =
+              (typeof rawSub.current_period_end === "number" ? rawSub.current_period_end : null)
+              ?? rawSub.items?.data?.[0]?.current_period_end
+              ?? null;
             const periodEnd = rawPeriodEnd
               ? new Date(rawPeriodEnd * 1000).toISOString()
               : null;

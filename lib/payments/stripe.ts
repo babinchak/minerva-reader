@@ -24,6 +24,21 @@ function unixToIso(unix: unknown): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/**
+ * Extract current_period_end from a Stripe subscription.
+ * In Stripe SDK v20+ (API 2026+), this moved from the subscription
+ * top level to subscription.items.data[0].current_period_end.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getSubscriptionPeriodEnd(sub: any): number | null {
+  // Try top-level first (older API versions)
+  if (typeof sub.current_period_end === "number") return sub.current_period_end;
+  // New location: items.data[0].current_period_end
+  const item = sub.items?.data?.[0];
+  if (item && typeof item.current_period_end === "number") return item.current_period_end;
+  return null;
+}
+
 export async function createStripeCheckoutSession(
   params: CheckoutSessionParams
 ): Promise<CheckoutSessionResult | null> {
@@ -140,12 +155,12 @@ export async function handleStripeWebhook(
 
       if (session.mode === "subscription" && session.subscription) {
         // Subscription checkout — upgrade to paid
-        const sub = (await stripe.subscriptions.retrieve(
+        const sub = await stripe.subscriptions.retrieve(
           session.subscription as string
-        )) as unknown as { id: string; status?: string; current_period_end: number; items: { data: { id: string; price: { id: string } }[] } };
+        );
         log("retrieved subscription", { subId: sub.id, status: sub.status });
 
-        const resetAt = unixToIso(sub.current_period_end) ?? (() => {
+        const resetAt = unixToIso(getSubscriptionPeriodEnd(sub)) ?? (() => {
           const d = new Date();
           d.setMonth(d.getMonth() + 1);
           return d.toISOString();
@@ -199,12 +214,12 @@ export async function handleStripeWebhook(
     }
 
     case "customer.subscription.created": {
-      const sub = event.data.object as Stripe.Subscription & { current_period_end?: number; items: { data: { id: string; price: { id: string } }[] } };
+      const sub = event.data.object as Stripe.Subscription;
       const userId = sub.metadata?.user_id;
       log("subscription created", { subId: sub.id, status: sub.status, hasUserId: !!userId });
       if (!userId || !["active", "trialing"].includes(sub.status)) break;
 
-      const resetAt = unixToIso(sub.current_period_end) ?? (() => {
+      const resetAt = unixToIso(getSubscriptionPeriodEnd(sub)) ?? (() => {
         const d = new Date();
         d.setMonth(d.getMonth() + 1);
         return d.toISOString();
@@ -230,12 +245,14 @@ export async function handleStripeWebhook(
 
     case "customer.subscription.updated":
     case "customer.subscription.deleted": {
-      const sub = event.data.object as Stripe.Subscription & { current_period_end?: number };
+      const sub = event.data.object as Stripe.Subscription;
       const userId = sub.metadata?.user_id;
+      const periodEnd = getSubscriptionPeriodEnd(sub);
       log("subscription event", {
         subId: sub.id,
         status: sub.status,
         hasUserId: !!userId,
+        periodEnd,
       });
       if (!userId) {
         log("→ SKIP: no user_id in subscription metadata");
@@ -248,6 +265,9 @@ export async function handleStripeWebhook(
         failedStatuses.includes(sub.status);
 
       if (shouldDowngrade) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
         await supabase
           .from("user_credits")
           .update({
@@ -255,12 +275,24 @@ export async function handleStripeWebhook(
             allowance_dollars: ALLOWANCE_DOLLARS_FREE_DAILY,
             included_balance: ALLOWANCE_DOLLARS_FREE_DAILY,
             stripe_subscription_id: null,
+            allowance_reset_at: tomorrow.toISOString(),
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", sub.id);
         log("→ DOWNGRADED to free", { subId: sub.id, reason: event.type === "customer.subscription.deleted" ? "deleted" : `status=${sub.status}` });
       } else if (["active", "trialing"].includes(sub.status)) {
-        const resetAt = unixToIso(sub.current_period_end);
+        const resetAt = unixToIso(periodEnd);
+
+        // Check if the billing period advanced — if so, reset included balance
+        const { data: current } = await supabase
+          .from("user_credits")
+          .select("allowance_reset_at")
+          .eq("stripe_subscription_id", sub.id)
+          .single();
+
+        const storedResetAt = current?.allowance_reset_at ?? null;
+        const periodAdvanced = resetAt && resetAt !== storedResetAt;
+
         const update: Record<string, unknown> = {
           allowance_dollars: ALLOWANCE_DOLLARS_PAID_MONTHLY,
           updated_at: new Date().toISOString(),
@@ -268,11 +300,18 @@ export async function handleStripeWebhook(
         if (resetAt) {
           update.allowance_reset_at = resetAt;
         }
+        if (periodAdvanced) {
+          update.included_balance = ALLOWANCE_DOLLARS_PAID_MONTHLY;
+          update.extra_usage_spent = 0;
+        }
         await supabase
           .from("user_credits")
           .update(update)
           .eq("stripe_subscription_id", sub.id);
-        log("→ updated allowance (kept paid)", { subId: sub.id, status: sub.status });
+        log(periodAdvanced
+          ? "→ RENEWED included balance (period advanced)"
+          : "→ updated allowance (kept paid)",
+          { subId: sub.id, status: sub.status, periodAdvanced, resetAt, storedResetAt });
       } else {
         log("→ SKIP: status not active/trialing/failed", { status: sub.status });
       }
@@ -280,14 +319,37 @@ export async function handleStripeWebhook(
     }
 
     case "invoice.paid": {
-      const invoice = event.data.object as Stripe.Invoice & { subscription?: string; billing_reason?: string };
-      log("invoice", { billing_reason: invoice.billing_reason, hasSubscription: !!invoice.subscription });
-      if (invoice.billing_reason === "subscription_cycle" && invoice.subscription) {
-        const sub = (await stripe.subscriptions.retrieve(
-          invoice.subscription
-        )) as unknown as { current_period_end: number; metadata?: { user_id?: string } };
-        const userId = sub.metadata?.user_id;
-        const resetAt = unixToIso(sub.current_period_end);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const invoice = event.data.object as any;
+      // Newer Stripe API versions moved subscription to parent.subscription_details
+      const subscriptionId: string | null =
+        (typeof invoice.subscription === "string" ? invoice.subscription : null)
+        ?? invoice.parent?.subscription_details?.subscription
+        ?? invoice.lines?.data?.[0]?.subscription
+        ?? null;
+      const billingReason: string | null =
+        invoice.billing_reason
+        ?? invoice.parent?.subscription_details?.billing_reason
+        ?? null;
+      log("invoice", { billingReason, subscriptionId: subscriptionId ?? "(none)" });
+      if (billingReason === "subscription_cycle" && subscriptionId) {
+        const sub = await stripe.subscriptions.retrieve(subscriptionId);
+        const periodEnd = getSubscriptionPeriodEnd(sub);
+        let userId = sub.metadata?.user_id ?? null;
+        const resetAt = unixToIso(periodEnd);
+        log("invoice.paid sub details", { userId, resetAt, periodEnd });
+
+        // Fallback: look up user by stripe_subscription_id if metadata missing
+        if (!userId) {
+          const { data: match } = await supabase
+            .from("user_credits")
+            .select("user_id")
+            .eq("stripe_subscription_id", subscriptionId)
+            .single();
+          userId = match?.user_id ?? null;
+          if (userId) log("→ resolved userId from DB fallback", { userId });
+        }
+
         if (userId && resetAt) {
           await supabase
             .from("user_credits")
@@ -300,6 +362,8 @@ export async function handleStripeWebhook(
             })
             .eq("user_id", userId);
           log("→ RENEWED included balance", { userId });
+        } else {
+          log("→ SKIP renewal: missing data", { userId, resetAt });
         }
       }
       break;
@@ -338,8 +402,8 @@ export async function getSubscriptionStatus(
       active: ["active", "trialing"].includes(sub.status),
       cancelAtPeriodEnd: sub.cancel_at_period_end,
       cancelAt: sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() :
-                sub.cancel_at_period_end && sub.current_period_end
-                  ? new Date(sub.current_period_end * 1000).toISOString()
+                sub.cancel_at_period_end && getSubscriptionPeriodEnd(sub)
+                  ? new Date(getSubscriptionPeriodEnd(sub)! * 1000).toISOString()
                   : null,
     };
   } catch {
@@ -372,8 +436,8 @@ export async function cancelSubscriptionAtPeriodEnd(
 
   return {
     success: true,
-    cancelAt: sub.current_period_end
-      ? new Date(sub.current_period_end * 1000).toISOString()
+    cancelAt: getSubscriptionPeriodEnd(sub)
+      ? new Date(getSubscriptionPeriodEnd(sub)! * 1000).toISOString()
       : undefined,
   };
 }
