@@ -62,7 +62,7 @@ export function MobileFilterSortSheet({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="fixed bottom-0 left-0 right-0 top-auto translate-x-0 translate-y-0 rounded-t-xl rounded-b-none max-w-none w-full p-0 data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-left-0 data-[state=closed]:slide-out-to-left-0 data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100"
+        variant="bottom-sheet"
         showCloseButton={false}
       >
         {/* Drag handle */}
