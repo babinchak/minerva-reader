@@ -30,7 +30,6 @@ import { getPdfLocalContextFromDocument } from "@/lib/pdf-position/local-context
 import { getEpubVisibleContext, getEpubVisibleContextWithPosition } from "@/lib/epub-visible-context";
 import { getEpubLocalContextAroundCurrentSelection } from "@/lib/book-position/local-context";
 import { resolveQuotePage, resolveQuoteReadingOrder } from "@/lib/resolve-quote-page";
-import { UpgradeCta } from "@/components/upgrade-cta";
 import {
   Dialog,
   DialogContent,
@@ -683,6 +682,7 @@ export function AIAgentPanel({
   }
   const [creditsExhaustedDialogOpen, setCreditsExhaustedDialogOpen] = useState(false);
   const [usageDeniedInfo, setUsageDeniedInfo] = useState<UsageDeniedInfo | null>(null);
+  const [upgradeCheckoutLoading, setUpgradeCheckoutLoading] = useState(false);
 
   useEffect(() => {
     refreshCredits();
@@ -2399,7 +2399,12 @@ export function AIAgentPanel({
                   : null;
                 switch (info.reason) {
                   case "included_exhausted_extra_disabled":
-                    return (
+                    return info.tier !== "paid" ? (
+                      <>
+                        You&apos;ve used all your free usage for today.
+                        {resetLine && <> {resetLine}</>}
+                      </>
+                    ) : (
                       <>
                         You&apos;ve used all your included usage and extra usage is disabled.
                         {resetLine && <> {resetLine}</>}
@@ -2428,7 +2433,32 @@ export function AIAgentPanel({
               })()}
             </DialogDescription>
           </DialogHeader>
-          {usageDeniedInfo?.tier !== "paid" && <UpgradeCta />}
+          {usageDeniedInfo?.tier !== "paid" && (
+            <Button
+              onClick={() => {
+                setUpgradeCheckoutLoading(true);
+                fetch("/api/stripe/checkout", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ mode: "subscription" }),
+                })
+                  .then((r) => r.json())
+                  .then((d) => { if (d.url) window.location.href = d.url; })
+                  .catch(() => setUpgradeCheckoutLoading(false));
+              }}
+              disabled={upgradeCheckoutLoading}
+              className="w-full"
+            >
+              {upgradeCheckoutLoading ? (
+                <>
+                  <Loader2 className="animate-spin h-4 w-4" />
+                  Redirecting...
+                </>
+              ) : (
+                "Subscribe to Pro"
+              )}
+            </Button>
+          )}
           {usageDeniedInfo?.tier === "paid" && (
             <div className="flex justify-end">
               <Button variant="outline" asChild>

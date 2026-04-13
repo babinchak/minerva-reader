@@ -27,8 +27,11 @@ export function UploadBookDialog({ iconOnly }: { iconOnly?: boolean } = {}) {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d) {
-          setIsPaid(d.tier === "paid");
-          setBalance((d.includedBalance ?? 0) + (d.extraUsageBalance ?? 0));
+          const paid = d.tier === "paid";
+          setIsPaid(paid);
+          setBalance(paid
+            ? (d.includedBalance ?? 0) + (d.extraUsageBalance ?? 0)
+            : (d.includedBalance ?? 0));
         }
       })
       .catch(() => {});

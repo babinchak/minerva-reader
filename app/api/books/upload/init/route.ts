@@ -67,8 +67,12 @@ export async function POST(request: NextRequest) {
   if (!admin) {
     // Check balance — user must have some credit to upload
     const credits = await getCredits(user.id);
-    const totalBalance = (credits?.includedBalance ?? 0) + (credits?.extraUsageBalance ?? 0);
-    if (totalBalance <= 0) {
+    const tier = credits?.tier ?? await getTier(user.id);
+    // Free users can only use included balance; extra usage is paid-only
+    const effectiveBalance = tier === "paid"
+      ? (credits?.includedBalance ?? 0) + (credits?.extraUsageBalance ?? 0)
+      : (credits?.includedBalance ?? 0);
+    if (effectiveBalance <= 0) {
       return NextResponse.json(
         {
           error: "Insufficient balance",
@@ -79,7 +83,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Check concurrent processing limit (tier-aware)
-    const tier = credits?.tier ?? await getTier(user.id);
     const maxConcurrent = maxConcurrentProcessing(tier);
     const inFlight = await countInFlightProcessing(user.id);
     if (inFlight >= maxConcurrent) {

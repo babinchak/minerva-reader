@@ -51,8 +51,8 @@ export function UpgradeCta() {
         <CardTitle>{tier === "paid" ? "Pro" : "Upgrade to Pro"}</CardTitle>
         <CardDescription>
           {tier === "paid"
-            ? "Unlimited uploads, best AI model, and included credits. Add extra usage balance anytime."
-            : "Unlimited uploads, best AI model, and more credits."}
+            ? "More monthly usage, bulk uploads, and extra usage balance."
+            : "More monthly usage and bulk uploads."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col sm:flex-row gap-3">

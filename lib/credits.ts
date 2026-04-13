@@ -234,7 +234,12 @@ export async function canMakeRequest(
 
   if (credits.includedBalance > 0) return { allowed: true, ...base };
 
-  // No included balance left — check extra usage
+  // Free users cannot use extra usage — only included balance
+  if (credits.tier !== "paid") {
+    return { allowed: false, reason: "included_exhausted_extra_disabled", ...base };
+  }
+
+  // No included balance left — check extra usage (paid only)
   if (credits.onDemandLimitType === "disabled") {
     return { allowed: false, reason: "included_exhausted_extra_disabled", ...base };
   }
