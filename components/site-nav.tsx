@@ -123,7 +123,7 @@ export function SiteNav({ rightSlot, showAdmin, userInfo }: SiteNavProps) {
   // Derive a page title from the current route for the mobile navbar.
   // Fundamental/marketing pages keep "Minerva Reader".
   const mobileTitle = (() => {
-    if (pathname === "/") return "Library";
+    if (pathname === "/" && userInfo) return "Library";
     if (pathname.startsWith("/browse")) return "Explore";
     if (pathname.startsWith("/admin")) return "Admin";
     if (pathname.startsWith("/settings")) return "Settings";
