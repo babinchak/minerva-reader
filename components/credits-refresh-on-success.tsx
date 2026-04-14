@@ -15,6 +15,18 @@ export function CreditsRefreshOnSuccess() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const search = window.location.search;
+    // Fire Google Ads conversion for new OAuth signups
+    if (search.includes("new_signup=true")) {
+      if (typeof window.gtag === "function") {
+        window.gtag("event", "conversion", {
+          send_to: `${process.env.NEXT_PUBLIC_GOOGLE_ADS_ID}/${process.env.NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL}`,
+        });
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.delete("new_signup");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    }
+
     if (!search.includes("success=1")) return;
 
     if (search.includes("upgrade=1")) {

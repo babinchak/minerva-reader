@@ -10,6 +10,11 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      const { data: { user } } = await supabase.auth.getUser();
+      const isNewUser = user && new Date(user.created_at).getTime() > Date.now() - 60000;
+      if (isNewUser) {
+        return NextResponse.redirect(`${origin}/?new_signup=true`);
+      }
       return NextResponse.redirect(`${origin}${next}`);
     }
   }
