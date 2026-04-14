@@ -74,12 +74,8 @@ function renderParagraphWithSelection(
           selectionActive ? "shadow-[0_0_0_1px_rgba(245,158,11,0.24)]" : ""
         )}
         style={{
-          backgroundImage:
-            "linear-gradient(180deg, rgba(250,204,21,0.14) 0%, rgba(250,204,21,0.72) 100%)",
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "0 100%",
-          backgroundSize: selectionActive ? "100% 100%" : "0% 100%",
-          transition: "background-size 900ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease",
+          backgroundColor: selectionActive ? "rgba(250,204,21,0.38)" : "transparent",
+          transition: "background-color 900ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease",
         }}
       >
         <span
@@ -410,7 +406,6 @@ export function HeroReplay() {
         ref={demoRef}
         className="relative h-[48rem] overflow-hidden rounded-[24px] border border-border/70 bg-card/95 shadow-xl backdrop-blur-sm md:h-[34rem]"
       >
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_24%)]" />
           <div className="relative grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1.5fr)] md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:grid-rows-1">
             <div className="flex min-h-0 min-w-0 flex-col">
               <div className="border-b border-border/60 bg-muted/35 px-[4.5%] py-[3.2%]">
@@ -477,8 +472,7 @@ export function HeroReplay() {
               </div>
             </div>
 
-            <div className="relative flex min-h-0 min-w-0 flex-col border-t border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%)] md:border-t-0 md:border-l">
-              <div className="absolute inset-y-[5%] left-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
+            <div className="relative flex min-h-0 min-w-0 flex-col border-t border-border/60 md:border-t-0 md:border-l">
               <div className="flex items-center justify-between border-b border-border/60 px-[6%] py-[4.2%]">
                 <div>
                   <div className="text-[0.62rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
