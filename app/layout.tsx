@@ -85,6 +85,13 @@ export default function RootLayout({
     <html lang="en" className={satoshi.variable} suppressHydrationWarning>
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
+        {/* Google Ads gtag.js */}
+        <script async src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GOOGLE_ADS_ID}`} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${process.env.NEXT_PUBLIC_GOOGLE_ADS_ID}');`,
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var s=localStorage.getItem("minerva-theme-variants");if(s){try{var p=JSON.parse(s);var l=p.light||"minerva";var d=p.dark||"minerva";document.documentElement.setAttribute("data-light-theme",l);document.documentElement.setAttribute("data-dark-theme",d);}catch(e){}}})();`,

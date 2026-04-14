@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MinervaLogo } from "@/components/minerva-logo";
+import { SignUpConversion } from "@/components/sign-up-conversion";
 
 export const metadata: Metadata = {
   title: "Check Your Email",
@@ -16,6 +17,7 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
+      <SignUpConversion />
       <div className="w-full max-w-lg flex flex-col items-center gap-6">
         <Link href="/" className="flex items-center gap-2">
           <MinervaLogo size={48} />
