@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff, ExternalLink } from "lucide-react";
+import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff, ExternalLink, BookOpenText } from "lucide-react";
 import { StreamingMarkdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
 import { ToolCallSteps, formatToolLabel, getQueryPreview, type MessageToolCall } from "@/components/tool-call-steps";
 import { createClient } from "@/lib/supabase/client";
@@ -2341,19 +2341,22 @@ export function AIAgentPanel({
               </span>
             </div>
           )}
-          {!showMessages && trimmedSelectedText && (
+          {!showMessages && (
             <div className="mb-2">
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() => handleExplain("selection")}
+                onClick={() => handleExplain(trimmedSelectedText ? "selection" : "page")}
                 disabled={isLoading}
                 className="w-full justify-center"
-                aria-label="Explain selection"
+                aria-label={trimmedSelectedText ? "Explain selection" : "Explain page"}
               >
-                <Highlighter className="h-4 w-4 mr-2" />
-                Explain selection
+                {trimmedSelectedText ? (
+                  <><Highlighter className="h-4 w-4 mr-2" />Explain selection</>
+                ) : (
+                  <><BookOpenText className="h-4 w-4 mr-2" />Explain page</>
+                )}
               </Button>
             </div>
           )}
