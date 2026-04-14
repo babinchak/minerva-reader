@@ -181,7 +181,7 @@ export function LandingSearch({
 
     // Redirect to login with next= pointing to collection page
     const next = `/browse/${encodeURIComponent(selectedSlug)}?prefill=${encodeURIComponent(q)}&openChat=1`;
-    window.location.href = `/auth/login?next=${encodeURIComponent(next)}`;
+    window.location.href = `/auth/sign-up?next=${encodeURIComponent(next)}`;
   }, [inputValue, selectedSlug]);
 
   const handleKeyDown = useCallback(
@@ -218,6 +218,7 @@ export function LandingSearch({
             onFocus={() => setIsFocused(true)}
             onKeyDown={handleKeyDown}
             placeholder="Ask anything across 150,000+ passages and 300+ books..."
+            autoComplete="off"
             className="flex-1 bg-transparent px-3 py-4 text-base text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
           {inputValue.trim() && (
@@ -375,6 +376,7 @@ export function LandingSearch({
                     }
                   }}
                   placeholder="Ask a follow-up..."
+                  autoComplete="off"
                   className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
                 <button
