@@ -29,7 +29,15 @@ export function CreditsRefreshOnSuccess() {
 
     if (!search.includes("success=1")) return;
 
+    // Fire Google Ads conversion for subscription purchase
     if (search.includes("upgrade=1")) {
+      if (typeof window.gtag === "function") {
+        window.gtag("event", "conversion", {
+          send_to: `${process.env.NEXT_PUBLIC_GOOGLE_ADS_ID}/${process.env.NEXT_PUBLIC_GOOGLE_ADS_PURCHASE_CONVERSION_LABEL}`,
+          value: 10.0,
+          currency: "USD",
+        });
+      }
       setMessage("Welcome to Pro!");
     } else if (search.includes("topup=1")) {
       setMessage("Credits added!");
