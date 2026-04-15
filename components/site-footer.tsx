@@ -16,7 +16,7 @@ export function SiteFooter({ className }: { className?: string }) {
   return (
     <footer
       className={cn(
-        "w-full flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-border py-8 text-xs text-muted-foreground",
+        "w-full flex flex-col items-center gap-4 border-t border-border py-8 text-xs text-muted-foreground",
         className
       )}
     >
@@ -24,30 +24,32 @@ export function SiteFooter({ className }: { className?: string }) {
         <MinervaLogo size={20} />
         Minerva Reader
       </Link>
-      <Link
-        href="/privacy"
-        className="hover:text-foreground underline-offset-4 hover:underline"
-      >
-        Privacy Policy
-      </Link>
-      <Link
-        href="/terms"
-        className="hover:text-foreground underline-offset-4 hover:underline"
-      >
-        Terms of Service
-      </Link>
-      <Link
-        href="/how-it-works"
-        className="hover:text-foreground underline-offset-4 hover:underline"
-      >
-        How It Works
-      </Link>
-      <FeedbackDialog>
-        <button className="hover:text-foreground underline-offset-4 hover:underline">
-          Feedback
-        </button>
-      </FeedbackDialog>
-      <span className="text-muted-foreground/70">
+      <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+        <Link
+          href="/privacy"
+          className="hover:text-foreground underline-offset-4 hover:underline"
+        >
+          Privacy Policy
+        </Link>
+        <Link
+          href="/terms"
+          className="hover:text-foreground underline-offset-4 hover:underline"
+        >
+          Terms of Service
+        </Link>
+        <Link
+          href="/how-it-works"
+          className="hover:text-foreground underline-offset-4 hover:underline"
+        >
+          How It Works
+        </Link>
+        <FeedbackDialog>
+          <button className="hover:text-foreground underline-offset-4 hover:underline">
+            Feedback
+          </button>
+        </FeedbackDialog>
+      </div>
+      <span className="text-muted-foreground/70 text-center">
         Thanks to{" "}
         <a href="https://www.gutenberg.org" target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline-offset-4 hover:underline">Project Gutenberg</a>
         {" & "}

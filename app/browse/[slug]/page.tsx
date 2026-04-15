@@ -198,7 +198,7 @@ export default async function BrowseCollectionPage({ params, searchParams }: Pag
           </div>
         </div>
 
-        <SiteFooter className="py-16" />
+        <SiteFooter className="py-8 sm:py-16" />
       </div>
     </main>
   );

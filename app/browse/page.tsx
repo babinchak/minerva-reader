@@ -107,7 +107,7 @@ export default async function BrowsePage() {
           )}
         </div>
 
-        <SiteFooter className="py-16" />
+        <SiteFooter className="py-8 sm:py-16" />
       </div>
     </main>
   );
