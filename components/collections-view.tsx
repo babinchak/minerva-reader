@@ -42,6 +42,8 @@ interface CollectionsViewProps {
   onEditCollection: (collection: CollectionSummary) => void;
   onOpenCollectionAI: (collectionId: string, bookIds: string[]) => void;
   onAddBooksToCollection: (collection: CollectionSummary) => void;
+  expandedCollectionId: string | null;
+  onExpandedCollectionChange: (id: string | null) => void;
 }
 
 /** How many BookCards to show per collection in the overview. */
@@ -60,8 +62,9 @@ export function CollectionsView({
   onEditCollection,
   onOpenCollectionAI,
   onAddBooksToCollection,
+  expandedCollectionId,
+  onExpandedCollectionChange: setExpandedCollectionId,
 }: CollectionsViewProps) {
-  const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 

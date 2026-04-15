@@ -62,10 +62,71 @@ export function LibraryWithBooks({
   initialFilter?: LibraryBookFilter;
 }) {
   const router = useRouter();
+
+  // Read initial view state from URL so back button restores it
+  const readViewFromUrl = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      viewMode: (params.get("view") === "collections" ? "collections" : "library") as "library" | "collections",
+      expandedCollectionId: params.get("collection") ?? null,
+    };
+  }, []);
+
+  const [viewMode, setViewModeState] = useState<"library" | "collections">(() => {
+    if (typeof window === "undefined") return "library";
+    return readViewFromUrl().viewMode;
+  });
+  const [expandedCollectionId, setExpandedCollectionIdState] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return readViewFromUrl().expandedCollectionId;
+  });
+
+  // Build URL string from view state
+  const buildUrl = useCallback((mode: "library" | "collections", collectionId: string | null) => {
+    const params = new URLSearchParams(window.location.search);
+    if (mode === "collections") {
+      params.set("view", "collections");
+    } else {
+      params.delete("view");
+    }
+    if (collectionId) {
+      params.set("collection", collectionId);
+    } else {
+      params.delete("collection");
+    }
+    const qs = params.toString();
+    return qs ? `/?${qs}` : "/";
+  }, []);
+
+  const setViewMode = useCallback((mode: "library" | "collections") => {
+    setViewModeState(mode);
+    setExpandedCollectionIdState(null);
+    window.history.pushState(null, "", buildUrl(mode, null));
+  }, [buildUrl]);
+
+  const setExpandedCollectionId = useCallback((id: string | null) => {
+    setExpandedCollectionIdState(id);
+    if (id) {
+      window.history.pushState(null, "", buildUrl("collections", id));
+    } else {
+      window.history.pushState(null, "", buildUrl("collections", null));
+    }
+  }, [buildUrl]);
+
+  // Restore state on back/forward
+  useEffect(() => {
+    const handlePopState = () => {
+      const { viewMode: vm, expandedCollectionId: ecId } = readViewFromUrl();
+      setViewModeState(vm);
+      setExpandedCollectionIdState(ecId);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [readViewFromUrl]);
+
   const [sort, setSort] = useState<LibrarySortType>(initialSort);
   const [dir, setDir] = useState<LibrarySortDir>(initialDir);
   const [filter, setFilter] = useState<LibraryBookFilter>(initialFilter);
-  const [viewMode, setViewMode] = useState<"library" | "collections">("library");
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [aiMobileOpen, setAiMobileOpen] = useState(false);
@@ -380,6 +441,8 @@ export function LibraryWithBooks({
           onEditCollection={setEditCollection}
           onOpenCollectionAI={handleOpenCollectionAI}
           onAddBooksToCollection={setAddBooksCollection}
+          expandedCollectionId={expandedCollectionId}
+          onExpandedCollectionChange={setExpandedCollectionId}
         />
       )}
 
