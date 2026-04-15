@@ -1978,60 +1978,70 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
                   </Button>
                 </div>
 
-                <div className="flex items-center justify-center gap-2 min-w-0 justify-self-center">
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 border-border bg-background"
+                <div className="flex items-center justify-center gap-1 min-w-0 justify-self-center">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 border-border bg-background"
+                    onClick={() => {
+                      hapticLight();
+                      zoomBy(-ZOOM_STEP);
+                    }}
+                    aria-label="Zoom out"
+                    title="Zoom out"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 border-border bg-background"
+                    onClick={() => {
+                      hapticLight();
+                      zoomBy(ZOOM_STEP);
+                    }}
+                    aria-label="Zoom in"
+                    title="Zoom in"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                  {isEditingPage ? (
+                    <Input
+                      value={pageInput}
+                      onChange={(e) => setPageInput(e.target.value)}
+                      onFocus={() => setIsEditingPage(true)}
+                      onBlur={() => {
+                        setIsEditingPage(false);
+                        commitPageInput();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          (e.currentTarget as HTMLInputElement).blur();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          setPageInput(String(currentPage));
+                          (e.currentTarget as HTMLInputElement).blur();
+                        }
+                      }}
+                      inputMode="numeric"
+                      autoFocus
+                      aria-label="Current page"
+                      className="h-8 w-16 text-center"
+                    />
+                  ) : (
+                    <button
+                      type="button"
                       onClick={() => {
                         hapticLight();
-                        zoomBy(-ZOOM_STEP);
+                        setIsEditingPage(true);
                       }}
-                      aria-label="Zoom out"
-                      title="Zoom out"
+                      className="h-8 px-3 rounded-md border border-border bg-background text-sm tabular-nums select-none"
+                      aria-label="Go to page"
                     >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 border-border bg-background"
-                      onClick={() => {
-                        hapticLight();
-                        zoomBy(ZOOM_STEP);
-                      }}
-                      aria-label="Zoom in"
-                      title="Zoom in"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <Input
-                    value={pageInput}
-                    onChange={(e) => setPageInput(e.target.value)}
-                    onFocus={() => setIsEditingPage(true)}
-                    onBlur={() => {
-                      setIsEditingPage(false);
-                      commitPageInput();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        (e.currentTarget as HTMLInputElement).blur();
-                      } else if (e.key === "Escape") {
-                        e.preventDefault();
-                        setPageInput(String(currentPage));
-                        (e.currentTarget as HTMLInputElement).blur();
-                      }
-                    }}
-                    inputMode="numeric"
-                    aria-label="Current page"
-                    className="h-8 w-16 text-center"
-                  />
-                  <span className="text-sm text-muted-foreground select-none">
-                    / {pdfDoc.numPages}
-                  </span>
+                      {currentPage}/{pdfDoc.numPages}
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 justify-self-end">
