@@ -62,6 +62,8 @@ export async function updateSession(request: NextRequest) {
     // Legal pages: must be readable before sign-up for informed consent
     request.nextUrl.pathname !== "/privacy" &&
     request.nextUrl.pathname !== "/terms" &&
+    // Public informational page
+    request.nextUrl.pathname !== "/how-it-works" &&
     // Thorium EPUB reader i18n translations (needed for anonymous curated book reading)
     !request.nextUrl.pathname.startsWith("/locales/") &&
     // Chat APIs (enforce access per-request; anonymous allowed for curated books)

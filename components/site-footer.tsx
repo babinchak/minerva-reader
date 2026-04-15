@@ -36,6 +36,12 @@ export function SiteFooter({ className }: { className?: string }) {
       >
         Terms of Service
       </Link>
+      <Link
+        href="/how-it-works"
+        className="hover:text-foreground underline-offset-4 hover:underline"
+      >
+        How It Works
+      </Link>
       <FeedbackDialog>
         <button className="hover:text-foreground underline-offset-4 hover:underline">
           Feedback

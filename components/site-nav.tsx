@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, X, Library, Home, Shield, Settings, LogOut, Sun, Moon, Laptop } from "lucide-react";
+import { Menu, X, Library, Home, Shield, Settings, LogOut, Sun, Moon, Laptop, BookOpen } from "lucide-react";
 import { useIsMobile } from "@/lib/use-media-query";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ const navLinks = [
 ] as const;
 
 const adminLink = { href: "/admin", label: "Admin", icon: Shield } as const;
+const howItWorksLink = { href: "/how-it-works", label: "How It Works", icon: BookOpen } as const;
 
 export function SiteNav({ rightSlot, showAdmin, userInfo }: SiteNavProps) {
   const isMobile = useIsMobile();
@@ -100,6 +101,19 @@ export function SiteNav({ rightSlot, showAdmin, userInfo }: SiteNavProps) {
                 {label}
               </Link>
             ))}
+            {!userInfo && (
+              <Link
+                href={howItWorksLink.href}
+                className={cn(
+                  "transition-colors",
+                  pathname.startsWith(howItWorksLink.href)
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {howItWorksLink.label}
+              </Link>
+            )}
             {showAdmin && (
               <Link
                 href="/admin"
@@ -271,6 +285,21 @@ export function SiteNav({ rightSlot, showAdmin, userInfo }: SiteNavProps) {
               >
                 <adminLink.icon className="h-5 w-5 shrink-0" />
                 {adminLink.label}
+              </Link>
+            )}
+            {!userInfo && (
+              <Link
+                href={howItWorksLink.href}
+                onClick={closeDrawer}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-base font-medium transition-colors",
+                  pathname.startsWith(howItWorksLink.href)
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                )}
+              >
+                <howItWorksLink.icon className="h-5 w-5 shrink-0" />
+                {howItWorksLink.label}
               </Link>
             )}
 
