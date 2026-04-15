@@ -6,7 +6,6 @@ import { ServerSiteNav } from "@/components/server-site-nav";
 import { hasEnvVars } from "@/lib/utils";
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { Suspense } from "react";
-import { CollectionCard } from "@/components/collection-card";
 import { BrowseCollectionsGrid } from "@/components/browse-collections-grid";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -48,9 +47,9 @@ export default async function BrowsePage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const collectionIds = (collections ?? []).map((c) => c.id);
 
-  // Fetch book IDs per curated collection for AI (only when logged in)
+  // Fetch book IDs per curated collection for AI
   let bookIdsByCollection: Record<string, string[]> = {};
-  if (user && collectionIds.length > 0) {
+  if (collectionIds.length > 0) {
     const { data: allRows } = await supabase
       .from("curated_collection_books")
       .select("curated_collection_id, book_id")
@@ -96,34 +95,7 @@ export default async function BrowsePage() {
           ) : (
             <div className="w-full max-w-7xl space-y-6">
               {collectionCards.length > 0 ? (
-                user ? (
-                  <BrowseCollectionsGrid collections={collectionCards} />
-                ) : (
-                  <>
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
-                          Curated Library
-                        </h1>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Explore curated collections of public domain books you can read and discuss with AI.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                      {collectionCards.map((c) => (
-                        <CollectionCard
-                          key={c.id}
-                          name={c.name}
-                          description={c.description}
-                          slug={c.slug}
-                          coverUrl={c.coverUrl}
-                          bookCount={c.bookCount}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )
+                <BrowseCollectionsGrid collections={collectionCards} />
               ) : (
                 <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-12 text-center">
                   <p className="text-sm text-muted-foreground">

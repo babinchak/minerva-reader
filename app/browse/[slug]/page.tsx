@@ -172,7 +172,7 @@ export default async function BrowseCollectionPage({ params, searchParams }: Pag
                   </p>
                 )}
               </div>
-              {user && books.length > 0 && (
+              {books.length > 0 && (
                 <CuratedCollectionAI
                   collectionId={collection.id}
                   collectionName={collection.name}

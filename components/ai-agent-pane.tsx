@@ -1096,6 +1096,11 @@ export function AIAgentPanel({
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
+    // Anonymous users in library/browse mode: redirect to sign up
+    if (authChecked && !userId && isLibraryMode) {
+      window.location.href = "/auth/sign-up";
+      return;
+    }
     if (sendingRef.current) return;
     sendingRef.current = true;
     hapticLight();
@@ -2170,6 +2175,16 @@ export function AIAgentPanel({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Anonymous sign-up banner for library/browse mode */}
+      {authChecked && !userId && isLibraryMode && (
+        <div className="px-4 py-3 border-b border-border bg-blue-50 dark:bg-blue-950/30">
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            <a href="/auth/sign-up" className="font-medium underline hover:text-blue-900 dark:hover:text-blue-100">Sign up</a>
+            {" "}to ask questions across this collection with AI.
+          </p>
         </div>
       )}
 
