@@ -14,6 +14,7 @@ Usage:
 import argparse
 import asyncio
 import base64
+import mimetypes
 import os
 import sys
 import time
@@ -86,11 +87,19 @@ async def generate_one(
         print(f"  [{index}/{total}] Generating...", flush=True)
         start = time.time()
         if ref_images:
-            images = [open(p, "rb") for p in ref_images]
+            mime_map = {".webp": "image/webp", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+            opened = []
+            tuples = []
+            for p in ref_images:
+                ext = Path(p).suffix.lower()
+                mime = mime_map.get(ext) or mimetypes.guess_type(p)[0] or "image/png"
+                f = open(p, "rb")
+                opened.append(f)
+                tuples.append((Path(p).name, f.read(), mime))
             try:
-                result = await client.images.edit(image=images, **kwargs)
+                result = await client.images.edit(image=tuples, **kwargs)
             finally:
-                for f in images:
+                for f in opened:
                     f.close()
         else:
             result = await client.images.generate(**kwargs)
