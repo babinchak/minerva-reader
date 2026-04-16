@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
@@ -114,7 +115,9 @@ export default function RootLayout({
           <ThemeVariantsProvider>
             <PwaRegister />
             <MobileConsoleMirror />
-            <CreditsRefreshOnSuccess />
+            <Suspense>
+              <CreditsRefreshOnSuccess />
+            </Suspense>
             <ScrollLockRepair />
             {children}
             <Analytics />

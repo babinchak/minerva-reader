@@ -1,22 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CREDITS_REFRESH_EVENT } from "@/lib/credits-refresh";
 import { CheckCircle2, X } from "lucide-react";
 
-/**
- * When user returns from Stripe with ?success=1, dispatch refresh events
- * so credits components refetch (webhook may still be processing).
- * Also shows a confirmation banner.
- */
 export function CreditsRefreshOnSuccess() {
   const [message, setMessage] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const search = window.location.search;
-    // Fire Google Ads conversion for new OAuth signups
-    if (search.includes("new_signup=true")) {
+
+    if (searchParams.has("new_signup")) {
       if (typeof window.gtag === "function") {
         window.gtag("event", "conversion", {
           send_to: `${process.env.NEXT_PUBLIC_GOOGLE_ADS_ID}/${process.env.NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL}`,
@@ -27,10 +23,10 @@ export function CreditsRefreshOnSuccess() {
       window.history.replaceState({}, "", url.pathname + url.search);
     }
 
-    if (!search.includes("success=1")) return;
+    if (!searchParams.has("success")) return;
 
     // Fire Google Ads conversion for subscription purchase
-    if (search.includes("upgrade=1")) {
+    if (searchParams.has("upgrade")) {
       if (typeof window.gtag === "function") {
         window.gtag("event", "conversion", {
           send_to: `${process.env.NEXT_PUBLIC_GOOGLE_ADS_ID}/${process.env.NEXT_PUBLIC_GOOGLE_ADS_PURCHASE_CONVERSION_LABEL}`,
@@ -39,7 +35,7 @@ export function CreditsRefreshOnSuccess() {
         });
       }
       setMessage("Welcome to Pro!");
-    } else if (search.includes("topup=1")) {
+    } else if (searchParams.has("topup")) {
       setMessage("Credits added!");
     }
 
@@ -58,7 +54,7 @@ export function CreditsRefreshOnSuccess() {
     window.history.replaceState({}, "", url.pathname + url.search);
 
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [searchParams]);
 
   if (!message) return null;
 
