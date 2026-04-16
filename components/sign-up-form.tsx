@@ -62,9 +62,6 @@ export function SignUpForm({
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-        },
       });
       if (error) throw error;
       if (typeof window !== "undefined" && typeof window.gtag === "function") {
@@ -72,7 +69,7 @@ export function SignUpForm({
           send_to: `${process.env.NEXT_PUBLIC_GOOGLE_ADS_ID}/${process.env.NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL}`,
         });
       }
-      router.push("/auth/sign-up-success");
+      router.push(`/auth/sign-up-success?email=${encodeURIComponent(email)}`);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {

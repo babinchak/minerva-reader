@@ -1,17 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Suspense } from "react";
 import { MinervaLogo } from "@/components/minerva-logo";
 import { SignUpConversion } from "@/components/sign-up-conversion";
+import { VerifyOtpForm } from "@/components/verify-otp-form";
 
 export const metadata: Metadata = {
-  title: "Check Your Email",
+  title: "Verify Your Email",
 };
 
 export default function Page() {
@@ -23,22 +18,9 @@ export default function Page() {
           <MinervaLogo size={48} />
           <span className="text-xl font-semibold text-foreground">Minerva Reader</span>
         </Link>
-        <div className="flex flex-col gap-6 w-full">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">
-                Thank you for signing up!
-              </CardTitle>
-              <CardDescription>Check your email to confirm</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                You&apos;ve successfully signed up. Please check your email to
-                confirm your account before signing in.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <Suspense>
+          <VerifyOtpForm />
+        </Suspense>
       </div>
     </div>
   );
