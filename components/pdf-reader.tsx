@@ -645,8 +645,11 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
 
   const handleNavigateToRef = useCallback(
     (ref: { page?: number; readingOrderIndex?: number; quotedText?: string }) => {
-      console.group("[NAV_REF] handleNavigateToRef");
-      console.log("page:", ref.page, "quotedText:", ref.quotedText);
+      const navDebug = debugEnabledRef.current;
+      const navLog = (...args: unknown[]) => { if (navDebug) console.log("[NAV_REF]", ...args); };
+      const navWarn = (...args: unknown[]) => { if (navDebug) console.warn("[NAV_REF]", ...args); };
+      if (navDebug) console.group("[NAV_REF] handleNavigateToRef");
+      navLog("page:", ref.page, "quotedText:", ref.quotedText);
 
       // Save reading anchor before first ref jump
       if (!readingAnchor && ref.page != null) {
@@ -669,16 +672,16 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
         .replace(/[""\u201C\u201D]+$/, "")
         .trim();
 
-      console.log("cleanQuote:", cleanQuote);
+      navLog("cleanQuote:", cleanQuote);
 
       if (!cleanQuote || !ref.page) {
-        console.warn("Aborting: no cleanQuote or no page", { cleanQuote, page: ref.page });
-        console.groupEnd();
+        navWarn("Aborting: no cleanQuote or no page", { cleanQuote, page: ref.page });
+        if (navDebug) console.groupEnd();
         return;
       }
 
       // Navigate to the target page
-      console.log("Calling goToPage:", ref.page);
+      navLog("Calling goToPage:", ref.page);
       goToPageRef.current(ref.page);
 
       // Poll for the text layer to render (async), then find and highlight text
@@ -691,12 +694,12 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
         // Find spans for this page number anywhere in the viewer
         const selector = `.pdfViewer [data-page-number="${ref.page}"][data-item-index]`;
         const allSpans = document.querySelectorAll<HTMLSpanElement>(selector);
-        console.log(`[NAV_REF] tryHighlight attempt ${attempt}/${maxAttempts}: selector="${selector}", spans found: ${allSpans.length}`);
+        navLog(`tryHighlight attempt ${attempt}/${maxAttempts}: selector="${selector}", spans found: ${allSpans.length}`);
         if (allSpans.length === 0) {
           if (attempt < maxAttempts) {
             pollTimer = setTimeout(tryHighlight, 100);
           } else {
-            console.warn("[NAV_REF] Gave up polling — no spans found after", maxAttempts, "attempts");
+            navWarn("Gave up polling — no spans found after", maxAttempts, "attempts");
           }
           return;
         }
@@ -714,8 +717,8 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
           spanOffsets.push({ span, start, end: flatText.length });
         }
 
-        console.log("[NAV_REF] flatText length:", flatText.length);
-        console.log("[NAV_REF] flatText preview (first 500):", flatText.slice(0, 500));
+        navLog("flatText length:", flatText.length);
+        navLog("flatText preview (first 500):", flatText.slice(0, 500));
 
         // Normalize for comparison: collapse whitespace, standardize quotes/ligatures
         const normalizeTypography = (s: string) =>
@@ -733,8 +736,8 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
         const normalizedFlat = normalizeTypography(flatText);
         const normalizedQuote = normalizeTypography(cleanQuote!);
 
-        console.log("[NAV_REF] normalizedFlat length:", normalizedFlat.length);
-        console.log("[NAV_REF] normalizedQuote:", normalizedQuote);
+        navLog("normalizedFlat length:", normalizedFlat.length);
+        navLog("normalizedQuote:", normalizedQuote);
 
         // Build a mapping from normalizedFlat index → original flatText index.
         // Characters that expand during normalization (ligatures, ellipsis) produce
@@ -774,7 +777,7 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
 
         // Try case-insensitive match
         let matchIdx = normalizedFlat.toLowerCase().indexOf(normalizedQuote.toLowerCase());
-        console.log("[NAV_REF] matchIdx (case-insensitive):", matchIdx);
+        navLog("matchIdx (case-insensitive):", matchIdx);
 
         // Fallback: strip ALL spaces from both and match, then map back.
         // PDF spans often concatenate without spaces between them (e.g. "Muggle,he'd").
@@ -783,7 +786,7 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
           const strippedFlat = stripSpaces(normalizedFlat.toLowerCase());
           const strippedQuote = stripSpaces(normalizedQuote.toLowerCase());
           const strippedIdx = strippedFlat.indexOf(strippedQuote);
-          console.log("[NAV_REF] spaceless matchIdx:", strippedIdx);
+          navLog("spaceless matchIdx:", strippedIdx);
 
           if (strippedIdx >= 0) {
             // Map stripped index back to normalizedFlat index
@@ -805,7 +808,7 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
 
             const origStart = normToOrigMap[normStartIdx] ?? 0;
             const origEnd = (normToOrigMap[normEndIdx - 1] ?? origStart) + 1;
-            console.log("[NAV_REF] spaceless match → origStart:", origStart, "origEnd:", origEnd);
+            navLog("spaceless match → origStart:", origStart, "origEnd:", origEnd);
             highlightRange(origStart, origEnd);
             return;
           }
@@ -845,13 +848,13 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
             const partialQuote = alphaQuote.slice(0, 40);
             alphaIdx = alphaFlat.indexOf(partialQuote);
             usedAlphaLen = partialQuote.length;
-            console.log("[NAV_REF] partial alpha matchIdx:", alphaIdx, "(query:", partialQuote, ")");
+            navLog("partial alpha matchIdx:", alphaIdx, "(query:", partialQuote, ")");
           } else {
-            console.log("[NAV_REF] alpha-only matchIdx:", alphaIdx);
+            navLog("alpha-only matchIdx:", alphaIdx);
           }
 
           if (alphaIdx >= 0) {
-            console.log("[NAV_REF] alpha match → alphaIdx:", alphaIdx, "len:", usedAlphaLen);
+            navLog("alpha match → alphaIdx:", alphaIdx, "len:", usedAlphaLen);
             highlightFromAlpha(alphaIdx, usedAlphaLen);
             return;
           }
@@ -869,7 +872,7 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
               const alphaFrag = alphaOnly(frag);
               const fragIdx = alphaFlat.indexOf(alphaFrag);
               if (fragIdx >= 0) {
-                console.log("[NAV_REF] ellipsis fragment match:", frag.slice(0, 40));
+                navLog("ellipsis fragment match:", frag.slice(0, 40));
                 highlightFromAlpha(fragIdx, alphaFrag.length);
                 return;
               }
@@ -886,15 +889,15 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
               const quotePrefix = alphaQuote.slice(0, len);
               if (alphaFlat.endsWith(quotePrefix)) {
                 const aIdx = alphaFlat.length - len;
-                console.log("[NAV_REF] end-of-page suffix match, overlap:", len);
+                navLog("end-of-page suffix match, overlap:", len);
                 highlightFromAlpha(aIdx, len);
                 return;
               }
             }
           }
 
-          console.warn("[NAV_REF] Quote NOT found on page", ref.page, "— no highlight");
-          console.log("[NAV_REF] Full normalizedFlat:", normalizedFlat);
+          navWarn("Quote NOT found on page", ref.page, "— no highlight");
+          navLog("Full normalizedFlat:", normalizedFlat);
           return;
         }
 
@@ -902,7 +905,7 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
         const origStart = normToOrigMap[matchIdx] ?? 0;
         const normEnd = matchIdx + normalizedQuote.length - 1;
         const origEnd = (normToOrigMap[normEnd] ?? origStart) + 1;
-        console.log("[NAV_REF] origStart:", origStart, "origEnd:", origEnd);
+        navLog("origStart:", origStart, "origEnd:", origEnd);
 
         highlightRange(origStart, origEnd);
 
@@ -934,12 +937,12 @@ const [pdfOutline, setPdfOutline] = useState<Array<{ title: string; dest?: unkno
             span.appendChild(frag);
           }
 
-          console.log("[NAV_REF] marks created:", marks.length);
+          navLog("marks created:", marks.length);
 
           // Center the first mark in the scroll container
           if (marks[0]) {
             const scroller = scrollRef.current;
-            console.log("[NAV_REF] scrollRef available:", !!scroller);
+            navLog("scrollRef available:", !!scroller);
             if (scroller) {
               centerElementInScroller(scroller, marks[0]);
             } else {

@@ -37,6 +37,27 @@ import { ReadPageSkeleton } from "@/components/read-page-skeleton";
 import { ReadingAnchorPill } from "@/components/reading-anchor-pill";
 import { MinervaLogo } from "@/components/minerva-logo";
 
+function isEpubDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  if (process.env.NODE_ENV !== "production") return true;
+  try {
+    const query = new URLSearchParams(window.location.search);
+    if (query.has("epubDebug")) return true;
+    if (window.localStorage.getItem("epubDebug") === "1") return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function epubLog(...args: unknown[]): void {
+  if (isEpubDebugEnabled()) console.log("[EPUB_NAV]", ...args);
+}
+
+function epubWarn(...args: unknown[]): void {
+  if (isEpubDebugEnabled()) console.warn("[EPUB_NAV]", ...args);
+}
+
 /** Fallback when document theme can't be read (SSR, etc.) */
 const FALLBACK_LIGHT = {
   background: "hsl(35, 25%, 97%)",
@@ -1146,7 +1167,7 @@ function EpubRefNavigator({
     const readingOrder = rawManifest.readingOrder ?? [];
     const targetItem = readingOrder[navRef.readingOrderIndex];
     if (!targetItem?.href) {
-      console.warn("[EPUB_NAV] No href for reading order index:", navRef.readingOrderIndex);
+      epubWarn("No href for reading order index:", navRef.readingOrderIndex);
       return;
     }
 
@@ -1185,12 +1206,12 @@ function EpubRefNavigator({
     const doNavigate = () => {
       if (cancelled) return;
 
-      console.log("[EPUB_NAV] Navigating to href:", targetItem.href, "readingOrderIndex:", navRef.readingOrderIndex, "quotedText:", quotedText?.slice(0, 60));
+      epubLog("Navigating to href:", targetItem.href, "readingOrderIndex:", navRef.readingOrderIndex, "quotedText:", quotedText?.slice(0, 60));
 
       // Use goLink() to navigate to the chapter. We handle text finding + scrolling ourselves.
       const link = new Link({ href: targetItem.href! });
       goLink(link, false, (ok: boolean) => {
-        console.log("[EPUB_NAV] goLink callback, ok:", ok);
+        epubLog("goLink callback, ok:", ok);
         if (!ok) return;
         if (!quotedText) return;
 
@@ -1232,17 +1253,17 @@ function EpubRefNavigator({
             if (attempt < maxAttempts) {
               setTimeout(tryHighlight, 150);
             } else {
-              console.warn("[EPUB_NAV] Gave up polling for iframe content");
+              epubWarn("Gave up polling for iframe content");
             }
             return;
           }
 
-          console.log("[EPUB_NAV] Found", iframeDocs.length, "iframe doc(s), attempt:", attempt);
+          epubLog("Found", iframeDocs.length, "iframe doc(s), attempt:", attempt);
 
           for (const doc of iframeDocs) {
             const result = highlightQuoteInDocument(doc, quotedText);
             if (result) {
-              console.log("[EPUB_NAV] Highlight applied successfully");
+              epubLog("Highlight applied successfully");
               highlightCleanupRef.current = result.cleanup;
               return;
             }
@@ -1252,7 +1273,7 @@ function EpubRefNavigator({
           if (attempt < maxAttempts) {
             setTimeout(tryHighlight, 150);
           } else {
-            console.warn("[EPUB_NAV] Quote not found in any iframe after", maxAttempts, "attempts");
+            epubWarn("Quote not found in any iframe after", maxAttempts, "attempts");
           }
         };
 
@@ -1503,7 +1524,7 @@ function highlightQuoteInDocument(
       matchStart = bestStart;
       matchEndNorm = bestEnd;
       matchLevel = "ellipsis-range";
-      console.log("[EPUB_NAV] Ellipsis range: gap=", bestGap, "chars between segments");
+      epubLog("Ellipsis range: gap=", bestGap, "chars between segments");
     }
   }
 
@@ -1515,7 +1536,7 @@ function highlightQuoteInDocument(
 
   // Log what we actually matched
   const matchedText = flatText.slice(origStart, origEnd);
-  console.log("[EPUB_NAV] Match level:", matchLevel, "matched:", JSON.stringify(matchedText.slice(0, 100)), "origStart:", origStart, "origEnd:", origEnd, "flatLen:", flatText.length);
+  epubLog("Match level:", matchLevel, "matched:", JSON.stringify(matchedText.slice(0, 100)), "origStart:", origStart, "origEnd:", origEnd, "flatLen:", flatText.length);
 
   // Create <mark> elements across text nodes
   const marks: HTMLElement[] = [];
@@ -1560,7 +1581,7 @@ function highlightQuoteInDocument(
       const rect = markEl.getBoundingClientRect();
       const scrollEl = doc.scrollingElement ?? doc.documentElement;
 
-      console.log("[EPUB_NAV] Positioning: colCount=", colCountStr,
+      epubLog("Positioning: colCount=", colCountStr,
         "scrollHeight=", scrollEl.scrollHeight, "clientHeight=", scrollEl.clientHeight,
         "scrollTop=", scrollEl.scrollTop,
         "mark rect:", JSON.stringify({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
@@ -1571,16 +1592,16 @@ function highlightQuoteInDocument(
         const pageWidth = wnd.innerWidth;
         const snappedScroll = docOffsetX - (docOffsetX % pageWidth);
         scrollEl.scrollLeft = snappedScroll;
-        console.log("[EPUB_NAV] Paginated snap: scrollLeft=", snappedScroll);
+        epubLog("Paginated snap: scrollLeft=", snappedScroll);
       } else if (scrollEl.scrollHeight > scrollEl.clientHeight) {
         // Vertically scrollable: scroll the documentElement to the mark
         const markDocTop = rect.top + scrollEl.scrollTop;
         const targetScroll = markDocTop - scrollEl.clientHeight / 3; // put mark in upper third
         scrollEl.scrollTop = Math.max(0, targetScroll);
-        console.log("[EPUB_NAV] Scroll to mark: markDocTop=", markDocTop, "scrollTop=", scrollEl.scrollTop);
+        epubLog("Scroll to mark: markDocTop=", markDocTop, "scrollTop=", scrollEl.scrollTop);
       } else {
         // Fallback
-        console.log("[EPUB_NAV] Fallback scrollIntoView");
+        epubLog("Fallback scrollIntoView");
         markEl.scrollIntoView({ behavior: "smooth", block: "center" });
       }
 
