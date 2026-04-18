@@ -15,7 +15,6 @@ export interface AIBottomDrawerProps
     | "showHeader"
     | "showMessages"
     | "showSelectedTextBanner"
-    | "showSelectionChip"
     | "onClose"
   > {
   /**
@@ -262,15 +261,15 @@ export function AIBottomDrawer({
 
   const panelVisibility = (() => {
     if (mode === "closed") {
-      return { showHeader: false, showMessages: false, showChip: false };
+      return { showHeader: false, showMessages: false };
     }
     if (mode === "quick") {
-      return { showHeader: false, showMessages: false, showChip: false };
+      return { showHeader: false, showMessages: false };
     }
     if (mode === "half") {
-      return { showHeader: true, showMessages: true, showChip: false };
+      return { showHeader: true, showMessages: true };
     }
-    return { showHeader: true, showMessages: true, showChip: false };
+    return { showHeader: true, showMessages: true };
   })();
 
   return (
@@ -333,7 +332,6 @@ export function AIBottomDrawer({
               showHeader={panelVisibility.showHeader}
               showMessages={panelVisibility.showMessages}
               showSelectedTextBanner={false}
-              showSelectionChip={panelVisibility.showChip}
               onClose={close}
               onNavigateToRef={handleNavigateToRef}
               onActionStart={() => {

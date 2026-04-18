@@ -80,10 +80,8 @@ export interface AIAgentPanelProps {
   showHeader?: boolean;
   showMessages?: boolean;
   showSelectedTextBanner?: boolean;
-  showSelectionChip?: boolean;
   /**
-   * Current PDF page number (1-based). When provided, shows "Using page X for context" when no selection.
-   * Enables page context to be included when user types a question.
+   * Current PDF page number (1-based). Enables page context to be included when user types a question.
    */
   currentPage?: number;
   /** PDF document for extracting local context from arbitrary pages (not just DOM). */
@@ -208,7 +206,6 @@ export function AIAgentPanel({
   showHeader = true,
   showMessages = true,
   showSelectedTextBanner = true,
-  showSelectionChip = false,
   currentPage,
   pdfDocument,
   onActionStart,
@@ -2192,17 +2189,6 @@ export function AIAgentPanel({
       {showMessages && messages.length === 0 && (
         <div className="flex-1 flex flex-col justify-start pt-4 px-4 min-h-0">
           <div className="space-y-4 max-w-full">
-              {showSelectionChip && (trimmedSelectedText || (currentPage && currentPage >= 1)) && (
-                <div className="flex justify-center">
-                  <span
-                    className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                  >
-                    {trimmedSelectedText
-                      ? "Using selected text for context"
-                      : `Using page ${currentPage} for context`}
-                  </span>
-                </div>
-              )}
               {creditsInfo && creditsInfo.tier === "free" && creditsInfo.allowanceDollars > 0 && (
                 <div className="flex justify-center -mt-2 -mb-2.5">
                   <span className="text-xs text-muted-foreground">
@@ -2345,17 +2331,6 @@ export function AIAgentPanel({
       {/* Input (bottom: when chat has messages, or in compact mode when showMessages is false) */}
       {((showMessages && messages.length > 0) || !showMessages) && (
         <div className="p-4 border-t border-border shrink-0">
-          {showSelectionChip && (trimmedSelectedText || (currentPage && currentPage >= 1)) && (
-            <div className="mb-2">
-              <span
-                className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-              >
-                {trimmedSelectedText
-                  ? "Using selected text for context"
-                  : `Using page ${currentPage} for context`}
-              </span>
-            </div>
-          )}
           {!showMessages && (
             <div className="mb-2">
               <Button
