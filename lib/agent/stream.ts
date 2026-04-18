@@ -171,20 +171,26 @@ class RefEnricher {
 /**
  * Stream LangGraph agent output and encode as SSE compatible with handleStreamingResponse.
  * Emits data: { content } for assistant text, data: { type: "status", message } for Cursor-style stage updates.
- * Emits data: { type: "usage_tokens", inputTokens, outputTokens, cachedInputTokens } before [DONE] when available from AIMessage.usage_metadata.
+ * Emits data: { type: "usage_tokens", inputTokens, outputTokens, cachedInputTokens } incrementally
+ * after each agent step (so partial token totals are available if the stream is aborted), and
+ * again just before [DONE].
  */
 export async function* streamAgentToSSE(
   graph: AgentGraph,
-  initialState: AgentState
+  initialState: AgentState,
+  options?: { signal?: AbortSignal }
 ): AsyncGenerator<string, void, unknown> {
   const stream = await graph.stream(initialState as unknown as Parameters<AgentGraph["stream"]>[0], {
     streamMode: ["messages", "updates"],
     configurable: { thread_id: crypto.randomUUID() },
+    signal: options?.signal,
   });
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let totalCachedInputTokens = 0;
+  let lastEmittedInputTokens = 0;
+  let lastEmittedOutputTokens = 0;
   const refEnricher = new RefEnricher();
 
   for await (const payload of stream) {
@@ -223,6 +229,13 @@ export async function* streamAgentToSSE(
           totalInputTokens += rm.tokenUsage.promptTokens ?? 0;
           totalOutputTokens += rm.tokenUsage.completionTokens ?? 0;
           totalCachedInputTokens += rm.usage?.prompt_tokens_details?.cached_tokens ?? 0;
+        }
+        // Emit running totals after each agent step so the server can bill for
+        // partial output if the client aborts mid-stream.
+        if (totalInputTokens !== lastEmittedInputTokens || totalOutputTokens !== lastEmittedOutputTokens) {
+          lastEmittedInputTokens = totalInputTokens;
+          lastEmittedOutputTokens = totalOutputTokens;
+          yield `data: ${JSON.stringify({ type: "usage_tokens", inputTokens: totalInputTokens, outputTokens: totalOutputTokens, cachedInputTokens: totalCachedInputTokens })}\n\n`;
         }
       }
       if (updates.tools?.messages?.length) {

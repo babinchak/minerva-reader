@@ -134,22 +134,72 @@ export async function POST(req: NextRequest) {
     }
 
     // Create a streaming response (include_usage needed for token counts in final chunk)
-    const stream = await openai.chat.completions.create({
-      model,
-      messages: openaiMessages,
-      stream: true,
-      stream_options: { include_usage: true },
-    });
+    const stream = await openai.chat.completions.create(
+      {
+        model,
+        messages: openaiMessages,
+        stream: true,
+        stream_options: { include_usage: true },
+      },
+      { signal: req.signal }
+    );
 
     // Create a ReadableStream to send the response
     const encoder = new TextEncoder();
-    let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
+    let usage: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } | undefined;
+    let outputCharCount = 0;
+    // Rough estimate of input tokens from the serialized prompt (used only on abort,
+    // when OpenAI's final usage chunk never arrives).
+    const estimatedInputTokens = Math.ceil(JSON.stringify(openaiMessages).length / 4);
+    let usageRecorded = false;
+
+    const recordIfNeeded = async (partial: boolean) => {
+      if (usageRecorded) return null;
+      usageRecorded = true;
+      let inputTokens: number;
+      let outputTokens: number;
+      let cachedInputTokens: number;
+      if (usage) {
+        inputTokens = usage.prompt_tokens ?? 0;
+        outputTokens = usage.completion_tokens ?? 0;
+        cachedInputTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
+      } else if (partial) {
+        // OpenAI never sent usage (client aborted). Estimate from char counts
+        // so we still bill for output the user actually saw.
+        outputTokens = Math.ceil(outputCharCount / 4);
+        if (outputTokens === 0) return null;
+        inputTokens = estimatedInputTokens;
+        cachedInputTokens = 0;
+      } else {
+        return null;
+      }
+      const costDollars = costDollarsFromTokens(model, inputTokens, outputTokens, false, cachedInputTokens);
+      if (costDollars <= 0) return null;
+      try {
+        const result = await recordUsage({
+          userId: user?.id ?? null,
+          costDollars,
+          usageType: "chat",
+          model,
+          inputTokens,
+          outputTokens,
+          cachedInputTokens,
+          referenceId: chatId,
+        });
+        return { result, inputTokens, outputTokens };
+      } catch (err) {
+        console.error("recordUsage failed:", err);
+        return null;
+      }
+    };
+
     const readable = new ReadableStream({
       async start(controller) {
         try {
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || "";
             if (content) {
+              outputCharCount += content.length;
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
             }
             if (chunk.usage) {
@@ -157,44 +207,34 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Record usage and send to client so it can store on chat_message
-          if (usage) {
-            const inputTokens = usage.prompt_tokens ?? 0;
-            const outputTokens = usage.completion_tokens ?? 0;
-            const cachedInputTokens = (usage as { prompt_tokens_details?: { cached_tokens?: number } }).prompt_tokens_details?.cached_tokens ?? 0;
-            const costDollars = costDollarsFromTokens(model, inputTokens, outputTokens, false, cachedInputTokens);
-            if (costDollars > 0) {
-              const result = await recordUsage({
-                userId: user?.id ?? null,
-                costDollars,
-                usageType: "chat",
-                model,
-                inputTokens,
-                outputTokens,
-                cachedInputTokens,
-                referenceId: chatId,
-              });
-              if (result.success) {
-                controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({
-                      type: "usage",
-                      inputTokens,
-                      outputTokens,
-                      costDollars: result.costDollars,
-                      model,
-                      chatMode: "fast",
-                    })}\n\n`
-                  )
-                );
-              }
-            }
+          const recorded = await recordIfNeeded(false);
+          if (recorded?.result.success) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: "usage",
+                  inputTokens: recorded.inputTokens,
+                  outputTokens: recorded.outputTokens,
+                  costDollars: recorded.result.costDollars,
+                  model,
+                  chatMode: "fast",
+                })}\n\n`
+              )
+            );
           }
           controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
           controller.close();
         } catch (error) {
+          if (req.signal.aborted) {
+            await recordIfNeeded(true);
+            try { controller.close(); } catch { /* already closed */ }
+            return;
+          }
           controller.error(error);
         }
+      },
+      async cancel() {
+        await recordIfNeeded(true);
       },
     });
 

@@ -272,34 +272,50 @@ export async function POST(req: NextRequest) {
     let capturedInputTokens: number | null = null;
     let capturedOutputTokens: number | null = null;
     let capturedCachedInputTokens: number | null = null;
+    let usageRecorded = false;
+
+    const recordIfNeeded = async (partial: boolean) => {
+      if (usageRecorded) return null;
+      usageRecorded = true;
+      // On partial (abort), only bill if we captured some tokens — otherwise skip.
+      if (partial && (capturedInputTokens == null || capturedOutputTokens == null)) return null;
+      const costDollars =
+        capturedInputTokens != null && capturedOutputTokens != null
+          ? costDollarsFromTokens(model, capturedInputTokens, capturedOutputTokens, true, capturedCachedInputTokens ?? 0)
+          : estimatedDollars;
+      try {
+        const result = await recordUsage({
+          userId: user?.id ?? null,
+          costDollars,
+          usageType: "chat_agentic",
+          model,
+          inputTokens: capturedInputTokens ?? undefined,
+          outputTokens: capturedOutputTokens ?? undefined,
+          cachedInputTokens: capturedCachedInputTokens ?? undefined,
+          referenceId: chatId,
+        });
+        return { result, costDollars };
+      } catch (err) {
+        console.error("recordUsage failed:", err);
+        return { result: { success: false, costDollars }, costDollars };
+      }
+    };
 
     const readable = new ReadableStream({
       async start(controller) {
         try {
           let lastChunk = "";
-          for await (const chunk of streamAgentToSSE(graph, initialState)) {
+          for await (const chunk of streamAgentToSSE(graph, initialState, { signal: req.signal })) {
             if (chunk.includes("[DONE]")) {
-              const costDollars =
-                capturedInputTokens != null && capturedOutputTokens != null
-                  ? costDollarsFromTokens(model, capturedInputTokens, capturedOutputTokens, true, capturedCachedInputTokens ?? 0)
-                  : estimatedDollars;
-              const result = await recordUsage({
-                      userId: user?.id ?? null,
-                      costDollars,
-                      usageType: "chat_agentic",
-                      model,
-                      inputTokens: capturedInputTokens ?? undefined,
-                      outputTokens: capturedOutputTokens ?? undefined,
-                      cachedInputTokens: capturedCachedInputTokens ?? undefined,
-                      referenceId: chatId,
-                    });
+              const recorded = await recordIfNeeded(false);
+              const finalCost = recorded?.result.success ? recorded.result.costDollars : recorded?.costDollars ?? estimatedDollars;
               controller.enqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({
                     type: "usage",
                     inputTokens: capturedInputTokens,
                     outputTokens: capturedOutputTokens,
-                    costDollars: result.success ? result.costDollars : costDollars,
+                    costDollars: finalCost,
                     model,
                     chatMode: "agentic",
                   })}\n\n`
@@ -328,15 +344,27 @@ export async function POST(req: NextRequest) {
           if (lastChunk) controller.enqueue(encoder.encode(lastChunk));
           controller.close();
         } catch (err) {
+          if (req.signal.aborted) {
+            // Client disconnected — bill for tokens consumed so far and exit quietly.
+            await recordIfNeeded(true);
+            try { controller.close(); } catch { /* already closed */ }
+            return;
+          }
           console.error("Agentic stream error:", err);
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ content: "\n\nSorry, an error occurred while generating the response." })}\n\n`
-            )
-          );
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
+          try {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ content: "\n\nSorry, an error occurred while generating the response." })}\n\n`
+              )
+            );
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          } catch { /* already closed */ }
         }
+      },
+      async cancel() {
+        // Client aborted — record partial usage if we captured any tokens.
+        await recordIfNeeded(true);
       },
     });
 

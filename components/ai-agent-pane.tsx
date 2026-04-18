@@ -5,7 +5,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { X, Send, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff, ExternalLink, BookOpenText } from "lucide-react";
+import { X, Send, Square, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff, ExternalLink, BookOpenText } from "lucide-react";
 import { StreamingMarkdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
 import { ToolCallSteps, formatToolLabel, getQueryPreview, type MessageToolCall } from "@/components/tool-call-steps";
 import { createClient } from "@/lib/supabase/client";
@@ -64,16 +64,17 @@ interface AIMessage {
 interface ChatInputProps {
   initialValue?: string | null;
   placeholder: string;
-  disabled: boolean;
+  loading: boolean;
   onSubmit: (text: string) => void;
+  onStop: () => void;
   variant: "empty-state" | "bottom";
 }
 
-function ChatInput({ initialValue, placeholder, disabled, onSubmit, variant }: ChatInputProps) {
+function ChatInput({ initialValue, placeholder, loading, onSubmit, onStop, variant }: ChatInputProps) {
   const [input, setInput] = useState(initialValue ?? "");
 
   const submit = () => {
-    if (!input.trim() || disabled) return;
+    if (!input.trim() || loading) return;
     const text = input;
     setInput("");
     onSubmit(text);
@@ -82,6 +83,7 @@ function ChatInput({ initialValue, placeholder, disabled, onSubmit, variant }: C
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      if (loading) return;
       submit();
     }
   };
@@ -98,14 +100,19 @@ function ChatInput({ initialValue, placeholder, disabled, onSubmit, variant }: C
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={disabled}
         rows={1}
         style={{ fieldSizing: "content" } as React.CSSProperties}
         className={textareaClass}
       />
-      <Button onClick={submit} disabled={!input.trim() || disabled} size="icon">
-        <Send className="h-4 w-4" />
-      </Button>
+      {loading ? (
+        <Button onClick={onStop} size="icon" aria-label="Stop generating" title="Stop generating">
+          <Square className="h-3 w-3 fill-current" />
+        </Button>
+      ) : (
+        <Button onClick={submit} disabled={!input.trim()} size="icon" aria-label="Send">
+          <Send className="h-4 w-4" />
+        </Button>
+      )}
     </div>
   );
 }
@@ -387,6 +394,11 @@ export function AIAgentPanel({
   const [isPrivateChat, setIsPrivateChat] = useState(false);
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const sendingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStop = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const initialRefScrolledRef = useRef(false);
   /** Map of section_id → section data for resolving navigable references to pages. */
@@ -516,7 +528,8 @@ export function AIAgentPanel({
       response: Response,
       assistantMessageId: string,
       onStreamComplete?: (content: string, usage?: StreamUsage, toolCalls?: MessageToolCall[]) => void | Promise<void>,
-      onStatus?: (message: string | null) => void
+      onStatus?: (message: string | null) => void,
+      signal?: AbortSignal
     ) => {
       if (!response.ok) {
         let message = response.statusText;
@@ -554,8 +567,29 @@ export function AIAgentPanel({
       let streamUsage: StreamUsage | undefined;
       const accumulatedToolCalls: MessageToolCall[] = [];
 
+      const finalizeAbort = async () => {
+        onStatus?.(null);
+        await onStreamComplete?.(fullContent, streamUsage, accumulatedToolCalls);
+        setIsLoading(false);
+        onActionComplete?.();
+      };
+
       while (true) {
-        const { done, value } = await reader.read();
+        let done: boolean;
+        let value: Uint8Array | undefined;
+        try {
+          ({ done, value } = await reader.read());
+        } catch (err) {
+          if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) {
+            await finalizeAbort();
+            return;
+          }
+          throw err;
+        }
+        if (signal?.aborted) {
+          await finalizeAbort();
+          return;
+        }
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
@@ -1632,12 +1666,16 @@ export function AIAgentPanel({
           })
         : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       const response = await fetch(chatUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: chatBody,
+        signal: abortController.signal,
       });
 
       const isNewChat = chatId && msgCount === 0;
@@ -1652,9 +1690,15 @@ export function AIAgentPanel({
             }
           }
         },
-        undefined
+        undefined,
+        abortController.signal
       );
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setIsLoading(false);
+        onActionComplete?.();
+        return;
+      }
       console.error("Chat API error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
@@ -1993,12 +2037,16 @@ export function AIAgentPanel({
           })
         : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
 
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       const response = await fetch(chatUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: chatBody,
+        signal: abortController.signal,
       });
 
       const isNewChat = chatId && msgCount === 0;
@@ -2013,9 +2061,15 @@ export function AIAgentPanel({
             }
           }
         },
-        undefined
+        undefined,
+        abortController.signal
       );
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setIsLoading(false);
+        onActionComplete?.();
+        return;
+      }
       console.error("Chat API error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Sorry, an error occurred. Please try again.";
@@ -2357,8 +2411,9 @@ export function AIAgentPanel({
                 variant="empty-state"
                 initialValue={prefillQuestion}
                 placeholder={isLibraryMode ? (aiScope?.type === "collection" || aiScope?.type === "curated-collection" ? `Ask across ${aiScope.name}...` : aiScope?.type === "curated-library" ? "Ask across curated library..." : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
-                disabled={isLoading}
+                loading={isLoading}
                 onSubmit={handleSend}
+                onStop={handleStop}
               />
             </div>
         </div>
@@ -2460,8 +2515,9 @@ export function AIAgentPanel({
             variant="bottom"
             initialValue={prefillQuestion}
             placeholder={isLibraryMode ? (aiScope?.type === "collection" || aiScope?.type === "curated-collection" ? `Ask across ${aiScope.name}...` : aiScope?.type === "curated-library" ? "Ask across curated library..." : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
-            disabled={isLoading}
+            loading={isLoading}
             onSubmit={handleSend}
+            onStop={handleStop}
           />
         </div>
       )}
