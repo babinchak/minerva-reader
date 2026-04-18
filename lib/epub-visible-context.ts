@@ -307,7 +307,11 @@ function computePositionResult(
   iframe: HTMLIFrameElement,
   readingOrderIndex?: number
 ): EpubVisibleContextWithPosition {
-  const roIndex = readingOrderIndex ?? findReadingOrderIndex(doc, iframe, readingOrder);
+  // Pass -1 when the caller didn't override so calculateSelectionPositions does
+  // its own localStorage-based resolution (same path getCurrentSelectionPosition
+  // takes). Don't pre-resolve via findReadingOrderIndex: its hardcoded "return 0"
+  // fallback masks lookup failures by passing a real-looking index downstream.
+  const roIndexHint = readingOrderIndex ?? -1;
   try {
     const first = blocks[0];
     const last = blocks[blocks.length - 1];
@@ -315,13 +319,14 @@ function computePositionResult(
       const range = doc.createRange();
       range.setStart(first, 0);
       range.setEnd(last, last.childNodes.length);
-      const positions = calculateSelectionPositions(range, readingOrder, doc, roIndex);
+      const positions = calculateSelectionPositions(range, readingOrder, doc, roIndexHint);
       return { text, startPosition: positions.start, endPosition: positions.end };
     }
   } catch {
     // Position calculation failed, using fallback
   }
-  return { text, startPosition: `${roIndex}/0/0`, endPosition: `${roIndex}/9999/9999` };
+  const fallbackRo = roIndexHint !== -1 ? roIndexHint : findReadingOrderIndex(doc, iframe, readingOrder);
+  return { text, startPosition: `${fallbackRo}/0/0`, endPosition: `${fallbackRo}/9999/9999` };
 }
 
 /**

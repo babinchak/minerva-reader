@@ -69,8 +69,34 @@ function calculatePositions(
   // Use readingOrder index from store if available
   let readingOrderIndex = readingOrderIndexFromStore;
 
+  const matchFilenameInReadingOrder = (filename: string): number => {
+    if (!filename) return -1;
+    for (let i = 0; i < readingOrder.length; i++) {
+      const itemFilename = (readingOrder[i]?.href || "").split("/").pop() || "";
+      if (itemFilename && filename === itemFilename) return i;
+    }
+    return -1;
+  };
+
+  // Primary: the iframe's baseURI is the actual chapter URL Readium loaded.
+  // This is authoritative — unlike localStorage (which holds saved positions
+  // for every book the user has opened and is prone to cross-book filename
+  // collisions) and unlike startDoc.URL (which is a blob: URL).
   if (readingOrderIndex === -1) {
-    // Primary: read Readium's locator from localStorage (most reliable — works with blob URLs)
+    try {
+      const baseHref = targetDoc.baseURI || "";
+      const baseFilename = baseHref.split("?")[0].split("#")[0].split("/").pop() || "";
+      const idx = matchFilenameInReadingOrder(baseFilename);
+      if (idx >= 0) readingOrderIndex = idx;
+    } catch {
+      // baseURI inaccessible
+    }
+  }
+
+  if (readingOrderIndex === -1) {
+    // Fallback: read Readium's locator from localStorage. Note we still scan
+    // every "*-current-location" key because we don't know this book's manifest
+    // URL here — accept the small chance of a wrong-book filename collision.
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -80,17 +106,12 @@ function calculatePositions(
         const locator = JSON.parse(raw) as { href?: string };
         if (locator.href) {
           const locFilename = locator.href.split("/").pop() || "";
-          if (!locFilename) continue;
-          for (let j = 0; j < readingOrder.length; j++) {
-            const itemHref = readingOrder[j]?.href || "";
-            const itemFilename = itemHref.split("/").pop() || "";
-            if (itemFilename && locFilename === itemFilename) {
-              readingOrderIndex = j;
-              break;
-            }
+          const idx = matchFilenameInReadingOrder(locFilename);
+          if (idx >= 0) {
+            readingOrderIndex = idx;
+            break;
           }
         }
-        if (readingOrderIndex !== -1) break;
       }
     } catch {
       // localStorage not available or parse error
