@@ -1330,6 +1330,10 @@ export function AIAgentPanel({
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     scrollToLastUserMessage();
 
+    // Yield so React paints the optimistic bubble + ellipsis before heavy sync
+    // work (PDF span walk, EPUB iframe DOM walk with getBoundingClientRect).
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
     if (bookId) {
       if (!hasSelection && bookType === "pdf") {
         const page = getCurrentPdfPageContext({ maxChars: 30000 });
