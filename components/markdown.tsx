@@ -312,12 +312,12 @@ export function StreamingMarkdown({ isStreaming, content, ...rest }: StreamingMa
   }
 
   return (
-    <>
+    <div className="space-y-3">
       {blocks.map((block, i) => (
         <FrozenBlock key={i} content={block} {...rest} />
       ))}
       {tailContent && <Markdown content={tailContent} {...rest} />}
-    </>
+    </div>
   );
 }
 
