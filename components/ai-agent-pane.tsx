@@ -1,7 +1,7 @@
 "use client";
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
@@ -60,6 +60,145 @@ interface AIMessage {
   selectionPositionTitle?: string;
   toolCalls?: MessageToolCall[];
 }
+
+interface ChatInputProps {
+  initialValue?: string | null;
+  placeholder: string;
+  disabled: boolean;
+  onSubmit: (text: string) => void;
+  variant: "empty-state" | "bottom";
+}
+
+function ChatInput({ initialValue, placeholder, disabled, onSubmit, variant }: ChatInputProps) {
+  const [input, setInput] = useState(initialValue ?? "");
+
+  const submit = () => {
+    if (!input.trim() || disabled) return;
+    const text = input;
+    setInput("");
+    onSubmit(text);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  };
+
+  const textareaClass =
+    variant === "empty-state"
+      ? "flex-1 min-h-[36px] max-h-[80px] resize-none overflow-y-auto py-2 bg-muted/50 shadow-md border-border dark:bg-muted dark:border-muted-foreground/30 dark:shadow-none"
+      : "flex-1 min-h-[36px] max-h-[80px] resize-none overflow-y-auto py-2";
+
+  return (
+    <div className="flex gap-2">
+      <Textarea
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        disabled={disabled}
+        rows={1}
+        style={{ fieldSizing: "content" } as React.CSSProperties}
+        className={textareaClass}
+      />
+      <Button onClick={submit} disabled={!input.trim() || disabled} size="icon">
+        <Send className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+interface MessageGroupProps {
+  user: AIMessage;
+  assistant?: AIMessage;
+  isLastGroup: boolean;
+  isLastAssistant: boolean;
+  isStreaming: boolean;
+  bookId?: string;
+  sectionBookMap?: Map<string, SectionBookInfo>;
+  onRefClick: (ref: PassageRef) => void;
+  activeChatId?: string | null;
+}
+
+const MessageGroup = memo(function MessageGroup({
+  user,
+  assistant,
+  isLastGroup,
+  isLastAssistant,
+  isStreaming,
+  bookId,
+  sectionBookMap,
+  onRefClick,
+  activeChatId,
+}: MessageGroupProps) {
+  return (
+    <div
+      data-user-message
+      className="space-y-4"
+      style={isLastGroup ? { minHeight: "100%" } : undefined}
+    >
+      <div className="flex flex-col gap-2 items-end">
+        <div className="flex justify-end w-full max-w-[85%]">
+          <Card className="p-3 bg-primary text-primary-foreground">
+            <p className="text-sm whitespace-pre-wrap break-words">
+              {user.content}
+            </p>
+            {user.selectionPositionLabel && (
+              <div className="mt-2">
+                <span
+                  title={user.selectionPositionTitle}
+                  className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium text-primary-foreground/80 border-primary-foreground/40 bg-primary-foreground/10"
+                >
+                  {user.selectionPositionLabel}
+                </span>
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {assistant && (
+        <div className="flex flex-col gap-2 w-full">
+          {assistant.toolCalls && assistant.toolCalls.length > 0 && (
+            <div className="w-full text-left">
+              <ToolCallSteps toolCalls={assistant.toolCalls} />
+            </div>
+          )}
+          <div className="w-full text-foreground select-text">
+            {assistant.content.trim() ? (
+              <StreamingMarkdown
+                isStreaming={isLastAssistant}
+                content={assistant.content}
+                bookId={bookId}
+                sectionBookMap={sectionBookMap}
+                onRefClick={onRefClick}
+                chatId={activeChatId}
+              />
+            ) : isStreaming ? (
+              <div className="flex gap-1">
+                <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
+                <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
+                <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
+              </div>
+            ) : null}
+            {assistant.selectionPositionLabel && (
+              <div className="mt-2">
+                <span
+                  title={assistant.selectionPositionTitle}
+                  className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium text-foreground/80 border-border bg-muted"
+                >
+                  {assistant.selectionPositionLabel}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 export interface AIAgentPanelProps {
   selectedText?: string;
@@ -228,7 +367,6 @@ export function AIAgentPanel({
   const trimmedSelectedText = normalizedSelectedText.trim();
 
   const [messages, setMessages] = useState<AIMessage[]>([]);
-  const [input, setInput] = useState(prefillQuestion ?? "");
   const [isLoading, setIsLoading] = useState(false);
   const [bookTitle, setBookTitle] = useState<string>("");
   const [bookAuthor, setBookAuthor] = useState<string>("");
@@ -1091,8 +1229,8 @@ export function AIAgentPanel({
     [activeChatId, chats, userId, supabase]
   );
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSend = async (text: string) => {
+    if (!text.trim() || isLoading) return;
     // Anonymous users in library/browse mode: redirect to sign up
     if (authChecked && !userId && isLibraryMode) {
       window.location.href = "/auth/sign-up";
@@ -1105,8 +1243,7 @@ export function AIAgentPanel({
     // "Streaming started" – satisfying burst in same sync stack (only way to work on iOS)
     hapticHeader();
 
-    const userInput = input;
-    setInput("");
+    const userInput = text;
     setIsLoading(true);
     try {
     let sendPositionLabel: string | undefined;
@@ -1528,13 +1665,6 @@ export function AIAgentPanel({
     } finally {
       sendingRef.current = false;
       refreshCredits();
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
     }
   };
 
@@ -2196,25 +2326,13 @@ export function AIAgentPanel({
                   </span>
                 </div>
               )}
-              <div className="flex gap-2">
-                <Textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={isLibraryMode ? (aiScope?.type === "collection" || aiScope?.type === "curated-collection" ? `Ask across ${aiScope.name}...` : aiScope?.type === "curated-library" ? "Ask across curated library..." : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
-                  disabled={isLoading}
-                  rows={1}
-                  style={{ fieldSizing: "content" } as React.CSSProperties}
-                  className="flex-1 min-h-[36px] max-h-[80px] resize-none overflow-y-auto py-2 bg-muted/50 shadow-md border-border dark:bg-muted dark:border-muted-foreground/30 dark:shadow-none"
-                />
-                <Button
-                  onClick={handleSend}
-                  disabled={!input.trim() || isLoading}
-                  size="icon"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
+              <ChatInput
+                variant="empty-state"
+                initialValue={prefillQuestion}
+                placeholder={isLibraryMode ? (aiScope?.type === "collection" || aiScope?.type === "curated-collection" ? `Ask across ${aiScope.name}...` : aiScope?.type === "curated-library" ? "Ask across curated library..." : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+                disabled={isLoading}
+                onSubmit={handleSend}
+              />
             </div>
         </div>
       )}
@@ -2256,72 +2374,26 @@ export function AIAgentPanel({
             return groups.map((group, groupIndex) => {
               const isLastGroup = groupIndex === groups.length - 1;
               const assistantMsg = group.assistant;
-              const isLastAssistant =
+              const isLastAssistant = !!(
                 isLoading &&
                 assistantMsg &&
-                filteredMessages[filteredMessages.length - 1]?.id === assistantMsg.id;
-              const isStreaming = isLastAssistant && !assistantMsg.content.trim();
+                filteredMessages[filteredMessages.length - 1]?.id === assistantMsg.id
+              );
+              const isStreaming = isLastAssistant && !assistantMsg!.content.trim();
 
               return (
-                <div
+                <MessageGroup
                   key={group.user.id}
-                  data-user-message
-                  className="space-y-4"
-                  style={isLastGroup ? { minHeight: "100%" } : undefined}
-                >
-                  {/* User message */}
-                  <div className="flex flex-col gap-2 items-end">
-                    <div className="flex justify-end w-full max-w-[85%]">
-                      <Card className="p-3 bg-primary text-primary-foreground">
-                        <p className="text-sm whitespace-pre-wrap break-words">
-                          {group.user.content}
-                        </p>
-                        {group.user.selectionPositionLabel && (
-                          <div className="mt-2">
-                            <span
-                              title={group.user.selectionPositionTitle}
-                              className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium text-primary-foreground/80 border-primary-foreground/40 bg-primary-foreground/10"
-                            >
-                              {group.user.selectionPositionLabel}
-                            </span>
-                          </div>
-                        )}
-                      </Card>
-                    </div>
-                  </div>
-
-                  {/* Assistant message */}
-                  {assistantMsg && (
-                    <div className="flex flex-col gap-2 w-full">
-                      {assistantMsg.toolCalls && assistantMsg.toolCalls.length > 0 && (
-                        <div className="w-full text-left">
-                          <ToolCallSteps toolCalls={assistantMsg.toolCalls} />
-                        </div>
-                      )}
-                      <div className="w-full text-foreground select-text">
-                        {assistantMsg.content.trim() ? (
-                          <StreamingMarkdown isStreaming={!!isLastAssistant} content={assistantMsg.content} bookId={bookId} sectionBookMap={isLibraryMode ? sectionBookMap : undefined} onRefClick={handleRefClick} chatId={activeChatId} />
-                        ) : isStreaming ? (
-                          <div className="flex gap-1">
-                            <div className="h-2 w-2 bg-foreground rounded-full animate-bounce" />
-                            <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.2s]" />
-                            <div className="h-2 w-2 bg-foreground rounded-full animate-bounce [animation-delay:0.4s]" />
-                          </div>
-                        ) : null}
-                        {assistantMsg.selectionPositionLabel && (
-                          <div className="mt-2">
-                            <span
-                              title={assistantMsg.selectionPositionTitle}
-                              className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium text-foreground/80 border-border bg-muted"
-                            >
-                              {assistantMsg.selectionPositionLabel}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  user={group.user}
+                  assistant={assistantMsg}
+                  isLastGroup={isLastGroup}
+                  isLastAssistant={isLastAssistant}
+                  isStreaming={isStreaming}
+                  bookId={bookId}
+                  sectionBookMap={isLibraryMode ? sectionBookMap : undefined}
+                  onRefClick={handleRefClick}
+                  activeChatId={activeChatId}
+                />
               );
             });
           })()}
@@ -2357,25 +2429,13 @@ export function AIAgentPanel({
               </span>
             </div>
           )}
-          <div className="flex gap-2">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={isLibraryMode ? (aiScope?.type === "collection" || aiScope?.type === "curated-collection" ? `Ask across ${aiScope.name}...` : aiScope?.type === "curated-library" ? "Ask across curated library..." : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
-                disabled={isLoading}
-                rows={1}
-                style={{ fieldSizing: "content" } as React.CSSProperties}
-                className="flex-1 min-h-[36px] max-h-[80px] resize-none overflow-y-auto py-2"
-              />
-              <Button
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading}
-                size="icon"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
+          <ChatInput
+            variant="bottom"
+            initialValue={prefillQuestion}
+            placeholder={isLibraryMode ? (aiScope?.type === "collection" || aiScope?.type === "curated-collection" ? `Ask across ${aiScope.name}...` : aiScope?.type === "curated-library" ? "Ask across curated library..." : "Ask a question across your library...") : trimmedSelectedText ? "Ask a question about the selection..." : "Ask a question about the book..."}
+            disabled={isLoading}
+            onSubmit={handleSend}
+          />
         </div>
       )}
 
