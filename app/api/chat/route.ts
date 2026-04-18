@@ -8,6 +8,11 @@ import {
   canMakeRequest,
 } from "@/lib/credits";
 import { recordUsage, costDollarsFromTokens } from "@/lib/usage";
+import {
+  insertAssistantPlaceholder,
+  finalizeAssistantMessage,
+  isStopRequested,
+} from "@/lib/chat/persistence";
 
 const openai = wrapOpenAI(new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -51,8 +56,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = (await req.json()) as { messages?: unknown; chatId?: string };
-    const { messages, chatId } = body;
+    const body = (await req.json()) as { messages?: unknown; chatId?: string; messageIndex?: number; isPrivate?: boolean };
+    const { messages, chatId, messageIndex, isPrivate } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(
@@ -133,6 +138,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Persist to chat_messages when logged in and not private. Tab-close then
+    // lets the generation finish and land in the DB — Stop explicitly aborts.
+    const shouldPersist = Boolean(user && chatId && !isPrivate);
+    let assistantMessageId: string | null = null;
+    if (shouldPersist && chatId && typeof messageIndex === "number") {
+      assistantMessageId = await insertAssistantPlaceholder(supabase, {
+        chatId,
+        messageIndex,
+        chatMode: "fast",
+        model,
+      });
+    }
+
+    // Internal abort → explicit stop. For unauthenticated/private requests where
+    // DB-polled stop isn't available, fall back to fetch-abort via req.signal.
+    const internalAbort = new AbortController();
+    if (!assistantMessageId) {
+      if (req.signal.aborted) internalAbort.abort();
+      else req.signal.addEventListener("abort", () => internalAbort.abort());
+    }
+
     // Create a streaming response (include_usage needed for token counts in final chunk)
     const stream = await openai.chat.completions.create(
       {
@@ -141,17 +167,21 @@ export async function POST(req: NextRequest) {
         stream: true,
         stream_options: { include_usage: true },
       },
-      { signal: req.signal }
+      { signal: internalAbort.signal }
     );
 
     // Create a ReadableStream to send the response
     const encoder = new TextEncoder();
     let usage: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } | undefined;
     let outputCharCount = 0;
+    let fullContent = "";
     // Rough estimate of input tokens from the serialized prompt (used only on abort,
     // when OpenAI's final usage chunk never arrives).
     const estimatedInputTokens = Math.ceil(JSON.stringify(openaiMessages).length / 4);
     let usageRecorded = false;
+    let finalized = false;
+    const POLL_INTERVAL_MS = 1500;
+    let lastPollAt = 0;
 
     const recordIfNeeded = async (partial: boolean) => {
       if (usageRecorded) return null;
@@ -164,8 +194,8 @@ export async function POST(req: NextRequest) {
         outputTokens = usage.completion_tokens ?? 0;
         cachedInputTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
       } else if (partial) {
-        // OpenAI never sent usage (client aborted). Estimate from char counts
-        // so we still bill for output the user actually saw.
+        // OpenAI never sent usage (aborted). Estimate from char counts so we
+        // still bill for output the user actually saw.
         outputTokens = Math.ceil(outputCharCount / 4);
         if (outputTokens === 0) return null;
         inputTokens = estimatedInputTokens;
@@ -193,14 +223,50 @@ export async function POST(req: NextRequest) {
       }
     };
 
+    const finalizeIfNeeded = async (finalCostDollars: number | null, inputTokens: number | null, outputTokens: number | null) => {
+      if (finalized) return;
+      finalized = true;
+      if (!assistantMessageId) return;
+      try {
+        await finalizeAssistantMessage(supabase, assistantMessageId, fullContent, {
+          inputTokens,
+          outputTokens,
+          costDollars: finalCostDollars,
+          model,
+          chatMode: "fast",
+        });
+      } catch (err) {
+        console.error("finalizeAssistantMessage failed:", err);
+      }
+    };
+
     const readable = new ReadableStream({
       async start(controller) {
+        const safeEnqueue = (bytes: Uint8Array) => {
+          try { controller.enqueue(bytes); } catch { /* client gone — keep generating for DB persistence */ }
+        };
+        if (assistantMessageId) {
+          safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "assistant_message_id", id: assistantMessageId })}\n\n`));
+        }
+
+        const maybePollStop = async () => {
+          if (!assistantMessageId) return;
+          const now = Date.now();
+          if (now - lastPollAt < POLL_INTERVAL_MS) return;
+          lastPollAt = now;
+          if (await isStopRequested(supabase, assistantMessageId)) {
+            internalAbort.abort();
+          }
+        };
+
         try {
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || "";
             if (content) {
               outputCharCount += content.length;
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+              fullContent += content;
+              safeEnqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+              await maybePollStop();
             }
             if (chunk.usage) {
               usage = chunk.usage;
@@ -208,8 +274,10 @@ export async function POST(req: NextRequest) {
           }
 
           const recorded = await recordIfNeeded(false);
+          const finalCost = recorded?.result.success ? recorded.result.costDollars : null;
+          await finalizeIfNeeded(finalCost, recorded?.inputTokens ?? null, recorded?.outputTokens ?? null);
           if (recorded?.result.success) {
-            controller.enqueue(
+            safeEnqueue(
               encoder.encode(
                 `data: ${JSON.stringify({
                   type: "usage",
@@ -222,20 +290,21 @@ export async function POST(req: NextRequest) {
               )
             );
           }
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-          controller.close();
+          safeEnqueue(encoder.encode(`data: [DONE]\n\n`));
+          try { controller.close(); } catch { /* already closed */ }
         } catch (error) {
-          if (req.signal.aborted) {
-            await recordIfNeeded(true);
+          if (internalAbort.signal.aborted) {
+            const recorded = await recordIfNeeded(true);
+            const finalCost = recorded?.result.success ? recorded.result.costDollars : null;
+            await finalizeIfNeeded(finalCost, recorded?.inputTokens ?? null, recorded?.outputTokens ?? null);
             try { controller.close(); } catch { /* already closed */ }
             return;
           }
-          controller.error(error);
+          await finalizeIfNeeded(null, null, null);
+          try { controller.error(error); } catch { /* already errored */ }
         }
       },
-      async cancel() {
-        await recordIfNeeded(true);
-      },
+      // NOTE: no cancel() handler — tab close must NOT abort upstream.
     });
 
     return new Response(readable, {

@@ -11,6 +11,12 @@ import {
   isFreeBetaMode,
 } from "@/lib/credits";
 import { recordUsage, costDollarsFromTokens } from "@/lib/usage";
+import {
+  insertAssistantPlaceholder,
+  finalizeAssistantMessage,
+  isStopRequested,
+  type PersistedToolCall,
+} from "@/lib/chat/persistence";
 
 const MARKDOWN_SYSTEM_PROMPT =
   "You are a helpful reading assistant. Respond using GitHub-flavored Markdown (GFM).\n" +
@@ -108,8 +114,8 @@ export async function POST(req: NextRequest) {
     const serviceSupabase = createServiceClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const body = (await req.json()) as { messages?: unknown; bookId?: string; bookIds?: string[]; chatId?: string; scopeLabel?: string };
-    const { messages: rawMessages, bookId, bookIds, chatId, scopeLabel } = body;
+    const body = (await req.json()) as { messages?: unknown; bookId?: string; bookIds?: string[]; chatId?: string; scopeLabel?: string; messageIndex?: number; isPrivate?: boolean };
+    const { messages: rawMessages, bookId, bookIds, chatId, scopeLabel, messageIndex, isPrivate } = body;
     const isLibraryMode = Array.isArray(bookIds) && bookIds.length > 0;
 
     if (!rawMessages || !Array.isArray(rawMessages)) {
@@ -268,21 +274,54 @@ export async function POST(req: NextRequest) {
       messages: [new SystemMessage(systemPrompt), ...langchainMessages],
     };
 
+    // Persist to chat_messages for logged-in, non-private chats. The placeholder
+    // row gives Stop a target to mark and gives the finalize step an id to UPDATE.
+    // Use the service client for server-side persistence so we don't depend on
+    // having UPDATE/INSERT RLS policies for chat_messages. Ownership was already
+    // validated above.
+    const shouldPersist = Boolean(user && chatId && !isPrivate);
+    let assistantMessageId: string | null = null;
+    if (shouldPersist && chatId && typeof messageIndex === "number") {
+      assistantMessageId = await insertAssistantPlaceholder(serviceSupabase, {
+        chatId,
+        messageIndex,
+        chatMode: "agentic",
+        model,
+      });
+    }
+
+    // Internal abort — used for explicit stop. Tab-close is intentionally NOT
+    // wired here so generation runs to completion and persists for later viewing.
+    // Anonymous / private chats have no stop endpoint to hit, so we fall back to
+    // tying internal abort to req.signal in that case.
+    const internalAbort = new AbortController();
+    if (!assistantMessageId) {
+      if (req.signal.aborted) internalAbort.abort();
+      else req.signal.addEventListener("abort", () => internalAbort.abort());
+    }
+
     const encoder = new TextEncoder();
     let capturedInputTokens: number | null = null;
     let capturedOutputTokens: number | null = null;
     let capturedCachedInputTokens: number | null = null;
+    let fullContent = "";
+    const accumulatedToolCalls: PersistedToolCall[] = [];
     let usageRecorded = false;
+    let finalized = false;
+    const POLL_INTERVAL_MS = 1500;
+    let lastPollAt = 0;
 
-    const recordIfNeeded = async (partial: boolean) => {
+    const recordIfNeeded = async () => {
       if (usageRecorded) return null;
       usageRecorded = true;
-      // On partial (abort), only bill if we captured some tokens — otherwise skip.
-      if (partial && (capturedInputTokens == null || capturedOutputTokens == null)) return null;
-      const costDollars =
-        capturedInputTokens != null && capturedOutputTokens != null
-          ? costDollarsFromTokens(model, capturedInputTokens, capturedOutputTokens, true, capturedCachedInputTokens ?? 0)
-          : estimatedDollars;
+      if (capturedInputTokens == null || capturedOutputTokens == null) return null;
+      const costDollars = costDollarsFromTokens(
+        model,
+        capturedInputTokens,
+        capturedOutputTokens,
+        true,
+        capturedCachedInputTokens ?? 0
+      );
       try {
         const result = await recordUsage({
           userId: user?.id ?? null,
@@ -301,21 +340,63 @@ export async function POST(req: NextRequest) {
       }
     };
 
+    const finalizeIfNeeded = async (finalCostDollars: number | null) => {
+      if (finalized) return;
+      finalized = true;
+      if (!assistantMessageId) return;
+      try {
+        await finalizeAssistantMessage(
+          supabase,
+          assistantMessageId,
+          fullContent,
+          {
+            inputTokens: capturedInputTokens,
+            outputTokens: capturedOutputTokens,
+            costDollars: finalCostDollars,
+            model,
+            chatMode: "agentic",
+          },
+          accumulatedToolCalls
+        );
+      } catch (err) {
+        console.error("finalizeAssistantMessage failed:", err);
+      }
+    };
+
     const readable = new ReadableStream({
       async start(controller) {
+        // Tell the client its row id so Stop knows what to target.
+        const safeEnqueue = (bytes: Uint8Array) => {
+          try { controller.enqueue(bytes); } catch { /* client gone — keep generating for DB persistence */ }
+        };
+        if (assistantMessageId) {
+          safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "assistant_message_id", id: assistantMessageId })}\n\n`));
+        }
+
+        const maybePollStop = async () => {
+          if (!assistantMessageId) return;
+          const now = Date.now();
+          if (now - lastPollAt < POLL_INTERVAL_MS) return;
+          lastPollAt = now;
+          if (await isStopRequested(supabase, assistantMessageId)) {
+            internalAbort.abort();
+          }
+        };
+
         try {
           let lastChunk = "";
-          for await (const chunk of streamAgentToSSE(graph, initialState, { signal: req.signal })) {
+          for await (const chunk of streamAgentToSSE(graph, initialState, { signal: internalAbort.signal })) {
             if (chunk.includes("[DONE]")) {
-              const recorded = await recordIfNeeded(false);
-              const finalCost = recorded?.result.success ? recorded.result.costDollars : recorded?.costDollars ?? estimatedDollars;
-              controller.enqueue(
+              const recorded = await recordIfNeeded();
+              const finalCost = recorded?.result.success ? recorded.result.costDollars : recorded?.costDollars ?? null;
+              await finalizeIfNeeded(finalCost);
+              safeEnqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({
                     type: "usage",
                     inputTokens: capturedInputTokens,
                     outputTokens: capturedOutputTokens,
-                    costDollars: finalCost,
+                    costDollars: finalCost ?? estimatedDollars,
                     model,
                     chatMode: "agentic",
                   })}\n\n`
@@ -323,49 +404,78 @@ export async function POST(req: NextRequest) {
               );
               lastChunk = chunk;
             } else {
-              // Capture usage_tokens from stream (internal event, do not forward)
+              // Parse SSE events to (a) capture usage_tokens (internal, not forwarded),
+              // (b) accumulate fullContent + tool calls for server-side persistence.
               const match = chunk.match(/^data:\s*(\{.*\})\s*$/m);
               if (match) {
                 try {
-                  const parsed = JSON.parse(match[1]) as { type?: string; inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };
+                  const parsed = JSON.parse(match[1]) as {
+                    type?: string;
+                    inputTokens?: number;
+                    outputTokens?: number;
+                    cachedInputTokens?: number;
+                    content?: string;
+                    toolName?: string;
+                    args?: Record<string, unknown>;
+                    id?: string;
+                    toolCallId?: string;
+                    results?: unknown;
+                  };
                   if (parsed.type === "usage_tokens") {
                     capturedInputTokens = parsed.inputTokens ?? null;
                     capturedOutputTokens = parsed.outputTokens ?? null;
                     capturedCachedInputTokens = parsed.cachedInputTokens ?? null;
                     continue; // skip forwarding internal event
                   }
+                  if (parsed.type === "tool_call" && parsed.toolName) {
+                    accumulatedToolCalls.push({
+                      toolName: parsed.toolName,
+                      args: parsed.args,
+                      id: parsed.id,
+                    });
+                  } else if (parsed.type === "tool_result_summary" && parsed.toolCallId) {
+                    const tc = accumulatedToolCalls.find((t) => t.id === parsed.toolCallId);
+                    if (tc) tc.resultSummary = parsed.results;
+                  } else if (parsed.type === "status") {
+                    // Status events fire at agent-step boundaries — good poll hook.
+                    await maybePollStop();
+                  } else if (typeof parsed.content === "string") {
+                    fullContent += parsed.content;
+                  }
                 } catch {
                   /* ignore parse errors */
                 }
               }
-              controller.enqueue(encoder.encode(chunk));
+              safeEnqueue(encoder.encode(chunk));
             }
           }
-          if (lastChunk) controller.enqueue(encoder.encode(lastChunk));
-          controller.close();
+          if (lastChunk) safeEnqueue(encoder.encode(lastChunk));
+          try { controller.close(); } catch { /* already closed */ }
         } catch (err) {
-          if (req.signal.aborted) {
-            // Client disconnected — bill for tokens consumed so far and exit quietly.
-            await recordIfNeeded(true);
+          // Internal abort (explicit stop) lands here. Treat like clean end —
+          // bill for consumed tokens and persist the partial message.
+          if (internalAbort.signal.aborted) {
+            const recorded = await recordIfNeeded();
+            const finalCost = recorded?.result.success ? recorded.result.costDollars : recorded?.costDollars ?? null;
+            await finalizeIfNeeded(finalCost);
             try { controller.close(); } catch { /* already closed */ }
             return;
           }
           console.error("Agentic stream error:", err);
+          await finalizeIfNeeded(null);
           try {
-            controller.enqueue(
+            safeEnqueue(
               encoder.encode(
                 `data: ${JSON.stringify({ content: "\n\nSorry, an error occurred while generating the response." })}\n\n`
               )
             );
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            safeEnqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
           } catch { /* already closed */ }
         }
       },
-      async cancel() {
-        // Client aborted — record partial usage if we captured any tokens.
-        await recordIfNeeded(true);
-      },
+      // NOTE: no cancel() handler — tab close must NOT abort upstream so the
+      // generation runs to completion and persists for the user to see later.
     });
 
     return new Response(readable, {

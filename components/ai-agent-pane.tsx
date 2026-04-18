@@ -395,8 +395,26 @@ export function AIAgentPanel({
   const selectionSnapshotRef = useRef<SelectionSnapshot | null>(null);
   const sendingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  /** Server-assigned chat_messages.id for the in-flight assistant response, if persisted. */
+  const assistantMessageIdRef = useRef<string | null>(null);
 
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback(async () => {
+    // Tell the server to abort upstream LLM generation — distinguished from a
+    // tab-close, which deliberately does NOT trigger this endpoint so the
+    // response still completes and persists for later viewing.
+    const id = assistantMessageIdRef.current;
+    if (id) {
+      try {
+        await fetch("/api/chat/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assistantMessageId: id }),
+        });
+      } catch {
+        // Best-effort — even if the stop signal fails, the local abort below
+        // still stops the user from seeing further tokens.
+      }
+    }
     abortControllerRef.current?.abort();
   }, []);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
@@ -529,7 +547,8 @@ export function AIAgentPanel({
       assistantMessageId: string,
       onStreamComplete?: (content: string, usage?: StreamUsage, toolCalls?: MessageToolCall[]) => void | Promise<void>,
       onStatus?: (message: string | null) => void,
-      signal?: AbortSignal
+      signal?: AbortSignal,
+      onAssistantMessageId?: (id: string) => void
     ) => {
       if (!response.ok) {
         let message = response.statusText;
@@ -609,7 +628,9 @@ export function AIAgentPanel({
 
             try {
               const parsed = JSON.parse(data);
-              if (parsed.type === "tool_call" && typeof parsed.toolName === "string") {
+              if (parsed.type === "assistant_message_id" && typeof parsed.id === "string") {
+                onAssistantMessageId?.(parsed.id);
+              } else if (parsed.type === "tool_call" && typeof parsed.toolName === "string") {
                 const tc: MessageToolCall = {
                   toolName: parsed.toolName,
                   args: parsed.args && typeof parsed.args === "object" ? parsed.args : {},
@@ -1127,34 +1148,6 @@ export function AIAgentPanel({
     });
   };
 
-  const persistAssistantMessage = async (
-    chatId: string,
-    content: string,
-    messageIndex: number,
-    usage?: {
-      inputTokens?: number | null;
-      outputTokens?: number | null;
-      costDollars: number;
-      model?: string;
-      chatMode?: string;
-    },
-    toolCalls?: MessageToolCall[]
-  ) => {
-    await supabase.from("chat_messages").insert({
-      chat_id: chatId,
-      role: "assistant",
-      content,
-      message_index: messageIndex,
-      cost_dollars: usage?.costDollars ?? null,
-      input_tokens: usage?.inputTokens ?? null,
-      output_tokens: usage?.outputTokens ?? null,
-      model: usage?.model ?? null,
-
-      chat_mode: usage?.chatMode ?? null,
-      tool_calls: toolCalls && toolCalls.length > 0 ? toolCalls : null,
-    });
-  };
-
   const generateAndUpdateChatTitle = useCallback(
     async (chatId: string, userMessage: string, assistantContent: string) => {
       try {
@@ -1662,12 +1655,20 @@ export function AIAgentPanel({
             bookId: bookId ?? undefined,
             bookIds: isLibraryMode ? bookIds : undefined,
             chatId: chatId ?? undefined,
+            messageIndex: assistantMsgIndex,
+            isPrivate: isPrivateChat,
             scopeLabel: isLibraryMode ? (aiScope?.type === "collection" ? `collection "${aiScope.name}"` : aiScope?.type === "curated-library" ? "the curated library" : aiScope?.type === "curated-collection" ? `curated collection "${aiScope.name}"` : undefined) : undefined,
           })
-        : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
+        : JSON.stringify({
+            messages: messagesForAPI,
+            chatId: chatId ?? undefined,
+            messageIndex: assistantMsgIndex,
+            isPrivate: isPrivateChat,
+          });
 
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
+      assistantMessageIdRef.current = null;
 
       const response = await fetch(chatUrl, {
         method: "POST",
@@ -1682,16 +1683,16 @@ export function AIAgentPanel({
       await handleStreamingResponse(
         response,
         assistantMessageId,
-        async (content, usage, toolCalls) => {
-          if (chatId && !isPrivateChat) {
-            await persistAssistantMessage(chatId, content, assistantMsgIndex, usage, toolCalls);
-            if (isNewChat) {
-              generateAndUpdateChatTitle(chatId, userInput, content).catch(() => {});
-            }
+        async (content) => {
+          // Server persists the assistant message. Client only fires the
+          // new-chat title generation on clean completion.
+          if (chatId && !isPrivateChat && isNewChat) {
+            generateAndUpdateChatTitle(chatId, userInput, content).catch(() => {});
           }
         },
         undefined,
-        abortController.signal
+        abortController.signal,
+        (id) => { assistantMessageIdRef.current = id; }
       );
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -2033,12 +2034,20 @@ export function AIAgentPanel({
             bookId: bookId ?? undefined,
             bookIds: isLibraryMode ? bookIds : undefined,
             chatId: chatId ?? undefined,
+            messageIndex: assistantMsgIndex,
+            isPrivate: isPrivateChat,
             scopeLabel: isLibraryMode ? (aiScope?.type === "collection" ? `collection "${aiScope.name}"` : aiScope?.type === "curated-library" ? "the curated library" : aiScope?.type === "curated-collection" ? `curated collection "${aiScope.name}"` : undefined) : undefined,
           })
-        : JSON.stringify({ messages: messagesForAPI, chatId: chatId ?? undefined });
+        : JSON.stringify({
+            messages: messagesForAPI,
+            chatId: chatId ?? undefined,
+            messageIndex: assistantMsgIndex,
+            isPrivate: isPrivateChat,
+          });
 
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
+      assistantMessageIdRef.current = null;
 
       const response = await fetch(chatUrl, {
         method: "POST",
@@ -2053,16 +2062,14 @@ export function AIAgentPanel({
       await handleStreamingResponse(
         response,
         assistantMessageId,
-        async (content, usage, toolCalls) => {
-          if (chatId && !isPrivateChat) {
-            await persistAssistantMessage(chatId, content, assistantMsgIndex, usage, toolCalls);
-            if (isNewChat) {
-              generateAndUpdateChatTitle(chatId, explainUserMessage, content).catch(() => {});
-            }
+        async (content) => {
+          if (chatId && !isPrivateChat && isNewChat) {
+            generateAndUpdateChatTitle(chatId, explainUserMessage, content).catch(() => {});
           }
         },
         undefined,
-        abortController.signal
+        abortController.signal,
+        (id) => { assistantMessageIdRef.current = id; }
       );
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
