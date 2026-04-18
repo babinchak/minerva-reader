@@ -958,7 +958,9 @@ export function AIAgentPanel({
         .eq("user_id", userId)
         .order("updated_at", { ascending: false });
       if (bookId) {
-        q = q.or(`book_id.eq.${bookId},book_id.is.null`);
+        q = q.eq("book_id", bookId);
+      } else {
+        q = q.is("book_id", null);
       }
       const { data } = await q;
       setChats(data ?? []);
