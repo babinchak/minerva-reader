@@ -1699,10 +1699,6 @@ export function AIAgentPanel({
     onActionStart?.();
     hapticHeader();
 
-    // If action says "page", but we are in an EPUB, we do a best-effort visible-context extraction.
-    // For PDF we use the existing page-context logic.
-
-    // Get current selection position
     setIsLoading(true);
 
     let summaries: SummaryContext[] = [];
@@ -1710,10 +1706,61 @@ export function AIAgentPanel({
     let selectionPositionTitle: string | undefined;
     const explainUserMessage = isExplainPage ? "Explain page" : "Explain selection";
     let explainBodyText = currentSelectedText;
+
+    // Compute label/title from the cached selection snapshot so the optimistic
+    // bubble can render before the slow DOM walks and Supabase summary queries.
+    // PDF "Explain page" still needs the DOM walk for the page number — label is
+    // updated after that work completes.
+    if (isPdf && !isExplainPage) {
+      const position = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
+      if (position) {
+        const formatted = formatSelectionPositionLabel(position.start, position.end);
+        selectionPositionLabel = formatted.label;
+        selectionPositionTitle = formatted.title;
+      }
+    } else if (!isPdf && isExplainPage) {
+      selectionPositionLabel = `(View)`;
+      selectionPositionTitle = "EPUB visible context";
+    } else if (!isPdf && !isExplainPage) {
+      const readingOrder = rawManifest?.readingOrder || [];
+      const position = selectionSnapshot?.epubPosition ?? getCurrentSelectionPosition(readingOrder, null);
+      if (position) {
+        const formatted = formatSelectionPositionLabel(position.start, position.end);
+        selectionPositionLabel = formatted.label;
+        selectionPositionTitle = formatted.title;
+      }
+    }
+
+    let userMessage: AIMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      content: explainUserMessage,
+      timestamp: new Date(),
+      selectionPositionLabel,
+      selectionPositionTitle,
+    };
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: AIMessage = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    scrollToLastUserMessage();
+
+    // Yield so React paints the bubble + ellipsis before heavy sync DOM walks
+    // and awaited summary queries.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
     if (isPdf) {
       if (isExplainPage) {
         const page = getCurrentPdfPageContext({ maxChars: 30000 });
         if (!page || !page.text) {
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== userMessage.id && m.id !== assistantMessageId)
+          );
           setIsLoading(false);
           onActionComplete?.();
           return;
@@ -1721,6 +1768,10 @@ export function AIAgentPanel({
         explainBodyText = page.text;
         selectionPositionLabel = `(Page ${page.pageNumber})`;
         selectionPositionTitle = `start=${page.startPosition} end=${page.endPosition}`;
+        userMessage = { ...userMessage, selectionPositionLabel, selectionPositionTitle };
+        setMessages((prev) =>
+          prev.map((m) => (m.id === userMessage.id ? userMessage : m))
+        );
         summaries = (
           await queryPdfSummariesForPosition(
             bookId,
@@ -1738,12 +1789,6 @@ export function AIAgentPanel({
         // even when live DOM selection position cannot be recovered.
         const position = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
         if (position) {
-          const formatted = formatSelectionPositionLabel(
-            position.start,
-            position.end
-          );
-          selectionPositionLabel = formatted.label;
-          selectionPositionTitle = formatted.title;
           summaries = (
             await queryPdfSummariesForPosition(
               bookId,
@@ -1763,13 +1808,14 @@ export function AIAgentPanel({
         const readingOrder = rawManifest?.readingOrder || [];
         const visible = getEpubVisibleContextWithPosition(readingOrder, { maxChars: 30000 });
         if (!visible?.text) {
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== userMessage.id && m.id !== assistantMessageId)
+          );
           setIsLoading(false);
           onActionComplete?.();
           return;
         }
         explainBodyText = visible.text;
-        selectionPositionLabel = `(View)`;
-        selectionPositionTitle = "EPUB visible context";
         summaries = (
           await querySummariesForPosition(bookId, visible.startPosition, visible.endPosition)
         ).map(({ summary_type, toc_title, chapter_path, summary_text }) => ({
@@ -1782,9 +1828,6 @@ export function AIAgentPanel({
         const readingOrder = rawManifest?.readingOrder || [];
         const position = selectionSnapshot?.epubPosition ?? getCurrentSelectionPosition(readingOrder, null);
         if (position) {
-          const formatted = formatSelectionPositionLabel(position.start, position.end);
-          selectionPositionLabel = formatted.label;
-          selectionPositionTitle = formatted.title;
           summaries = (await querySummariesForPosition(bookId, position.start, position.end)).map(
             ({ summary_type, toc_title, chapter_path, summary_text }) => ({
               summary_type: summary_type ?? "chapter",
@@ -1889,24 +1932,6 @@ export function AIAgentPanel({
       isExplainPage ? "page" : "selected text"
     } from the book:\n\n"${explainBodyText}"\n\nProvide a clear and helpful explanation in the context of the book.`;
 
-
-    const userMessage: AIMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content: explainUserMessage,
-      timestamp: new Date(),
-      selectionPositionLabel,
-      selectionPositionTitle,
-    };
-
-    const assistantMessageId = (Date.now() + 1).toString();
-    const assistantMessage: AIMessage = {
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      timestamp: new Date(),
-    };
-
     try {
       let chatId: string | null = null;
       let historyForAPI: { role: "user" | "assistant"; content: string }[] = [];
@@ -1946,8 +1971,6 @@ export function AIAgentPanel({
         }
       } else {
         historyForAPI = messages.map((m) => ({ role: m.role, content: m.content }));
-        setMessages((prev) => [...prev, userMessage, assistantMessage]);
-        scrollToLastUserMessage();
       }
 
       const userMsgIndex = msgCount;
