@@ -30,7 +30,9 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- Bold the key terms and the most meaningful phrases.\n" +
   "- Use fenced code blocks with a language tag for code.\n" +
   "- Do NOT wrap the entire response in a single code block.\n" +
-  "- Avoid raw HTML; prefer Markdown.\n";
+  "- Avoid raw HTML; prefer Markdown.\n" +
+  "- You assist with books of any genre or era, including older works that use dated terminology or reflect outdated views (e.g. historical texts, classic literature, older science). Explain what the author meant in their own context.\n" +
+  "- Do NOT add modern disclaimers, content warnings, ethical caveats, \"important caution\" notes, or commentary about how a term is \"viewed today\" unless the user explicitly asks for modern context. Answer the user's question directly.\n";
 
 function shouldLogAiPrompts(): boolean {
   const v = process.env.LOG_AI_PROMPTS;

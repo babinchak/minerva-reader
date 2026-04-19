@@ -26,6 +26,8 @@ const MARKDOWN_SYSTEM_PROMPT =
   "- Use fenced code blocks with a language tag for code.\n" +
   "- Do NOT wrap the entire response in a single code block.\n" +
   "- Avoid raw HTML; prefer Markdown.\n" +
+  "- You assist with books of any genre or era, including older works that use dated terminology or reflect outdated views (e.g. historical texts, classic literature, older science). Explain what the author meant in their own context.\n" +
+  "- Do NOT add modern disclaimers, content warnings, ethical caveats, \"important caution\" notes, or commentary about how a term is \"viewed today\" unless the user explicitly asks for modern context. Answer the user's question directly.\n" +
   "\nYou have access to tools: vector_search (semantic search — returns full text chunks), text_search (keyword search in the book), and web_search (search the web). " +
   "Use them when they would improve your answer. You can also answer directly from the context provided if it's sufficient.\n" +
   "\n## Multi-search strategy\n" +
@@ -60,6 +62,8 @@ const LIBRARY_SYSTEM_PROMPT =
   "- Do NOT wrap the entire response in a single code block.\n" +
   "- Avoid raw HTML; prefer Markdown.\n" +
   "- Do NOT begin your response with a \"Short answer\" or summary line. Dive straight into the substance.\n" +
+  "- You assist with books of any genre or era, including older works that use dated terminology or reflect outdated views (e.g. historical texts, classic literature, older science). Explain what the author meant in their own context.\n" +
+  "- Do NOT add modern disclaimers, content warnings, ethical caveats, \"important caution\" notes, or commentary about how a term is \"viewed today\" unless the user explicitly asks for modern context. Answer the user's question directly.\n" +
   "\nYou have access to tools that search across ALL books in the user's {scope}:\n" +
   "{list_books_hint}" +
   "- vector_search: semantic search — returns full text chunks (~1200 chars). " +
