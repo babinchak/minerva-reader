@@ -5,7 +5,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { X, Send, Square, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff, ExternalLink, BookOpenText } from "lucide-react";
+import { X, ArrowUp, Square, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff, ExternalLink, BookOpenText } from "lucide-react";
 import { StreamingMarkdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
 import { ToolCallSteps, formatToolLabel, getQueryPreview, type MessageToolCall } from "@/components/tool-call-steps";
 import { createClient } from "@/lib/supabase/client";
@@ -110,7 +110,7 @@ function ChatInput({ initialValue, placeholder, loading, onSubmit, onStop, varia
         </Button>
       ) : (
         <Button onClick={submit} disabled={!input.trim()} size="icon" aria-label="Send">
-          <Send className="h-4 w-4" />
+          <ArrowUp className="h-4 w-4" />
         </Button>
       )}
     </div>
