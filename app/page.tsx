@@ -43,7 +43,8 @@ async function fetchResponseWallSeed(limit = 15) {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("collection_demos")
-    .select("id, question, tool_calls, answer, books, curated_collections!inner(name, slug)")
+    .select("id, question, tool_calls, answer, books, wall_rank, curated_collections!inner(name, slug)")
+    .order("wall_rank", { ascending: true, nullsFirst: false })
     .order("id")
     .limit(limit);
 
