@@ -87,12 +87,12 @@ function demosToCards(demos: ApiDemo[], seen: Set<string>): ResponseCard[] {
 /* ------------------------------------------------------------------ */
 
 const HEADLINES = [
+  "Not a summary app. A reading app.",
   "Stop copy-pasting passages into ChatGPT",
   "One tap to navigate to any reference",
   "Search across your entire book collection",
   "Search an author's entire body of work in seconds",
   "Find that quote you half-remember",
-  "Not a summary app. A reading app.",
   "Read first. Ask second.",
   "Stop losing your place in dense books",
   "Prep for book club in 5 minutes",
