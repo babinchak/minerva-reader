@@ -50,7 +50,7 @@ export function PricingCards() {
           <ul className="space-y-2 text-sm">
             <li className="flex items-start gap-2">
               <Check className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-              <span>More monthly usage</span>
+              <span>$10 of monthly usage</span>
             </li>
             <li className="flex items-start gap-2">
               <Check className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
