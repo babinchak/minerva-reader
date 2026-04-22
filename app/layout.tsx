@@ -19,9 +19,11 @@ const satoshi = localFont({
   display: "swap",
 });
 
-const defaultUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : "http://localhost:4000";
+const defaultUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:4000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
