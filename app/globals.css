@@ -1079,6 +1079,13 @@
     display: none !important;
   }
 
+  /* Hide Thorium's bottom bar in paginated mode (page nav is already in our top toolbar).
+   * Keep it in scrollable mode where the prev/next spine buttons are still useful. */
+  .epub-reader-with-custom-toolbar:not(.epub-scroll-on) #reader-footer-overlay,
+  .epub-reader-with-custom-toolbar:not(.epub-scroll-on) #bottom-bar {
+    display: none !important;
+  }
+
   /* Thorium uses height: 100vh which can overflow and overlap our toolbar.
    * Constrain the reader to the content area so it sits below the toolbar. */
   .epub-reader-with-custom-toolbar #reader-main,

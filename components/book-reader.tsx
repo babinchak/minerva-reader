@@ -448,6 +448,7 @@ export function BookReader({ rawManifest, selfHref, bookTitle, initialReadingPos
         <ThI18nProvider>
           <ThoriumThemeSync />
           <EpubPanelOpenWatcher onChange={setThoriumPanelOpen} />
+          <EpubScrollModeClass />
           <EpubMobileLayoutForce />
           <EpubMobileIframeHeightFix enabled={isMobile} />
           <EpubSelectionTouchGuard enabled={isMobile} />
@@ -919,6 +920,21 @@ function applyThemeToEpubIframes(tokens: Record<string, string>) {
       // Cross-origin or inaccessible iframe
     }
   }
+}
+
+/** Mirrors Thorium's scroll-mode setting as a class on the reader root, so CSS can
+ *  conditionally show/hide Thorium chrome (e.g. the footer bar) per layout. */
+function EpubScrollModeClass() {
+  const isScroll = useAppSelector((state) => Boolean(state.settings?.scroll));
+  useEffect(() => {
+    const root = document.querySelector(".epub-reader-with-custom-toolbar");
+    if (!root) return;
+    root.classList.toggle("epub-scroll-on", isScroll);
+    return () => {
+      root.classList.remove("epub-scroll-on");
+    };
+  }, [isScroll]);
+  return null;
 }
 
 /** Forces paginated mode on mobile. Settings hiding happens in the initial preferences. */
