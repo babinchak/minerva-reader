@@ -1096,11 +1096,6 @@
     max-height: 100% !important;
   }
 
-  /* Add top padding so body text isn't crowded against the toolbar */
-  .epub-reader-with-custom-toolbar #container {
-    padding-top: 1.5rem !important;
-  }
-
   /* Override Thorium reader's html,body styles which persist after navigation */
   html.scroll-unlock,
   body.scroll-unlock {
