@@ -139,7 +139,7 @@ export function BookCard({
         )}
       </div>
       <div className="mt-2 flex-1">
-        <h3 className={`line-clamp-2 text-sm font-medium leading-snug ${isBlocked ? "text-muted-foreground" : "text-foreground group-hover:text-primary"}`}>
+        <h3 className={`line-clamp-2 break-words text-sm font-medium leading-snug ${isBlocked ? "text-muted-foreground" : "text-foreground group-hover:text-primary"}`}>
           {title}
         </h3>
         {authorDisplay && (

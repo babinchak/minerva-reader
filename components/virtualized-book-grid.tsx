@@ -101,7 +101,11 @@ export function VirtualizedBookGrid({
             i++
           ) {
             rowItems.push(
-              <div key={i} style={{ flex: `0 0 calc((100% - ${GAP * (columns - 1)}px) / ${columns})` }}>
+              <div
+                key={i}
+                className="min-w-0"
+                style={{ flex: `0 0 calc((100% - ${GAP * (columns - 1)}px) / ${columns})` }}
+              >
                 {renderItem(i)}
               </div>
             );
