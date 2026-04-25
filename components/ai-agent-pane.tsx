@@ -1625,7 +1625,9 @@ export function AIAgentPanel({
         if (contextHeader) {
           contextHeader += "\n";
         }
-        userContent = `${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendLocalContextBlock ? `${sendLocalContextBlock}` : ""}Selected text (use as context):\n"${selectionForSend}"\n\nUser question:\n${userInput}`;
+        const pageContextInner = `${sendLocalContextBlock || ""}Selected text (use as context):\n"${selectionForSend}"\n`;
+        const wrappedPageContext = `<current_page_context>\n${pageContextInner}</current_page_context>\n\n`;
+        userContent = `${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${wrappedPageContext}User question:\n${userInput}`;
       } else if (!selectionForSend) {
         let contextHeader = "";
         const finalBookTitle = sendBookContext?.title ?? bookTitle;
@@ -1640,7 +1642,10 @@ export function AIAgentPanel({
           contextHeader += "\n";
         }
         if (sendContextBlock || sendPageContextBlock || contextHeader) {
-          userContent = `${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${sendPageContextBlock ? `${sendPageContextBlock}\n\n` : ""}User question:\n${userInput}`;
+          const wrappedPageContext = sendPageContextBlock
+            ? `<current_page_context>\n${sendPageContextBlock}\n</current_page_context>\n\n`
+            : "";
+          userContent = `${contextHeader}${sendContextBlock ? `${sendContextBlock}` : ""}${wrappedPageContext}User question:\n${userInput}`;
         }
       }
 
@@ -1924,7 +1929,8 @@ export function AIAgentPanel({
     appendSummaries("Broader summary (wide context)", broadSummaries);
     appendSummaries("More specific summary (narrow context)", narrowSummaries);
 
-    // Add local context window around selection (PDF from document for cross-page; EPUB from DOM)
+    // Build current-page-context block (local nearby text + the selected/page text the user wants explained)
+    let pageContextInner = "";
     if (!isExplainPage) {
       if (isPdf) {
         const position = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
@@ -1946,13 +1952,13 @@ export function AIAgentPanel({
           });
         }
         if (local && (local.beforeText || local.afterText)) {
-          prompt += "Local context around the selection (PDF text from surrounding pages):\n\n";
+          pageContextInner += "Local context around the selection (PDF text from surrounding pages):\n\n";
           if (local.beforeText) {
-            prompt += `Before:\n"${local.beforeText}"\n\n`;
+            pageContextInner += `Before:\n"${local.beforeText}"\n\n`;
           }
-          prompt += `Selected:\n"${local.selectedText}"\n\n`;
+          pageContextInner += `Selected:\n"${local.selectedText}"\n\n`;
           if (local.afterText) {
-            prompt += `After:\n"${local.afterText}"\n\n`;
+            pageContextInner += `After:\n"${local.afterText}"\n\n`;
           }
         }
       } else {
@@ -1962,22 +1968,23 @@ export function AIAgentPanel({
           maxTotalChars: 2800,
         });
         if (local && (local.beforeText || local.afterText)) {
-          prompt += "Local context around the selection (EPUB nearby text):\n\n";
+          pageContextInner += "Local context around the selection (EPUB nearby text):\n\n";
           if (local.beforeText) {
-            prompt += `Before:\n"${local.beforeText}"\n\n`;
+            pageContextInner += `Before:\n"${local.beforeText}"\n\n`;
           }
-          prompt += `Selected:\n"${local.selectedText}"\n\n`;
+          pageContextInner += `Selected:\n"${local.selectedText}"\n\n`;
           if (local.afterText) {
-            prompt += `After:\n"${local.afterText}"\n\n`;
+            pageContextInner += `After:\n"${local.afterText}"\n\n`;
           }
         }
       }
     }
 
-    // Add the selected text and instruction
-    prompt += `Please explain the following ${
-      isExplainPage ? "page" : "selected text"
-    } from the book:\n\n"${explainBodyText}"\n\nProvide a clear and helpful explanation in the context of the book.`;
+    pageContextInner += `${isExplainPage ? "Current page" : "Selected text"}:\n"${explainBodyText}"\n`;
+    prompt += `<current_page_context>\n${pageContextInner}</current_page_context>\n\n`;
+    prompt += `Please explain the ${
+      isExplainPage ? "current page" : "selected text"
+    } above in the context of the book. Provide a clear and helpful explanation.`;
 
     try {
       let chatId: string | null = null;
