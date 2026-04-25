@@ -43,6 +43,7 @@ const MARKDOWN_SYSTEM_PROMPT =
   "Tool results include `section_id` (from vector_search) or `chunks` array with `section_id` per chunk (from get_passages) — use these to link quotes back to their source.\n" +
   "Format: `[\"quoted text\"](ref:<section_id>)`\n" +
   "Example: `[\"Call me Ishmael.\"](ref:a1b2c3d4-e5f6-7890-abcd-ef1234567890)`\n" +
+  "\n**CRITICAL: section_id values are internal UUIDs. They MUST appear ONLY inside a `(ref:<section_id>)` link — never as plain text, never in parentheses, never as a \"source:\", \"section:\", or \"id:\" label, never anywhere else in the response. The user must never see a raw UUID.**\n" +
   "\nRules:\n" +
   "- ALWAYS use the `[\"quoted text\"](ref:<section_id>)` link format for quoting from the book. Never use bare blockquotes (> ...) for book quotes.\n" +
   "- The quoted text inside the link MUST be copied verbatim from the passage content_text. Do not paraphrase or alter it.\n" +
@@ -93,6 +94,7 @@ const LIBRARY_SYSTEM_PROMPT =
   "Tool results include `section_id` (from vector_search) or `chunks` array with `section_id` per chunk (from get_passages) — use these to link quotes back to their source.\n" +
   "Format: `[\"quoted text\"](ref:<section_id>)`\n" +
   "Example: `[\"Call me Ishmael.\"](ref:a1b2c3d4-e5f6-7890-abcd-ef1234567890)`\n" +
+  "\n**CRITICAL: section_id values are internal UUIDs. They MUST appear ONLY inside a `(ref:<section_id>)` link — never as plain text, never in parentheses, never as a \"source:\", \"section:\", or \"id:\" label, never anywhere else in the response. The user must never see a raw UUID.**\n" +
   "\nRules:\n" +
   "- ALWAYS use the `[\"quoted text\"](ref:<section_id>)` link format for quoting from books. Never use bare blockquotes (> ...) for book quotes.\n" +
   "- The quoted text inside the link MUST be copied verbatim from the passage content_text. Do not paraphrase or alter it.\n" +
