@@ -207,6 +207,40 @@ const MessageGroup = memo(function MessageGroup({
   );
 });
 
+/**
+ * Compute before/after buffer sizes for the <current_page_context> block.
+ * Total budget is fixed; the buffer shrinks as the focal text grows, with a
+ * floor so even very long selections still get an anchor of surrounding text.
+ */
+function computeContextBudget(focalLen: number, opts?: { totalCap?: number }) {
+  const totalCap = opts?.totalCap ?? 6000;
+  const remaining = Math.max(0, totalCap - focalLen);
+  const half = Math.max(400, Math.min(3000, Math.floor(remaining / 2)));
+  return { beforeChars: half, afterChars: half, maxTotalChars: totalCap };
+}
+
+/**
+ * Enrich a historical user message with a positional anchor before sending to the LLM.
+ * Persisted user content is already lean (raw question, or "Explain page" / "Explain selection"),
+ * but that strips the model of any anchor for follow-ups. We use the existing
+ * selection_position_label (e.g. "(Page 47)") to add a tiny marker.
+ */
+function enrichHistoryMessage(content: string, positionLabel?: string | null): string {
+  if (content === "Explain page") {
+    const pageMatch = positionLabel?.match(/Page\s+(\d+)/i);
+    return pageMatch ? `[Asked to explain page ${pageMatch[1]}]` : "[Asked to explain current page]";
+  }
+  if (content === "Explain selection") {
+    return positionLabel
+      ? `[Asked to explain selection at ${positionLabel}]`
+      : "[Asked to explain selection]";
+  }
+  if (positionLabel) {
+    return `[Earlier selection at ${positionLabel}]\n\n${content}`;
+  }
+  return content;
+}
+
 export interface AIAgentPanelProps {
   selectedText?: string;
   bookId?: string;
@@ -1517,6 +1551,7 @@ export function AIAgentPanel({
     }
 
     if (hasSelection) {
+      const budget = computeContextBudget(selectionForSend.length);
       if (bookType === "pdf") {
         const pos = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
         let local: { beforeText: string; selectedText: string; afterText: string } | null = null;
@@ -1526,15 +1561,11 @@ export function AIAgentPanel({
             pos.start,
             pos.end,
             selectionForSend,
-            { beforeChars: 1200, afterChars: 1200, pagesBefore: 2, pagesAfter: 2, maxTotalChars: 4000 }
+            { ...budget, pagesBefore: 3, pagesAfter: 3 }
           );
         }
         if (!local) {
-          local = getPdfLocalContextAroundCurrentSelection({
-            beforeChars: 800,
-            afterChars: 800,
-            maxTotalChars: 2400,
-          });
+          local = getPdfLocalContextAroundCurrentSelection(budget);
         }
         if (local && (local.beforeText || local.afterText)) {
           sendLocalContextBlock += "Local context around the selection (PDF text from surrounding pages):\n\n";
@@ -1547,11 +1578,7 @@ export function AIAgentPanel({
           }
         }
       } else {
-        const local = getEpubLocalContextAroundCurrentSelection({
-          beforeChars: 900,
-          afterChars: 900,
-          maxTotalChars: 2800,
-        });
+        const local = getEpubLocalContextAroundCurrentSelection(budget);
         if (local && (local.beforeText || local.afterText)) {
           sendLocalContextBlock += "Local context around the selection (EPUB nearby text):\n\n";
           if (local.beforeText) {
@@ -1589,7 +1616,10 @@ export function AIAgentPanel({
               selectionPositionLabel: m.selection_position_label ?? undefined,
               selectionPositionTitle: m.selection_position_title ?? undefined,
             }));
-            historyForAPI = existingAsAIMessages.map((m) => ({ role: m.role, content: m.content }));
+            historyForAPI = existingAsAIMessages.map((m) => ({
+              role: m.role,
+              content: m.role === "user" ? enrichHistoryMessage(m.content, m.selectionPositionLabel) : m.content,
+            }));
             setMessages([...existingAsAIMessages, userMessage, assistantMessage]);
           } else {
             setMessages([userMessage, assistantMessage]);
@@ -1604,7 +1634,10 @@ export function AIAgentPanel({
           );
         }
       } else {
-        historyForAPI = messages.map((m) => ({ role: m.role, content: m.content }));
+        historyForAPI = messages.map((m) => ({
+          role: m.role,
+          content: m.role === "user" ? enrichHistoryMessage(m.content, m.selectionPositionLabel) : m.content,
+        }));
       }
 
       const userMsgIndex = msgCount;
@@ -1806,6 +1839,7 @@ export function AIAgentPanel({
     // and awaited summary queries.
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
+    let pdfPagePosForLocalContext: { start: string; end: string } | null = null;
     if (isPdf) {
       if (isExplainPage) {
         const page = getCurrentPdfPageContext({ maxChars: 30000 });
@@ -1818,6 +1852,7 @@ export function AIAgentPanel({
           return;
         }
         explainBodyText = page.text;
+        pdfPagePosForLocalContext = { start: page.startPosition, end: page.endPosition };
         selectionPositionLabel = `(Page ${page.pageNumber})`;
         selectionPositionTitle = `start=${page.startPosition} end=${page.endPosition}`;
         userMessage = { ...userMessage, selectionPositionLabel, selectionPositionTitle };
@@ -1931,51 +1966,50 @@ export function AIAgentPanel({
 
     // Build current-page-context block (local nearby text + the selected/page text the user wants explained)
     let pageContextInner = "";
-    if (!isExplainPage) {
-      if (isPdf) {
-        const position = selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition();
-        let local: { beforeText: string; selectedText: string; afterText: string } | null = null;
-        if (pdfDocument && position && explainBodyText) {
-          local = await getPdfLocalContextFromDocument(
-            pdfDocument,
-            position.start,
-            position.end,
-            explainBodyText,
-            { beforeChars: 1200, afterChars: 1200, pagesBefore: 2, pagesAfter: 2, maxTotalChars: 4000 }
-          );
+    const explainBudget = computeContextBudget(explainBodyText.length);
+    if (isPdf) {
+      const position = isExplainPage
+        ? pdfPagePosForLocalContext
+        : (selectionSnapshot?.pdfPosition ?? getCurrentPdfSelectionPosition());
+      let local: { beforeText: string; selectedText: string; afterText: string } | null = null;
+      if (pdfDocument && position && explainBodyText) {
+        local = await getPdfLocalContextFromDocument(
+          pdfDocument,
+          position.start,
+          position.end,
+          explainBodyText,
+          { ...explainBudget, pagesBefore: 3, pagesAfter: 3 }
+        );
+      }
+      if (!local && !isExplainPage) {
+        // DOM fallback only makes sense for selection (explain-page already has full page text)
+        local = getPdfLocalContextAroundCurrentSelection(explainBudget);
+      }
+      if (local && (local.beforeText || local.afterText)) {
+        const label = isExplainPage
+          ? "Local context around the page (PDF text from surrounding pages)"
+          : "Local context around the selection (PDF text from surrounding pages)";
+        pageContextInner += `${label}:\n\n`;
+        if (local.beforeText) {
+          pageContextInner += `Before:\n"${local.beforeText}"\n\n`;
         }
-        if (!local) {
-          local = getPdfLocalContextAroundCurrentSelection({
-            beforeChars: 800,
-            afterChars: 800,
-            maxTotalChars: 2400,
-          });
+        pageContextInner += `Selected:\n"${local.selectedText}"\n\n`;
+        if (local.afterText) {
+          pageContextInner += `After:\n"${local.afterText}"\n\n`;
         }
-        if (local && (local.beforeText || local.afterText)) {
-          pageContextInner += "Local context around the selection (PDF text from surrounding pages):\n\n";
-          if (local.beforeText) {
-            pageContextInner += `Before:\n"${local.beforeText}"\n\n`;
-          }
-          pageContextInner += `Selected:\n"${local.selectedText}"\n\n`;
-          if (local.afterText) {
-            pageContextInner += `After:\n"${local.afterText}"\n\n`;
-          }
+      }
+    } else if (!isExplainPage) {
+      // EPUB: only fetch local context for selections — explain-page already passes the full visible text
+      // and the DOM doesn't reliably hold surrounding-chapter content to use as "before/after".
+      const local = getEpubLocalContextAroundCurrentSelection(explainBudget);
+      if (local && (local.beforeText || local.afterText)) {
+        pageContextInner += "Local context around the selection (EPUB nearby text):\n\n";
+        if (local.beforeText) {
+          pageContextInner += `Before:\n"${local.beforeText}"\n\n`;
         }
-      } else {
-        const local = getEpubLocalContextAroundCurrentSelection({
-          beforeChars: 900,
-          afterChars: 900,
-          maxTotalChars: 2800,
-        });
-        if (local && (local.beforeText || local.afterText)) {
-          pageContextInner += "Local context around the selection (EPUB nearby text):\n\n";
-          if (local.beforeText) {
-            pageContextInner += `Before:\n"${local.beforeText}"\n\n`;
-          }
-          pageContextInner += `Selected:\n"${local.selectedText}"\n\n`;
-          if (local.afterText) {
-            pageContextInner += `After:\n"${local.afterText}"\n\n`;
-          }
+        pageContextInner += `Selected:\n"${local.selectedText}"\n\n`;
+        if (local.afterText) {
+          pageContextInner += `After:\n"${local.afterText}"\n\n`;
         }
       }
     }
@@ -2009,7 +2043,10 @@ export function AIAgentPanel({
               selectionPositionLabel: m.selection_position_label ?? undefined,
               selectionPositionTitle: m.selection_position_title ?? undefined,
             }));
-            historyForAPI = existingAsAIMessages.map((m) => ({ role: m.role, content: m.content }));
+            historyForAPI = existingAsAIMessages.map((m) => ({
+              role: m.role,
+              content: m.role === "user" ? enrichHistoryMessage(m.content, m.selectionPositionLabel) : m.content,
+            }));
             setMessages([...existingAsAIMessages, userMessage, assistantMessage]);
           } else {
             setMessages([userMessage, assistantMessage]);
@@ -2024,7 +2061,10 @@ export function AIAgentPanel({
           );
         }
       } else {
-        historyForAPI = messages.map((m) => ({ role: m.role, content: m.content }));
+        historyForAPI = messages.map((m) => ({
+          role: m.role,
+          content: m.role === "user" ? enrichHistoryMessage(m.content, m.selectionPositionLabel) : m.content,
+        }));
       }
 
       const userMsgIndex = msgCount;
