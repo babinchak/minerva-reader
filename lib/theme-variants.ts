@@ -18,7 +18,8 @@ export type ThemeVariantId =
   | "obsidian"
   | "gothic"
   | "inferno"
-  | "cyberpunk";
+  | "cyberpunk"
+  | "oled";
 
 /** HSL string for inline styles: "hsl(H, S%, L%)" */
 function hsl(h: number, s: number, l: number) {
@@ -109,6 +110,10 @@ const PREVIEW_COLORS: Record<
   cyberpunk: {
     light: { bg: hsl(220, 12, 97), primary: hsl(180, 75, 42), accent: hsl(300, 60, 92) },
     dark: { bg: hsl(260, 20, 6), primary: hsl(180, 90, 55), accent: hsl(300, 80, 25) },
+  },
+  oled: {
+    light: { bg: hsl(0, 0, 100), primary: hsl(0, 0, 0), accent: hsl(0, 0, 94) },
+    dark: { bg: hsl(0, 0, 0), primary: hsl(0, 0, 100), accent: hsl(0, 0, 10) },
   },
 };
 
@@ -244,6 +249,7 @@ export const THEME_VARIANTS = [
   { id: "gothic", name: "Gothic", description: "Dark and dramatic" },
   { id: "inferno", name: "Inferno", description: "Fire and lava" },
   { id: "cyberpunk", name: "Cyberpunk", description: "Neon cyan and electric" },
+  { id: "oled", name: "OLED", description: "Pure black and pure white" },
 ] as const;
 
 export const STORAGE_KEY = "minerva-theme-variants";
