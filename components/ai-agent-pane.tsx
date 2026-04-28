@@ -5,7 +5,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { X, ArrowUp, Square, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, EyeOff, ExternalLink, BookOpenText } from "lucide-react";
+import { X, ArrowUp, Square, Plus, Clock, MessageSquare, Zap, Sparkles, Loader2, ChevronRight, Highlighter, AlertCircle, FolderOpen, Trash2, Eye, EyeOff, ExternalLink, BookOpenText } from "lucide-react";
 import { StreamingMarkdown, type SectionBookInfo, type PassageRef } from "@/components/markdown";
 import { ToolCallSteps, formatToolLabel, getQueryPreview, type MessageToolCall } from "@/components/tool-call-steps";
 import { createClient } from "@/lib/supabase/client";
@@ -1142,12 +1142,6 @@ export function AIAgentPanel({
     }
   };
 
-  const handleNewPrivateChat = () => {
-    setActiveChatId(null);
-    setMessages([]);
-    setIsPrivateChat(true);
-  };
-
   const handleSelectChat = (chatId: string) => {
     setActiveChatId(chatId);
     setIsPrivateChat(false);
@@ -2177,34 +2171,17 @@ export function AIAgentPanel({
         <div className="flex flex-col border-b border-border">
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-1">
-              {userId ? (
-                <DropdownMenu modal={false}>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-foreground"
-                      aria-label="New chat"
-                      title="New chat"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    onCloseAutoFocus={(e) => e.preventDefault()}
-                    onPointerDownOutside={(e) => e.detail.originalEvent.stopPropagation()}
-                  >
-                    <DropdownMenuItem onClick={handleNewChat} className="flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4" />
-                      New chat
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleNewPrivateChat} className="flex items-center gap-2">
-                      <EyeOff className="h-4 w-4" />
-                      New private chat
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+              {userId && messages.length === 0 && !activeChatId ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsPrivateChat((prev) => !prev)}
+                  className="h-8 w-8 text-foreground"
+                  aria-label={isPrivateChat ? "Make chat normal" : "Make chat private"}
+                  title={isPrivateChat ? "Make chat normal" : "Make chat private"}
+                >
+                  {isPrivateChat ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                </Button>
               ) : (
                 <Button
                   variant="ghost"
@@ -2452,6 +2429,14 @@ export function AIAgentPanel({
         </div>
       )}
 
+      {/* Private chat banner */}
+      {isPrivateChat && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-xs border-b border-amber-200 dark:border-amber-800">
+          <EyeOff className="h-3 w-3 shrink-0" />
+          Private chat — messages won&apos;t be saved to history
+        </div>
+      )}
+
       {/* Empty state: input near top (Cursor-style) */}
       {showMessages && messages.length === 0 && (
         <div className="flex-1 flex flex-col justify-start pt-4 px-4 min-h-0">
@@ -2472,14 +2457,6 @@ export function AIAgentPanel({
                 onStop={handleStop}
               />
             </div>
-        </div>
-      )}
-
-      {/* Private chat banner */}
-      {isPrivateChat && (
-        <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-xs border-b border-amber-200 dark:border-amber-800">
-          <EyeOff className="h-3 w-3 shrink-0" />
-          Private chat — messages won&apos;t be saved to history
         </div>
       )}
 
