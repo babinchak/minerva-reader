@@ -27,6 +27,11 @@ export function VerifyOtpForm({
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
+  // `next` is forwarded by the sign-up form when the user came in via an
+  // anon-chat handoff (or any other redirect-after-auth flow). Falls back
+  // to /browse so fresh signups land on the curated collections view rather
+  // than an empty library.
+  const next = searchParams.get("next");
 
   const submitCode = useCallback(async (token: string) => {
     if (submittingRef.current) return;
@@ -42,7 +47,9 @@ export function VerifyOtpForm({
         type: "signup",
       });
       if (error) throw error;
-      router.push("/?new_signup=true");
+      const target = next ? next : "/browse";
+      const sep = target.includes("?") ? "&" : "?";
+      router.push(`${target}${sep}new_signup=true`);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "Invalid code. Please try again.");
       setCode(["", "", "", "", "", ""]);
@@ -51,7 +58,7 @@ export function VerifyOtpForm({
       setIsLoading(false);
       submittingRef.current = false;
     }
-  }, [email, router]);
+  }, [email, router, next]);
 
   const handleChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  const nextParam = searchParams.get("next");
 
   if (code) {
     const supabase = await createClient();
@@ -12,10 +12,14 @@ export async function GET(request: Request) {
     if (!error) {
       const { data: { user } } = await supabase.auth.getUser();
       const isNewUser = user && new Date(user.created_at).getTime() > Date.now() - 60000;
+      // New signups land on /browse by default (curated collections > empty
+      // home) but always honor an explicit `next` (e.g. anon-chat handoff).
       if (isNewUser) {
-        return NextResponse.redirect(`${origin}/?new_signup=true`);
+        const target = nextParam ?? "/browse";
+        const sep = target.includes("?") ? "&" : "?";
+        return NextResponse.redirect(`${origin}${target}${sep}new_signup=true`);
       }
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(`${origin}${nextParam ?? "/"}`);
     }
   }
 

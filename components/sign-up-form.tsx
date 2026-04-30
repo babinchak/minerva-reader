@@ -13,10 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GoogleIcon } from "@/components/google-icon";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
-export function SignUpForm({
+function SignUpFormInner({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
@@ -27,16 +27,25 @@ export function SignUpForm({
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Carry `next` through the entire signup flow (OTP step + OAuth callback)
+  // so post-auth lands the user where they intended (e.g. an anon-chat handoff
+  // back to /browse/{slug}). Falls back to /browse if not provided.
+  const next = searchParams.get("next");
 
   const handleGoogleSignUp = async () => {
     const supabase = createClient();
     setIsGoogleLoading(true);
     setError(null);
 
+    const callbackUrl = next
+      ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${window.location.origin}/auth/callback`;
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl,
       },
     });
 
@@ -69,7 +78,9 @@ export function SignUpForm({
           send_to: `${process.env.NEXT_PUBLIC_GOOGLE_ADS_ID}/${process.env.NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL}`,
         });
       }
-      router.push(`/auth/sign-up-success?email=${encodeURIComponent(email)}`);
+      const successQs = new URLSearchParams({ email });
+      if (next) successQs.set("next", next);
+      router.push(`/auth/sign-up-success?${successQs.toString()}`);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
@@ -170,5 +181,14 @@ export function SignUpForm({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export function SignUpForm(props: React.ComponentPropsWithoutRef<"div">) {
+  // useSearchParams requires Suspense in Next 14+
+  return (
+    <Suspense>
+      <SignUpFormInner {...props} />
+    </Suspense>
   );
 }

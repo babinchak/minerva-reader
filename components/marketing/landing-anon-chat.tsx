@@ -336,12 +336,38 @@ export function LandingAnonChat({
     }
   }, [sectionBookMap]);
 
+  /**
+   * Follow-up question = signup wall. Anon visitors get one free answer; the
+   * second click is when buying intent is highest, so we trade the chat for
+   * a conversion. The full conversation is stashed in sessionStorage so a
+   * future hydration step can restore it post-signup; for now we use the
+   * existing prefill plumbing to drop the user into the same collection's
+   * chat with the follow-up question pre-filled.
+   */
   const handleFollowUp = useCallback(() => {
     const q = followUp.trim();
     if (!q) return;
-    setFollowUp("");
-    enqueueQuestion(q);
-  }, [followUp, enqueueQuestion]);
+
+    // Snapshot the conversation up to and including the new follow-up.
+    const handoff = {
+      collectionSlug,
+      collectionName,
+      followUp: q,
+      messages: messages.map(({ role, content }) => ({ role, content })),
+      stashedAt: new Date().toISOString(),
+    };
+    try {
+      sessionStorage.setItem("minerva_anon_chat_handoff", JSON.stringify(handoff));
+      // Backfill the keys the existing recovery path looks for.
+      sessionStorage.setItem("minerva_prefill_question", q);
+      sessionStorage.setItem("minerva_prefill_collection", collectionSlug);
+    } catch {
+      /* sessionStorage unavailable (private mode) — proceed anyway. */
+    }
+
+    const next = `/browse/${encodeURIComponent(collectionSlug)}?prefill=${encodeURIComponent(q)}&openChat=1`;
+    window.location.href = `/auth/sign-up?next=${encodeURIComponent(next)}`;
+  }, [followUp, collectionSlug, collectionName, messages]);
 
   const lastAssistant = useMemo(
     () => [...messages].reverse().find((m) => m.role === "assistant"),
@@ -436,11 +462,8 @@ export function LandingAnonChat({
         <div className="border-t border-border bg-muted/20 px-4 py-3">
           {hasContent && !isLoading && !error && (
             <div className="mb-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground">
-              <span className="font-medium">Like what you see?</span>{" "}
-              <a href="/auth/sign-up" className="font-medium text-primary hover:underline">
-                Sign up free
-              </a>{" "}
-              to save answers, ask follow-ups across more books, and search your own library.
+              <span className="font-medium">Sign up free</span> to ask follow-ups,
+              save your conversation, and search across your own library.
             </div>
           )}
           <div className="flex items-center gap-2">
@@ -454,7 +477,7 @@ export function LandingAnonChat({
                   handleFollowUp();
                 }
               }}
-              placeholder={isLoading ? "Generating..." : "Ask a follow-up..."}
+              placeholder={isLoading ? "Generating..." : "Sign up to ask a follow-up..."}
               disabled={isLoading}
               className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
             />
@@ -469,7 +492,14 @@ export function LandingAnonChat({
                   : "bg-muted text-muted-foreground"
               )}
             >
-              {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+              {isLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <>
+                  Sign up
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </>
+              )}
             </button>
           </div>
         </div>
