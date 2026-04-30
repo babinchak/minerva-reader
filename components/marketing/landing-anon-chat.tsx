@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Script from "next/script";
-import { ArrowRight, Loader2, Sparkles, X } from "lucide-react";
+import { ArrowRight, Loader2, X } from "lucide-react";
 import { StreamingMarkdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
 import { ToolCallSteps, type MessageToolCall } from "@/components/tool-call-steps";
 import { cn } from "@/lib/utils";
@@ -390,12 +390,10 @@ export function LandingAnonChat({
 
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-foreground">{collectionName}</span>
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-              Free preview
-            </span>
+          <div className="flex items-center gap-1.5 text-sm">
+            <span className="font-medium text-foreground">{collectionName}</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-xs text-muted-foreground">free preview</span>
           </div>
           <button
             type="button"

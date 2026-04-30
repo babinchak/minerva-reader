@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Highlighter, Library, Search, Sparkles } from "lucide-react";
+import { BookOpen, Highlighter, Library, Search } from "lucide-react";
 import { Markdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
 
 
@@ -372,7 +372,6 @@ function CardPreview({
       className="group relative flex w-[340px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm sm:w-[400px]"
     >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 shrink-0">
-        <Sparkles className="h-3 w-3 text-primary" />
         <span className="text-[11px] font-medium text-muted-foreground">
           {collectionName}
         </span>

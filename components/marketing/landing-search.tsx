@@ -10,7 +10,7 @@ import {
 import {
   ChevronDown,
   Search,
-  Sparkles,
+  Loader2,
   ArrowRight,
 } from "lucide-react";
 import { Markdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
@@ -423,10 +423,9 @@ export function LandingSearch({
                     disabled={!!loadingDemoId}
                     className="group flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-left transition-all hover:border-primary/30 hover:bg-accent hover:shadow-sm disabled:opacity-50"
                   >
-                    <Sparkles className={cn(
-                      "mt-0.5 h-4 w-4 shrink-0 transition-colors group-hover:text-primary",
-                      loadingDemoId === demo.id ? "animate-spin text-primary" : "text-primary/60"
-                    )} />
+                    {loadingDemoId === demo.id && (
+                      <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" />
+                    )}
                     <span className="text-sm text-foreground">
                       {demo.question}
                     </span>
@@ -444,14 +443,12 @@ export function LandingSearch({
           <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-foreground">
+              <div className="flex items-center gap-1.5 text-sm">
+                <span className="font-medium text-foreground">
                   {selectedCollection?.name}
                 </span>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                  Demo
-                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-xs text-muted-foreground">demo</span>
               </div>
               <button
                 type="button"
@@ -539,7 +536,9 @@ export function LandingSearch({
                       disabled={!!loadingDemoId}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent disabled:opacity-50"
                     >
-                      <Sparkles className="h-3 w-3 text-primary/60" />
+                      {loadingDemoId === demo.id && (
+                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                      )}
                       <span className="max-w-[250px] truncate">
                         {demo.question}
                       </span>
