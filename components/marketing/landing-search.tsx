@@ -100,6 +100,11 @@ export function LandingSearch({
   // Live anonymous chat state
   const [anonQuestion, setAnonQuestion] = useState<string | null>(null);
 
+  // Separate state for the demo panel's bottom-CTA follow-up input. Sharing
+  // `inputValue` with the main search bar makes both fields render the same
+  // text simultaneously when both are visible.
+  const [demoFollowUpValue, setDemoFollowUpValue] = useState("");
+
   // Typewriter placeholder state. Rotates through example questions across
   // collections. Pauses on focus, halts permanently once the user manually
   // interacts (types or picks a collection).
@@ -286,18 +291,21 @@ export function LandingSearch({
     [loadingDemoId]
   );
 
-  // Handle submitting a custom question → start a live anonymous chat
-  const handleSubmitCustom = useCallback(() => {
-    const q = inputValue.trim();
-    if (!q) return;
+  // Handle submitting a custom question → start a live anonymous chat.
+  // Accepts an optional `q` so the demo panel's bottom input can submit
+  // its own value without sharing state with the main search bar.
+  const handleSubmitCustom = useCallback((q?: string) => {
+    const trimmed = (q ?? inputValue).trim();
+    if (!trimmed) return;
 
     // Persist for graceful recovery if the user later signs up mid-flow
-    sessionStorage.setItem(SESSION_KEY_PREFILL, q);
+    sessionStorage.setItem(SESSION_KEY_PREFILL, trimmed);
     sessionStorage.setItem(SESSION_KEY_COLLECTION, selectedSlug);
 
     setActiveDemo(null);
-    setAnonQuestion(q);
+    setAnonQuestion(trimmed);
     setInputValue("");
+    setDemoFollowUpValue("");
   }, [inputValue, selectedSlug]);
 
   const handleKeyDown = useCallback(
@@ -344,7 +352,7 @@ export function LandingSearch({
           {inputValue.trim() && (
             <button
               type="button"
-              onClick={handleSubmitCustom}
+              onClick={() => handleSubmitCustom()}
               className="mr-2 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Ask
@@ -493,12 +501,12 @@ export function LandingSearch({
               <div className="flex items-center gap-3">
                 <input
                   type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
+                  value={demoFollowUpValue}
+                  onChange={(e) => setDemoFollowUpValue(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && inputValue.trim()) {
+                    if (e.key === "Enter" && demoFollowUpValue.trim()) {
                       e.preventDefault();
-                      handleSubmitCustom();
+                      handleSubmitCustom(demoFollowUpValue);
                     }
                   }}
                   placeholder="Ask a follow-up..."
@@ -507,8 +515,8 @@ export function LandingSearch({
                 />
                 <button
                   type="button"
-                  onClick={handleSubmitCustom}
-                  disabled={!inputValue.trim()}
+                  onClick={() => handleSubmitCustom(demoFollowUpValue)}
+                  disabled={!demoFollowUpValue.trim()}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary"
                 >
                   Ask
