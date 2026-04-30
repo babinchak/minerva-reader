@@ -68,11 +68,45 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
         }),
       }
     );
-    if (!res.ok) return false;
-    const data = (await res.json()) as { success?: boolean };
-    return data.success === true;
+    if (!res.ok) {
+      console.warn("[anon-limits] Turnstile siteverify HTTP error:", {
+        status: res.status,
+        statusText: res.statusText,
+      });
+      return false;
+    }
+    const data = (await res.json()) as {
+      success?: boolean;
+      "error-codes"?: string[];
+      challenge_ts?: string;
+      hostname?: string;
+      action?: string;
+      cdata?: string;
+    };
+    if (data.success !== true) {
+      // Cloudflare error codes:
+      //   missing-input-secret, invalid-input-secret,
+      //   missing-input-response, invalid-input-response,
+      //   bad-request, timeout-or-duplicate, internal-error
+      console.warn("[anon-limits] Turnstile verification rejected:", {
+        errorCodes: data["error-codes"] ?? [],
+        hostname: data.hostname,
+        challengeTs: data.challenge_ts,
+        ip,
+        tokenPrefix: token.slice(0, 16),
+        secretPrefix: secret.slice(0, 6),
+      });
+      return false;
+    }
+    if (process.env.LOG_TURNSTILE_SUCCESS === "1") {
+      console.log("[anon-limits] Turnstile verified:", {
+        hostname: data.hostname,
+        challengeTs: data.challenge_ts,
+      });
+    }
+    return true;
   } catch (err) {
-    console.error("[anon-limits] Turnstile verify failed:", err);
+    console.error("[anon-limits] Turnstile verify threw:", err);
     return false;
   }
 }

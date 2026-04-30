@@ -64,6 +64,10 @@ export function LandingAnonChat({
   const [turnstileReady, setTurnstileReady] = useState(!TURNSTILE_SITE_KEY);
   const initialSentRef = useRef(false);
 
+  // A question that's already been pushed to the UI (user msg + loading state)
+  // but is waiting on Turnstile before the actual fetch can fire.
+  const [pending, setPending] = useState<{ question: string; assistantId: string } | null>(null);
+
   // Render Turnstile widget when script loads
   const renderTurnstile = useCallback(() => {
     if (!TURNSTILE_SITE_KEY || !window.turnstile || !turnstileContainerRef.current) return;
@@ -102,30 +106,13 @@ export function LandingAnonChat({
     };
   }, []);
 
-  const sendQuestion = useCallback(
-    async (question: string) => {
-      if (!question.trim() || isLoading) return;
-      setError(null);
-
-      const userMsg: AnonMessage = {
-        id: `u-${Date.now()}`,
-        role: "user",
-        content: question.trim(),
-      };
-      const assistantId = `a-${Date.now()}`;
-      const assistantMsg: AnonMessage = {
-        id: assistantId,
-        role: "assistant",
-        content: "",
-        toolCalls: [],
-      };
-      const nextMessages = [...messages, userMsg, assistantMsg];
-      setMessages(nextMessages);
-      setIsLoading(true);
-
-      const apiMessages = nextMessages
-        .filter((m, i) => !(i === nextMessages.length - 1 && m.role === "assistant"))
-        .map((m) => ({ role: m.role, content: m.content }));
+  /** Run the actual network call + SSE stream for an already-rendered question. */
+  const runStream = useCallback(
+    async (question: string, assistantId: string, priorMessages: AnonMessage[]) => {
+      const apiMessages = [
+        ...priorMessages.map((m) => ({ role: m.role, content: m.content })),
+        { role: "user" as const, content: question },
+      ];
 
       try {
         const res = await fetch("/api/chat/agentic", {
@@ -148,14 +135,9 @@ export function LandingAnonChat({
             reason: body.reason,
             resetAt: body.resetAt ?? null,
           });
-          // Remove the empty assistant placeholder on hard error
+          // Remove the empty assistant placeholder on hard error.
+          // Turnstile reset is handled in `finally`.
           setMessages((prev) => prev.filter((m) => m.id !== assistantId));
-          setIsLoading(false);
-          // Reset Turnstile so the user can retry with a fresh token
-          if (turnstileWidgetIdRef.current && window.turnstile) {
-            try { window.turnstile.reset(turnstileWidgetIdRef.current); } catch { /* noop */ }
-          }
-          turnstileTokenRef.current = null;
           return;
         }
 
@@ -266,19 +248,81 @@ export function LandingAnonChat({
         setMessages((prev) => prev.filter((m) => m.id !== assistantId));
       } finally {
         setIsLoading(false);
+        // Turnstile tokens are single-use. Reset the widget after every send
+        // (success OR failure) so the next submit gets a fresh token. Setting
+        // turnstileReady=false here makes the next enqueueQuestion wait for
+        // the new token to arrive via the widget callback.
+        if (turnstileWidgetIdRef.current && window.turnstile) {
+          try { window.turnstile.reset(turnstileWidgetIdRef.current); } catch { /* noop */ }
+        }
+        turnstileTokenRef.current = null;
+        if (TURNSTILE_SITE_KEY) setTurnstileReady(false);
       }
     },
-    [collectionSlug, collectionName, isLoading, messages]
+    [collectionSlug, collectionName]
   );
 
-  // Auto-fire the initial question once Turnstile is ready (or immediately if not configured)
+  /** Push the user message + empty assistant placeholder synchronously, then either
+   *  fire the stream (if Turnstile is ready) or queue it for the ready effect. */
+  const enqueueQuestion = useCallback(
+    (question: string) => {
+      const trimmed = question.trim();
+      if (!trimmed || isLoading) return;
+      setError(null);
+
+      const userMsg: AnonMessage = {
+        id: `u-${Date.now()}`,
+        role: "user",
+        content: trimmed,
+      };
+      const assistantId = `a-${Date.now()}`;
+      const assistantMsg: AnonMessage = {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        toolCalls: [],
+      };
+
+      // Snapshot the conversation BEFORE adding the new turn — runStream needs
+      // the prior messages without its own user message duplicated in.
+      const priorMessages = messages;
+      setMessages([...priorMessages, userMsg, assistantMsg]);
+      setIsLoading(true);
+
+      if (turnstileReady) {
+        void runStream(trimmed, assistantId, priorMessages);
+      } else {
+        // Hold the question until Turnstile resolves; the effect below drains it.
+        setPending({ question: trimmed, assistantId });
+      }
+    },
+    [isLoading, messages, turnstileReady, runStream]
+  );
+
+  // Auto-fire the initial question on mount (renders optimistic UI immediately,
+  // even before Turnstile is ready).
   useEffect(() => {
     if (initialSentRef.current) return;
-    if (!turnstileReady) return;
     if (!initialQuestion.trim()) return;
     initialSentRef.current = true;
-    void sendQuestion(initialQuestion);
-  }, [initialQuestion, turnstileReady, sendQuestion]);
+    enqueueQuestion(initialQuestion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuestion]);
+
+  // Drain the pending question once Turnstile becomes ready.
+  useEffect(() => {
+    if (!pending) return;
+    if (!turnstileReady) return;
+    const { question, assistantId } = pending;
+    setPending(null);
+    // Use the message snapshot from BEFORE the user/assistant pair was pushed.
+    // Find it by stripping the last two messages.
+    setMessages((current) => {
+      const prior = current.slice(0, -2);
+      void runStream(question, assistantId, prior);
+      return current;
+    });
+  }, [pending, turnstileReady, runStream]);
 
   const handleRefClick = useCallback((ref: PassageRef) => {
     const bid = ref.bookId || sectionBookMap.get(ref.sectionId)?.bookId;
@@ -292,8 +336,8 @@ export function LandingAnonChat({
     const q = followUp.trim();
     if (!q) return;
     setFollowUp("");
-    void sendQuestion(q);
-  }, [followUp, sendQuestion]);
+    enqueueQuestion(q);
+  }, [followUp, enqueueQuestion]);
 
   const lastAssistant = useMemo(
     () => [...messages].reverse().find((m) => m.role === "assistant"),
