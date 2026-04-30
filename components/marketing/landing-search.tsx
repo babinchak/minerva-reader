@@ -174,6 +174,12 @@ export function LandingSearch({
     return () => document.removeEventListener("keydown", handleKey);
   }, [activeDemo]);
 
+  // Clear the typewriter text when the input is focused so it doesn't hang
+  // half-typed beside the user's cursor. The pool resumes typing on blur.
+  useEffect(() => {
+    if (isFocused) setTypewriterText("");
+  }, [isFocused]);
+
   // Typewriter effect: types out the current example question, pauses, deletes,
   // moves to the next. Bound to typewriterIndex so re-running the effect (after
   // a focus/blur cycle) restarts from the current question without repeating.
