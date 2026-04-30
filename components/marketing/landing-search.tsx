@@ -308,6 +308,22 @@ export function LandingSearch({
     setDemoFollowUpValue("");
   }, [inputValue, selectedSlug]);
 
+  // Demo panel follow-ups go to the signup wall (matches the live anon chat's
+  // follow-up behavior). The demo is a cached pre-canned answer, so letting
+  // users keep asking against it would burn anon quota for a non-real flow.
+  const handleDemoFollowUpSubmit = useCallback(() => {
+    const q = demoFollowUpValue.trim();
+    if (!q) return;
+    try {
+      sessionStorage.setItem(SESSION_KEY_PREFILL, q);
+      sessionStorage.setItem(SESSION_KEY_COLLECTION, selectedSlug);
+    } catch {
+      /* sessionStorage unavailable (private mode) — proceed anyway. */
+    }
+    const next = `/browse/${encodeURIComponent(selectedSlug)}?prefill=${encodeURIComponent(q)}&openChat=1`;
+    window.location.href = `/auth/sign-up?next=${encodeURIComponent(next)}`;
+  }, [demoFollowUpValue, selectedSlug]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" && inputValue.trim()) {
@@ -496,8 +512,14 @@ export function LandingSearch({
               </div>
             </div>
 
-            {/* Bottom CTA */}
+            {/* Bottom CTA — follow-ups go to the signup wall (demo answers
+                are cached pre-canned content; live follow-ups would burn
+                anon-chat quota for a non-real flow). */}
             <div className="border-t border-border px-4 py-3">
+              <div className="mb-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground">
+                <span className="font-medium">Sign up free</span> to ask follow-ups,
+                save your conversation, and search across your own library.
+              </div>
               <div className="flex items-center gap-3">
                 <input
                   type="text"
@@ -506,20 +528,20 @@ export function LandingSearch({
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && demoFollowUpValue.trim()) {
                       e.preventDefault();
-                      handleSubmitCustom(demoFollowUpValue);
+                      handleDemoFollowUpSubmit();
                     }
                   }}
-                  placeholder="Ask a follow-up..."
+                  placeholder="Sign up to ask a follow-up..."
                   autoComplete="off"
                   className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
                 <button
                   type="button"
-                  onClick={() => handleSubmitCustom(demoFollowUpValue)}
+                  onClick={handleDemoFollowUpSubmit}
                   disabled={!demoFollowUpValue.trim()}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary"
                 >
-                  Ask
+                  Sign up
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
