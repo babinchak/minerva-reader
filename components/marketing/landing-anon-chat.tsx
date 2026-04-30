@@ -65,8 +65,15 @@ export function LandingAnonChat({
   const initialSentRef = useRef(false);
 
   // A question that's already been pushed to the UI (user msg + loading state)
-  // but is waiting on Turnstile before the actual fetch can fire.
-  const [pending, setPending] = useState<{ question: string; assistantId: string } | null>(null);
+  // but is waiting on Turnstile before the actual fetch can fire. We snapshot
+  // `prior` here so the drain effect doesn't need to read message state — that
+  // matters because the snapshot must NOT come from inside a state updater
+  // (StrictMode double-invokes updaters, which would fire runStream twice).
+  const [pending, setPending] = useState<{
+    question: string;
+    assistantId: string;
+    prior: AnonMessage[];
+  } | null>(null);
 
   // Render Turnstile widget when script loads
   const renderTurnstile = useCallback(() => {
@@ -293,7 +300,7 @@ export function LandingAnonChat({
         void runStream(trimmed, assistantId, priorMessages);
       } else {
         // Hold the question until Turnstile resolves; the effect below drains it.
-        setPending({ question: trimmed, assistantId });
+        setPending({ question: trimmed, assistantId, prior: priorMessages });
       }
     },
     [isLoading, messages, turnstileReady, runStream]
@@ -309,19 +316,16 @@ export function LandingAnonChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuestion]);
 
-  // Drain the pending question once Turnstile becomes ready.
+  // Drain the pending question once Turnstile becomes ready. The `prior`
+  // snapshot was captured at enqueue time, so we don't need to peek at
+  // current message state from inside a state updater (which would
+  // double-fire runStream under React StrictMode).
   useEffect(() => {
     if (!pending) return;
     if (!turnstileReady) return;
-    const { question, assistantId } = pending;
+    const { question, assistantId, prior } = pending;
     setPending(null);
-    // Use the message snapshot from BEFORE the user/assistant pair was pushed.
-    // Find it by stripping the last two messages.
-    setMessages((current) => {
-      const prior = current.slice(0, -2);
-      void runStream(question, assistantId, prior);
-      return current;
-    });
+    void runStream(question, assistantId, prior);
   }, [pending, turnstileReady, runStream]);
 
   const handleRefClick = useCallback((ref: PassageRef) => {
