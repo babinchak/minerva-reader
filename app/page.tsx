@@ -8,7 +8,7 @@ import { HeroReplay } from "@/components/marketing/hero-replay";
 import { ServerSiteNav } from "@/components/server-site-nav";
 import { LibraryPageSkeleton } from "@/components/library-grid-skeleton";
 import { HomeContentSkeleton } from "@/components/home-content-skeleton";
-import { ResponseWall, RotatingHeadline } from "@/components/marketing/response-wall";
+import { ResponseWall } from "@/components/marketing/response-wall";
 import { LandingSearch } from "@/components/marketing/landing-search";
 import { PricingCards } from "@/components/marketing/pricing-cards";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -140,7 +140,10 @@ async function HomeContent({
     <div className="w-full max-w-7xl space-y-5 sm:space-y-6">
       {/* 1. Search box with inline headline */}
       <section className="flex flex-col items-center pt-2 sm:pt-4">
-        <RotatingHeadline />
+        <h1 className="text-center text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          <span>Not a summary app.</span>{" "}
+          <span className="block sm:inline">A reading app.</span>
+        </h1>
         <div className="mt-4 w-full">
           <LandingSearch collections={cards} />
         </div>

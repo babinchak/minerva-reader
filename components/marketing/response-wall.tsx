@@ -83,36 +83,11 @@ function demosToCards(demos: ApiDemo[], seen: Set<string>): ResponseCard[] {
 
 
 /* ------------------------------------------------------------------ */
-/*  Rotating headlines                                                  */
+/*  Feature pills                                                       */
 /* ------------------------------------------------------------------ */
-
-const HEADLINES = [
-  "Not a summary app. A reading app.",
-  "Stop copy-pasting passages into ChatGPT",
-  "One tap to navigate to any reference",
-  "Search across your entire book collection",
-  "Search an author's entire body of work in seconds",
-  "Find that quote you half-remember",
-  "Read first. Ask second.",
-  "Stop losing your place in dense books",
-  "Prep for book club in 5 minutes",
-  "Cross-reference ideas across 10 books at once",
-  "Now you can finally understand Hegel",
-  "Did Dumbledore really ask calmly? Now you can check.",
-  "Call me Ishmael. Or just search for him.",
-  "MLA format not included",
-  "Ask Machiavelli and Buddha the same question",
-  "Settle the free will debate once and for all",
-  "When is retreat wisdom? Ask five generals at once.",
-  "Plot twist: the footnotes were useful",
-  "Search the canon",
-  "Upload your entire pogonology collection",
-  "Every obscure reference, explained in context",
-  "That passage you skipped? It actually makes sense now.",
-  "Finally understand that Latin phrase Nietzsche dropped",
-];
-
-const HEADLINE_INTERVAL_MS = 4000;
+// Headlines moved to lib/marketing/headlines.ts and rendered server-side
+// via pickHeadline() — see app/page.tsx. RotatingHeadline removed: a single
+// random pick per render outperformed in-place rotation.
 
 const FEATURES = [
   { icon: Highlighter, text: "Highlight and explain anything in context" },
@@ -176,61 +151,6 @@ export function ResponseWall({
         ) : null}
       </div>
     </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  RotatingHeadline                                                    */
-/* ------------------------------------------------------------------ */
-
-function pickWeightedIndex(lastShown: number[], current: number): number {
-  const now = Date.now();
-  const weights = lastShown.map((t, i) =>
-    i === current ? 0 : Math.max(now - t, 1)
-  );
-  const total = weights.reduce((a, b) => a + b, 0);
-  let r = Math.random() * total;
-  for (let i = 0; i < weights.length; i++) {
-    r -= weights[i];
-    if (r <= 0) return i;
-  }
-  return (current + 1) % HEADLINES.length;
-}
-
-export function RotatingHeadline() {
-  const [index, setIndex] = useState(0);
-  const [visible, setVisible] = useState(true);
-  const lastShownRef = useRef<number[]>(
-    HEADLINES.map(() => 0)
-  );
-
-  useEffect(() => {
-    lastShownRef.current[index] = Date.now();
-  }, [index]);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setVisible(false);
-      setTimeout(() => {
-        setIndex((i) => pickWeightedIndex(lastShownRef.current, i));
-        setVisible(true);
-      }, 400);
-    }, HEADLINE_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div className="relative h-[4rem] sm:h-[2.5rem] overflow-hidden">
-      <h1
-        className="text-center text-2xl font-bold tracking-tight text-foreground transition-all duration-400 ease-in-out sm:text-3xl"
-        style={{
-          opacity: visible ? 1 : 0,
-          transform: visible ? "translateY(0)" : "translateY(-12px)",
-        }}
-      >
-        {HEADLINES[index]}
-      </h1>
-    </div>
   );
 }
 

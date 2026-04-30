@@ -16,6 +16,7 @@ import {
 import { Markdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
 import { ToolCallSteps } from "@/components/tool-call-steps";
 import { LandingAnonChat } from "@/components/marketing/landing-anon-chat";
+import { getPreviewQuestions } from "@/lib/marketing/preview-questions";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
@@ -99,8 +100,41 @@ export function LandingSearch({
   // Live anonymous chat state
   const [anonQuestion, setAnonQuestion] = useState<string | null>(null);
 
+  // Typewriter placeholder state. Rotates through example questions across
+  // collections. Pauses on focus, halts permanently once the user manually
+  // interacts (types or picks a collection).
+  const [typewriterText, setTypewriterText] = useState("");
+  const [typewriterIndex, setTypewriterIndex] = useState(0);
+  const [userInteracted, setUserInteracted] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Pool of (slug, name, question) tuples drawn from preview-questions.ts
+  // (with a length-filtered fallback to c.demos for any unlisted slug).
+  // Interleaved across collections so the rotation visibly hops between them
+  // and the collection chip flips to match each question as it types.
+  const typewriterPool = useMemo(() => {
+    const perCollection = collections.map((c) => {
+      const questions = getPreviewQuestions(
+        c.slug,
+        c.demos.map((d) => d.question)
+      );
+      return questions.map((question) => ({
+        slug: c.slug,
+        name: c.name,
+        question,
+      }));
+    });
+    const interleaved: { slug: string; name: string; question: string }[] = [];
+    const maxLen = Math.max(0, ...perCollection.map((arr) => arr.length));
+    for (let i = 0; i < maxLen; i++) {
+      for (const arr of perCollection) {
+        if (arr[i]) interleaved.push(arr[i]);
+      }
+    }
+    return interleaved;
+  }, [collections]);
 
   const selectedCollection = collections.find(
     (c) => c.slug === selectedSlug
@@ -139,6 +173,78 @@ export function LandingSearch({
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [activeDemo]);
+
+  // Typewriter effect: types out the current example question, pauses, deletes,
+  // moves to the next. Bound to typewriterIndex so re-running the effect (after
+  // a focus/blur cycle) restarts from the current question without repeating.
+  useEffect(() => {
+    if (userInteracted) return;
+    if (isFocused) return;
+    if (typewriterPool.length === 0) return;
+
+    // Respect the user's reduced-motion preference: just show a static example.
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      const target = typewriterPool[typewriterIndex % typewriterPool.length];
+      setTypewriterText(target.question);
+      setSelectedSlug(target.slug);
+      return;
+    }
+
+    const target = typewriterPool[typewriterIndex % typewriterPool.length];
+    setSelectedSlug(target.slug);
+
+    let cancelled = false;
+    let charIdx = typewriterText.startsWith(target.question.slice(0, typewriterText.length))
+      ? typewriterText.length
+      : 0;
+    let phase: "typing" | "holding" | "deleting" = "typing";
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = (delay: number, fn: () => void) => {
+      timeoutId = setTimeout(() => {
+        if (cancelled) return;
+        fn();
+      }, delay);
+    };
+
+    const tick = () => {
+      if (cancelled) return;
+      if (phase === "typing") {
+        if (charIdx < target.question.length) {
+          charIdx++;
+          setTypewriterText(target.question.slice(0, charIdx));
+          schedule(28 + Math.random() * 32, tick);
+        } else {
+          phase = "holding";
+          schedule(2400, tick);
+        }
+      } else if (phase === "holding") {
+        phase = "deleting";
+        schedule(20, tick);
+      } else {
+        if (charIdx > 0) {
+          // Sweep a few chars per tick so deletion feels like a quick wipe
+          // rather than a one-by-one undo.
+          charIdx = Math.max(0, charIdx - 3);
+          setTypewriterText(target.question.slice(0, charIdx));
+          schedule(18, tick);
+        } else {
+          // Advance — the effect re-runs with a fresh question.
+          setTypewriterIndex((i) => i + 1);
+        }
+      }
+    };
+
+    tick();
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typewriterIndex, typewriterPool, userInteracted, isFocused]);
 
   // Build sectionBookMap from the active demo's books for reference rendering
   const sectionBookMap = useMemo(() => {
@@ -219,10 +325,13 @@ export function LandingSearch({
             ref={inputRef}
             type="text"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+              if (e.target.value.length > 0) setUserInteracted(true);
+            }}
             onFocus={() => setIsFocused(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything across 150,000+ passages and 300+ books..."
+            placeholder={typewriterText || "Ask anything..."}
             autoComplete="off"
             className="flex-1 bg-transparent px-3 py-4 text-base text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
@@ -238,47 +347,46 @@ export function LandingSearch({
           )}
         </div>
 
-        {/* Collection picker */}
-        {isFocused && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Searching:</span>
-            <div ref={pickerRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setPickerOpen(!pickerOpen)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-              >
-                {selectedCollection?.name ?? "Select collection"}
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-              {pickerOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-card p-1 shadow-lg">
-                  {collections.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSlug(c.slug);
-                        setPickerOpen(false);
-                        if (activeDemo) setActiveDemo(null);
-                        if (anonQuestion) setAnonQuestion(null);
-                      }}
-                      className={cn(
-                        "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
-                        c.slug === selectedSlug && "bg-accent"
-                      )}
-                    >
-                      <span className="font-medium">{c.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {c.bookCount} books
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+        {/* Collection picker — chip always visible, dropdown opens on click */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Searching:</span>
+          <div ref={pickerRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setPickerOpen(!pickerOpen)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              {selectedCollection?.name ?? "Select collection"}
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+            {pickerOpen && (
+              <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-card p-1 shadow-lg">
+                {collections.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSlug(c.slug);
+                      setPickerOpen(false);
+                      setUserInteracted(true);
+                      if (activeDemo) setActiveDemo(null);
+                      if (anonQuestion) setAnonQuestion(null);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
+                      c.slug === selectedSlug && "bg-accent"
+                    )}
+                  >
+                    <span className="font-medium">{c.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {c.bookCount} books
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Live anonymous chat — fired when user submits a custom question */}
