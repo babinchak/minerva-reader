@@ -17,6 +17,7 @@ import {
   isStopRequested,
   type PersistedToolCall,
 } from "@/lib/chat/persistence";
+import { checkAnonGate } from "@/lib/anon-limits";
 
 const MARKDOWN_SYSTEM_PROMPT =
   "You are a helpful reading assistant. Respond using GitHub-flavored Markdown (GFM).\n" +
@@ -149,9 +150,19 @@ export async function POST(req: NextRequest) {
     const serviceSupabase = createServiceClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const body = (await req.json()) as { messages?: unknown; bookId?: string; bookIds?: string[]; chatId?: string; scopeLabel?: string; messageIndex?: number; isPrivate?: boolean };
-    const { messages: rawMessages, bookId, bookIds, chatId, scopeLabel, messageIndex, isPrivate } = body;
-    const isLibraryMode = Array.isArray(bookIds) && bookIds.length > 0;
+    const body = (await req.json()) as {
+      messages?: unknown;
+      bookId?: string;
+      bookIds?: string[];
+      chatId?: string;
+      scopeLabel?: string;
+      messageIndex?: number;
+      isPrivate?: boolean;
+      curatedCollectionSlug?: string;
+      turnstileToken?: string | null;
+    };
+    const { messages: rawMessages, bookId, chatId, scopeLabel, messageIndex, isPrivate, curatedCollectionSlug, turnstileToken } = body;
+    let { bookIds } = body;
 
     if (!rawMessages || !Array.isArray(rawMessages)) {
       return NextResponse.json(
@@ -160,15 +171,49 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Library mode requires authentication (no anonymous multi-book search)
-    if (isLibraryMode && !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Anonymous + curated collection slug: resolve to bookIds server-side so
+    // visitors can't tamper with the list.
+    if (!user && curatedCollectionSlug && (!bookIds || bookIds.length === 0)) {
+      const { data: collection } = await serviceSupabase
+        .from("curated_collections")
+        .select("id")
+        .eq("slug", curatedCollectionSlug)
+        .single();
+      if (!collection) {
+        return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+      }
+      const { data: collectionBooks } = await serviceSupabase
+        .from("curated_collection_books")
+        .select("book_id")
+        .eq("curated_collection_id", collection.id);
+      bookIds = (collectionBooks ?? []).map((r) => r.book_id);
+      if (bookIds.length === 0) {
+        return NextResponse.json({ error: "Collection is empty" }, { status: 400 });
+      }
     }
 
-    // Anonymous: allow for curated books, or when FREE_BETA_MODE
+    const isLibraryMode = Array.isArray(bookIds) && bookIds.length > 0;
+
+    // Anonymous library mode: only allowed when ALL bookIds are curated.
+    if (!user && isLibraryMode) {
+      const { data: curatedRows } = await serviceSupabase
+        .from("books")
+        .select("id")
+        .in("id", bookIds!)
+        .eq("is_curated", true);
+      const curatedSet = new Set((curatedRows ?? []).map((r) => r.id));
+      const allCurated = bookIds!.every((id) => curatedSet.has(id));
+      if (!allCurated) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    }
+
+    // Anonymous: allow for curated books, FREE_BETA_MODE, or curated library mode (gated below).
     if (!user) {
       if (isFreeBetaMode()) {
         // Free beta: allow anonymous Deep mode (with or without book)
+      } else if (isLibraryMode) {
+        // Already validated above — all bookIds are curated. Gate below.
       } else {
         if (!bookId) {
           return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -181,6 +226,20 @@ export async function POST(req: NextRequest) {
         if (!book?.is_curated) {
           return NextResponse.json({ error: "Access denied to this book" }, { status: 403 });
         }
+      }
+
+      // Anon abuse gate: Turnstile + per-IP rate limit + global daily budget cap.
+      const gate = await checkAnonGate(req, turnstileToken ?? null);
+      if (!gate.allowed) {
+        return NextResponse.json(
+          {
+            error: gate.message,
+            anonGateDenied: true,
+            reason: gate.reason,
+            resetAt: gate.resetAt ?? null,
+          },
+          { status: 429 }
+        );
       }
     }
 
@@ -235,6 +294,16 @@ export async function POST(req: NextRequest) {
         .from("books")
         .select("id")
         .in("id", validatedBookIds)
+        .not("vectors_processed_at", "is", null)
+        .limit(1);
+      vectorsReady = (booksWithVectors?.length ?? 0) > 0;
+    } else if (isLibraryMode && !user) {
+      // Anon library mode: bookIds were already validated as curated above.
+      validatedBookIds = bookIds;
+      const { data: booksWithVectors } = await serviceSupabase
+        .from("books")
+        .select("id")
+        .in("id", validatedBookIds!)
         .not("vectors_processed_at", "is", null)
         .limit(1);
       vectorsReady = (booksWithVectors?.length ?? 0) > 0;

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Markdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
 import { ToolCallSteps } from "@/components/tool-call-steps";
+import { LandingAnonChat } from "@/components/marketing/landing-anon-chat";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
@@ -95,6 +96,9 @@ export function LandingSearch({
   const [activeDemo, setActiveDemo] = useState<DemoFull | null>(null);
   const [loadingDemoId, setLoadingDemoId] = useState<string | null>(null);
 
+  // Live anonymous chat state
+  const [anonQuestion, setAnonQuestion] = useState<string | null>(null);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -170,18 +174,18 @@ export function LandingSearch({
     [loadingDemoId]
   );
 
-  // Handle submitting a custom question → redirect to login
+  // Handle submitting a custom question → start a live anonymous chat
   const handleSubmitCustom = useCallback(() => {
     const q = inputValue.trim();
     if (!q) return;
 
-    // Save to sessionStorage so we can recover after auth
+    // Persist for graceful recovery if the user later signs up mid-flow
     sessionStorage.setItem(SESSION_KEY_PREFILL, q);
     sessionStorage.setItem(SESSION_KEY_COLLECTION, selectedSlug);
 
-    // Redirect to login with next= pointing to collection page
-    const next = `/browse/${encodeURIComponent(selectedSlug)}?prefill=${encodeURIComponent(q)}&openChat=1`;
-    window.location.href = `/auth/sign-up?next=${encodeURIComponent(next)}`;
+    setActiveDemo(null);
+    setAnonQuestion(q);
+    setInputValue("");
   }, [inputValue, selectedSlug]);
 
   const handleKeyDown = useCallback(
@@ -195,6 +199,7 @@ export function LandingSearch({
   );
 
   const showDemoPanel = activeDemo !== null;
+  const showAnonChat = anonQuestion !== null;
 
   return (
     <div ref={containerRef} className="w-full space-y-6">
@@ -255,9 +260,8 @@ export function LandingSearch({
                       onClick={() => {
                         setSelectedSlug(c.slug);
                         setPickerOpen(false);
-                        if (activeDemo) {
-                          setActiveDemo(null);
-                        }
+                        if (activeDemo) setActiveDemo(null);
+                        if (anonQuestion) setAnonQuestion(null);
                       }}
                       className={cn(
                         "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
@@ -277,8 +281,19 @@ export function LandingSearch({
         )}
       </div>
 
+      {/* Live anonymous chat — fired when user submits a custom question */}
+      {showAnonChat && selectedCollection && (
+        <LandingAnonChat
+          key={`${selectedCollection.slug}-${anonQuestion}`}
+          collectionSlug={selectedCollection.slug}
+          collectionName={selectedCollection.name}
+          initialQuestion={anonQuestion!}
+          onClose={() => setAnonQuestion(null)}
+        />
+      )}
+
       {/* Demo questions list */}
-      {isFocused && !showDemoPanel && (
+      {isFocused && !showDemoPanel && !showAnonChat && (
         <div className="mx-auto w-full max-w-3xl">
           {filteredDemos.length > 0 ? (
             <div className="space-y-3">
@@ -310,7 +325,7 @@ export function LandingSearch({
       )}
 
       {/* Demo response — rendered immediately */}
-      {showDemoPanel && (
+      {showDemoPanel && !showAnonChat && (
         <div className="mx-auto w-full max-w-3xl">
           <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
             {/* Header */}
@@ -382,9 +397,10 @@ export function LandingSearch({
                 <button
                   type="button"
                   onClick={handleSubmitCustom}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  disabled={!inputValue.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary"
                 >
-                  {inputValue.trim() ? "Sign in to ask" : "Sign in for more"}
+                  Ask
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
