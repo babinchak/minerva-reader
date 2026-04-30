@@ -11,12 +11,23 @@ import {
   type ThemeVariantId,
 } from "@/lib/theme-variants";
 import { ThemeSwatch } from "@/components/theme-swatch";
+import { createClient } from "@/lib/supabase/client";
 
 const MODES = [
   { value: "light", label: "Light", icon: Sun },
   { value: "dark", label: "Dark", icon: Moon },
   { value: "system", label: "System", icon: Laptop },
 ] as const;
+
+async function persistThemeVariantsToUser(variants: { light: ThemeVariantId; dark: ThemeVariantId }) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const { error } = await supabase.auth.updateUser({
+    data: { theme_variants: variants },
+  });
+  if (error) console.error("Failed to persist theme variants:", error.message);
+}
 
 export function ThemeSettingsContent() {
   const [mounted, setMounted] = useState(false);
@@ -36,6 +47,7 @@ export function ThemeSettingsContent() {
     setVariants(next);
     setStoredThemeVariants(next);
     setTheme(mode); // Switch to that mode so user sees the change
+    void persistThemeVariantsToUser(next);
   };
 
   if (!mounted) {

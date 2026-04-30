@@ -254,41 +254,65 @@ export const THEME_VARIANTS = [
 
 export const STORAGE_KEY = "minerva-theme-variants";
 
-export function getStoredThemeVariants(): {
+export type ThemeVariants = {
   light: ThemeVariantId;
   dark: ThemeVariantId;
-} {
-  if (typeof window === "undefined") {
-    return { light: "minerva", dark: "minerva" };
-  }
+};
+
+export const DEFAULT_THEME_VARIANTS: ThemeVariants = {
+  light: "minerva",
+  dark: "minerva",
+};
+
+function isThemeVariantId(value: unknown): value is ThemeVariantId {
+  return THEME_VARIANTS.some((t) => t.id === value);
+}
+
+/** Coerce arbitrary input into a valid ThemeVariants pair, falling back to defaults. */
+export function normalizeThemeVariants(input: unknown): ThemeVariants {
+  if (!input || typeof input !== "object") return DEFAULT_THEME_VARIANTS;
+  const { light, dark } = input as { light?: unknown; dark?: unknown };
+  return {
+    light: isThemeVariantId(light) ? light : DEFAULT_THEME_VARIANTS.light,
+    dark: isThemeVariantId(dark) ? dark : DEFAULT_THEME_VARIANTS.dark,
+  };
+}
+
+export function getStoredThemeVariants(): ThemeVariants {
+  if (typeof window === "undefined") return DEFAULT_THEME_VARIANTS;
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as { light?: string; dark?: string };
-      const light = THEME_VARIANTS.some((t) => t.id === parsed.light)
-        ? (parsed.light as ThemeVariantId)
-        : "minerva";
-      const dark = THEME_VARIANTS.some((t) => t.id === parsed.dark)
-        ? (parsed.dark as ThemeVariantId)
-        : "minerva";
-      return { light, dark };
-    }
+    if (stored) return normalizeThemeVariants(JSON.parse(stored));
   } catch {
     // ignore
   }
-  return { light: "minerva", dark: "minerva" };
+  return DEFAULT_THEME_VARIANTS;
 }
 
-export function setStoredThemeVariants(variants: {
-  light: ThemeVariantId;
-  dark: ThemeVariantId;
-}) {
+/** Write data-light-theme / data-dark-theme attributes on <html>. */
+export function applyThemeVariantsToDocument(variants: ThemeVariants) {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-light-theme", variants.light);
+  document.documentElement.setAttribute("data-dark-theme", variants.dark);
+}
+
+export function setStoredThemeVariants(variants: ThemeVariants) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(variants));
-    document.documentElement.setAttribute("data-light-theme", variants.light);
-    document.documentElement.setAttribute("data-dark-theme", variants.dark);
+    applyThemeVariantsToDocument(variants);
   } catch {
     // ignore
   }
+}
+
+/** Drop the saved variant and reset DOM to the brand defaults. */
+export function clearStoredThemeVariants() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+  applyThemeVariantsToDocument(DEFAULT_THEME_VARIANTS);
 }
