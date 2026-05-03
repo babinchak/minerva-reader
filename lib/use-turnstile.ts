@@ -58,17 +58,6 @@ export type UseTurnstileResult = {
  *  - Read `tokenRef.current` at send time and include it in the request body.
  *  - Call `resetAfterSend()` after each request — tokens are single-use.
  */
-// Set NEXT_PUBLIC_DEBUG_TURNSTILE=1 to enable verbose console logs covering
-// the widget lifecycle and token transitions. Strip back to false once the
-// in-book quick-mode anon flow is stable.
-const TURNSTILE_DEBUG =
-  process.env.NEXT_PUBLIC_DEBUG_TURNSTILE === "1" ||
-  process.env.NODE_ENV !== "production";
-
-function tlog(...args: unknown[]) {
-  if (TURNSTILE_DEBUG) console.log("[turnstile]", ...args);
-}
-
 export function useTurnstile(enabled: boolean): UseTurnstileResult {
   const tokenRef = useRef<string | null>(null);
   const widgetIdRef = useRef<string | null>(null);
@@ -76,54 +65,23 @@ export function useTurnstile(enabled: boolean): UseTurnstileResult {
   const shouldRender = enabled && Boolean(TURNSTILE_SITE_KEY);
   const [ready, setReady] = useState(!shouldRender);
 
-  // Stable instance id to disambiguate logs from concurrent hook instances.
-  const instanceIdRef = useRef<string>(
-    typeof window === "undefined" ? "ssr" : `t${Math.random().toString(36).slice(2, 8)}`
-  );
-
-  tlog(instanceIdRef.current, "render", {
-    enabled,
-    shouldRender,
-    ready,
-    hasToken: !!tokenRef.current,
-    widgetId: widgetIdRef.current,
-  });
-
   const onScriptLoad = useCallback(() => {
-    tlog(instanceIdRef.current, "onScriptLoad called", {
-      shouldRender,
-      hasWindowTurnstile:
-        typeof window !== "undefined" && !!window.turnstile,
-      hasContainer: !!containerRef.current,
-      existingWidgetId: widgetIdRef.current,
-    });
-    if (!shouldRender || !window.turnstile || !containerRef.current) {
-      tlog(instanceIdRef.current, "onScriptLoad early-return");
-      return;
-    }
-    if (widgetIdRef.current) {
-      tlog(instanceIdRef.current, "onScriptLoad skipped (widget already rendered)");
-      return;
-    }
+    if (!shouldRender || !window.turnstile || !containerRef.current) return;
+    if (widgetIdRef.current) return;
     try {
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: TURNSTILE_SITE_KEY!,
         size: "invisible",
         appearance: "interaction-only",
         callback: (token) => {
-          tlog(instanceIdRef.current, "widget callback (token received)", {
-            tokenPrefix: token.slice(0, 16),
-          });
           tokenRef.current = token;
           setReady(true);
         },
         "error-callback": () => {
-          tlog(instanceIdRef.current, "widget error-callback");
           tokenRef.current = null;
           setReady(false);
         },
         "expired-callback": () => {
-          tlog(instanceIdRef.current, "widget expired-callback");
           tokenRef.current = null;
           setReady(false);
           if (widgetIdRef.current && window.turnstile) {
@@ -131,19 +89,12 @@ export function useTurnstile(enabled: boolean): UseTurnstileResult {
           }
         },
       });
-      tlog(instanceIdRef.current, "widget rendered", {
-        widgetId: widgetIdRef.current,
-      });
     } catch (err) {
       console.error("[turnstile] render failed:", err);
     }
   }, [shouldRender]);
 
   const resetAfterSend = useCallback(() => {
-    tlog(instanceIdRef.current, "resetAfterSend", {
-      widgetId: widgetIdRef.current,
-      hasTurnstile: typeof window !== "undefined" && !!window.turnstile,
-    });
     if (widgetIdRef.current && window.turnstile) {
       try {
         window.turnstile.reset(widgetIdRef.current);
@@ -164,22 +115,13 @@ export function useTurnstile(enabled: boolean): UseTurnstileResult {
   useEffect(() => {
     if (!shouldRender) return;
     if (typeof window === "undefined") return;
-    tlog(instanceIdRef.current, "fallback effect", {
-      hasWindowTurnstile: !!window.turnstile,
-      widgetId: widgetIdRef.current,
-    });
     if (window.turnstile) {
       onScriptLoad();
     }
   }, [shouldRender, onScriptLoad]);
 
   useEffect(() => {
-    const id = instanceIdRef.current;
     return () => {
-      tlog(id, "cleanup unmounting", {
-        widgetId: widgetIdRef.current,
-        hasTurnstile: typeof window !== "undefined" && !!window.turnstile,
-      });
       if (widgetIdRef.current && window.turnstile) {
         try {
           window.turnstile.remove(widgetIdRef.current);
@@ -191,9 +133,7 @@ export function useTurnstile(enabled: boolean): UseTurnstileResult {
       // subsequent mount of the *same* hook instance (React StrictMode dev
       // double-invokes mount → cleanup → remount) would see widgetIdRef still
       // pointing at the now-destroyed widget, hit the early-return in
-      // onScriptLoad, and never render a replacement. The fallback effect
-      // would call onScriptLoad, log "widget already rendered", and skip —
-      // leaving the consumer waiting on a token that's never coming.
+      // onScriptLoad, and never render a replacement.
       widgetIdRef.current = null;
       tokenRef.current = null;
     };

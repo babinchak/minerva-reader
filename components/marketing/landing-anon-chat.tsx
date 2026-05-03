@@ -59,15 +59,6 @@ export function LandingAnonChat({
         { role: "user" as const, content: question },
       ];
 
-      const tokenAtSend = turnstile.tokenRef.current;
-      console.log("[anon-chat] runStream start", {
-        assistantId,
-        questionPrefix: question.slice(0, 40),
-        priorCount: priorMessages.length,
-        hasToken: !!tokenAtSend,
-        tokenPrefix: tokenAtSend ? tokenAtSend.slice(0, 16) : null,
-      });
-
       try {
         const res = await fetch("/api/chat/agentic", {
           method: "POST",
@@ -77,20 +68,13 @@ export function LandingAnonChat({
             curatedCollectionSlug: collectionSlug,
             scopeLabel: `curated collection "${collectionName}"`,
             isPrivate: true,
-            turnstileToken: tokenAtSend,
+            turnstileToken: turnstile.tokenRef.current,
           }),
-        });
-
-        console.log("[anon-chat] fetch returned", {
-          status: res.status,
-          ok: res.ok,
-          hasBody: !!res.body,
         });
 
         if (!res.ok) {
           let body: { error?: string; anonGateDenied?: boolean; reason?: string; resetAt?: string | null } = {};
           try { body = await res.json(); } catch { /* noop */ }
-          console.log("[anon-chat] non-ok response body", body);
           setError({
             message: body.error || "Something went wrong. Please try again.",
             reason: body.reason,
@@ -112,16 +96,10 @@ export function LandingAnonChat({
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
-        let chunkCount = 0;
-        let eventCount = 0;
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) {
-            console.log("[anon-chat] stream done", { chunkCount, eventCount });
-            break;
-          }
-          chunkCount++;
+          if (done) break;
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
@@ -129,9 +107,7 @@ export function LandingAnonChat({
           for (const line of lines) {
             if (!line.startsWith("data: ")) continue;
             const data = line.slice(6);
-            eventCount++;
             if (data === "[DONE]") {
-              console.log("[anon-chat] received [DONE]");
               setIsLoading(false);
               continue;
             }
@@ -212,11 +188,10 @@ export function LandingAnonChat({
           }
         }
       } catch (err) {
-        console.error("[anon-chat] stream error:", err);
+        console.error("Anon chat stream error:", err);
         setError({ message: err instanceof Error ? err.message : "Stream failed" });
         setMessages((prev) => prev.filter((m) => m.id !== assistantId));
       } finally {
-        console.log("[anon-chat] runStream finally — resetting turnstile");
         setIsLoading(false);
         // Turnstile tokens are single-use. Reset the widget after every send
         // (success OR failure) so the next submit gets a fresh token. The
@@ -255,22 +230,14 @@ export function LandingAnonChat({
       setMessages([...priorMessages, userMsg, assistantMsg]);
       setIsLoading(true);
 
-      console.log("[anon-chat] enqueueQuestion", {
-        assistantId,
-        ready: turnstile.ready,
-        hasToken: !!turnstile.tokenRef.current,
-        priorCount: priorMessages.length,
-      });
-
       if (turnstile.ready) {
         void runStream(trimmed, assistantId, priorMessages);
       } else {
         // Hold the question until Turnstile resolves; the effect below drains it.
-        console.log("[anon-chat] queueing as pending (turnstile not ready)");
         setPending({ question: trimmed, assistantId, prior: priorMessages });
       }
     },
-    [isLoading, messages, turnstile.ready, turnstile.tokenRef, runStream]
+    [isLoading, messages, turnstile.ready, runStream]
   );
 
   // Auto-fire the initial question on mount (renders optimistic UI immediately,
@@ -288,16 +255,9 @@ export function LandingAnonChat({
   // current message state from inside a state updater (which would
   // double-fire runStream under React StrictMode).
   useEffect(() => {
-    if (!pending) {
-      console.log("[anon-chat] drain effect — no pending");
-      return;
-    }
-    if (!turnstile.ready) {
-      console.log("[anon-chat] drain effect — pending but turnstile not ready");
-      return;
-    }
+    if (!pending) return;
+    if (!turnstile.ready) return;
     const { question, assistantId, prior } = pending;
-    console.log("[anon-chat] drain effect — firing runStream", { assistantId });
     setPending(null);
     void runStream(question, assistantId, prior);
   }, [pending, turnstile.ready, runStream]);
