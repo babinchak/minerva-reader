@@ -219,16 +219,28 @@ export function LandingSearch({
   // scrolls animate. When we cross into the right copy of the strip, schedule
   // an invisible teleport back to the equivalent middle-copy position so the
   // rotation reads as infinite.
+  //
+  // We compute scrollLeft directly instead of using `scrollIntoView`. The
+  // latter walks every scrollable ancestor and forces *all* of them to bring
+  // the element into view — including the page itself. That made the page
+  // jerk back up to the carousel on every rotation if the user had scrolled
+  // away. Setting scrollLeft on the strip only touches the strip.
   useEffect(() => {
     if (userInteracted || isFocused) return;
     const N = typewriterPool.length;
     if (N === 0) return;
+    const container = carouselStripRef.current;
     const target = carouselItemRefs.current[carouselScrollIndex];
-    if (!target) return;
-    target.scrollIntoView({
+    if (!container || !target) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const targetCenterFromContainer =
+      targetRect.left - containerRect.left + container.scrollLeft + targetRect.width / 2;
+    const newScrollLeft = targetCenterFromContainer - container.clientWidth / 2;
+    container.scrollTo({
+      left: newScrollLeft,
       behavior: carouselFirstScrollRef.current ? "instant" : "smooth",
-      block: "nearest",
-      inline: "center",
     });
     carouselFirstScrollRef.current = false;
 
@@ -238,18 +250,16 @@ export function LandingSearch({
     // is invisible.
     if (carouselScrollIndex >= 2 * N) {
       const t = setTimeout(() => {
-        const container = carouselStripRef.current;
+        const stripEl = carouselStripRef.current;
         const rewindTarget = carouselItemRefs.current[carouselScrollIndex - N];
-        if (container && rewindTarget) {
-          const prevBehavior = container.style.scrollBehavior;
-          container.style.scrollBehavior = "auto";
-          rewindTarget.scrollIntoView({
+        if (stripEl && rewindTarget) {
+          const cRect = stripEl.getBoundingClientRect();
+          const rRect = rewindTarget.getBoundingClientRect();
+          const rewindCenterFromContainer =
+            rRect.left - cRect.left + stripEl.scrollLeft + rRect.width / 2;
+          stripEl.scrollTo({
+            left: rewindCenterFromContainer - stripEl.clientWidth / 2,
             behavior: "instant",
-            block: "nearest",
-            inline: "center",
-          });
-          requestAnimationFrame(() => {
-            container.style.scrollBehavior = prevBehavior;
           });
         }
         setCarouselTeleportOffset((prev) => prev + N);
