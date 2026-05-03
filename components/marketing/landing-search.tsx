@@ -115,6 +115,18 @@ export function LandingSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Refs for the auto-scrolling collection carousel (shown until the user
+  // engages — see showCarousel below). The strip renders the pool 3× and
+  // teleports scrollLeft back to the middle copy after each lap, so the
+  // rotation reads as infinite instead of snapping back at the end.
+  const carouselStripRef = useRef<HTMLDivElement>(null);
+  const carouselItemRefs = useRef<(HTMLElement | null)[]>([]);
+  const carouselFirstScrollRef = useRef(true);
+  // Cumulative offset bumped by N each time we teleport from the right copy
+  // back to the middle copy. Lets us derive a stable rendered index from the
+  // ever-growing typewriterIndex.
+  const [carouselTeleportOffset, setCarouselTeleportOffset] = useState(0);
+
   // Pool of (slug, name, question) tuples drawn from preview-questions.ts
   // (with a length-filtered fallback to c.demos for any unlisted slug).
   // Interleaved across collections so the rotation visibly hops between them
@@ -184,6 +196,71 @@ export function LandingSearch({
   useEffect(() => {
     if (isFocused) setTypewriterText("");
   }, [isFocused]);
+
+  // While focused we render the chip instead of the carousel. When the user
+  // blurs without engaging, the carousel re-mounts — flag the next scroll as
+  // the "first" so it lands instantly at the current rotation position rather
+  // than sweeping from scrollLeft 0.
+  useEffect(() => {
+    if (isFocused) carouselFirstScrollRef.current = true;
+  }, [isFocused]);
+
+  // Rendered index in the tripled strip. Starts at N (middle copy) and grows
+  // with typewriterIndex; the teleport offset keeps it bounded to [N, 2N) so
+  // we always have a copy of the pool both ahead and behind for seamless wrap.
+  const carouselScrollIndex =
+    typewriterPool.length > 0
+      ? typewriterPool.length + typewriterIndex - carouselTeleportOffset
+      : 0;
+
+  // Auto-scroll the collection carousel so the active item slides into the
+  // center each time the typewriter advances. First scroll is instant; later
+  // scrolls animate. When we cross into the right copy of the strip, schedule
+  // an invisible teleport back to the equivalent middle-copy position so the
+  // rotation reads as infinite.
+  useEffect(() => {
+    if (userInteracted || isFocused) return;
+    const N = typewriterPool.length;
+    if (N === 0) return;
+    const target = carouselItemRefs.current[carouselScrollIndex];
+    if (!target) return;
+    target.scrollIntoView({
+      behavior: carouselFirstScrollRef.current ? "instant" : "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+    carouselFirstScrollRef.current = false;
+
+    // Teleport once we land on or past the first item of the right copy.
+    // Smooth scroll is ~500ms; 700ms gives it time to settle before we snap
+    // scrollLeft back. The destination renders identical content, so the snap
+    // is invisible.
+    if (carouselScrollIndex >= 2 * N) {
+      const t = setTimeout(() => {
+        const container = carouselStripRef.current;
+        const rewindTarget = carouselItemRefs.current[carouselScrollIndex - N];
+        if (container && rewindTarget) {
+          const prevBehavior = container.style.scrollBehavior;
+          container.style.scrollBehavior = "auto";
+          rewindTarget.scrollIntoView({
+            behavior: "instant",
+            block: "nearest",
+            inline: "center",
+          });
+          requestAnimationFrame(() => {
+            container.style.scrollBehavior = prevBehavior;
+          });
+        }
+        setCarouselTeleportOffset((prev) => prev + N);
+      }, 700);
+      return () => clearTimeout(t);
+    }
+  }, [
+    carouselScrollIndex,
+    typewriterPool.length,
+    userInteracted,
+    isFocused,
+  ]);
 
   // Typewriter effect: types out the current example question, pauses, deletes,
   // moves to the next. Bound to typewriterIndex so re-running the effect (after
@@ -377,18 +454,85 @@ export function LandingSearch({
           )}
         </div>
 
-        {/* Collection picker — chip always visible, dropdown opens on click */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Searching:</span>
-          <div ref={pickerRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setPickerOpen(!pickerOpen)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-            >
-              {selectedCollection?.name ?? "Select collection"}
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
+        {/* Collection picker — auto-scrolling carousel until the user engages,
+            then collapses into a normal dropdown chip. The carousel is a real
+            scroll container; scrollIntoView animates the active item to center
+            in time with the typewriter rotation. */}
+        <div className="flex items-center">
+          <div
+            ref={pickerRef}
+            className={cn(
+              "relative",
+              !userInteracted && !isFocused ? "min-w-0 flex-1" : ""
+            )}
+          >
+            {!userInteracted && !isFocused ? (
+              <button
+                type="button"
+                onClick={() => setPickerOpen(!pickerOpen)}
+                className="group block w-full text-left"
+                aria-label="Choose collection"
+              >
+                <div className="relative">
+                  {/* Edge fade masks so peeking neighbors drift in/out of view */}
+                  <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-background to-transparent" />
+                  <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-background to-transparent" />
+                  <div
+                    ref={carouselStripRef}
+                    className="overflow-x-hidden px-[50%] py-1.5"
+                    style={{ scrollbarWidth: "none" }}
+                  >
+                    <div className="flex items-center gap-8 whitespace-nowrap">
+                      {[
+                        ...typewriterPool,
+                        ...typewriterPool,
+                        ...typewriterPool,
+                      ].map((item, i) => {
+                        const c = collections.find(
+                          (col) => col.slug === item.slug
+                        );
+                        const isCenter = i === carouselScrollIndex;
+                        return (
+                          <span
+                            key={i}
+                            ref={(el) => {
+                              carouselItemRefs.current[i] = el;
+                            }}
+                            className={cn(
+                              "shrink-0 inline-flex items-center gap-1.5 text-sm transition-opacity duration-500",
+                              isCenter
+                                ? "font-medium text-foreground opacity-100"
+                                : "text-foreground opacity-30"
+                            )}
+                          >
+                            <span>{c?.name ?? item.name}</span>
+                            {isCenter && c ? (
+                              <span className="text-xs text-muted-foreground">
+                                · {c.bookCount} books
+                              </span>
+                            ) : null}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPickerOpen(!pickerOpen)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+              >
+                <span>{selectedCollection?.name ?? "Select collection"}</span>
+                {selectedCollection ? (
+                  <span className="text-xs text-muted-foreground">
+                    · {selectedCollection.bookCount} books
+                  </span>
+                ) : null}
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            )}
             {pickerOpen && (
               <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-card p-1 shadow-lg">
                 {collections.map((c) => (
