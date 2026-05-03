@@ -13,6 +13,7 @@ import {
   Loader2,
   ArrowRight,
 } from "lucide-react";
+import Link from "next/link";
 import { Markdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
 import { ToolCallSteps } from "@/components/tool-call-steps";
 import { LandingAnonChat } from "@/components/marketing/landing-anon-chat";
@@ -519,19 +520,32 @@ export function LandingSearch({
                 </div>
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => setPickerOpen(!pickerOpen)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-              >
-                <span>{selectedCollection?.name ?? "Select collection"}</span>
-                {selectedCollection ? (
-                  <span className="text-xs text-muted-foreground">
-                    · {selectedCollection.bookCount} books
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(!pickerOpen)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                >
+                  <span>
+                    {selectedCollection?.name ?? "Select collection"}
                   </span>
+                  {selectedCollection ? (
+                    <span className="text-xs text-muted-foreground">
+                      · {selectedCollection.bookCount} books
+                    </span>
+                  ) : null}
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+                {selectedCollection ? (
+                  <Link
+                    href={`/browse/${selectedCollection.slug}`}
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Go to collection
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
                 ) : null}
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
+              </div>
             )}
             {pickerOpen && (
               <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-card p-1 shadow-lg">
