@@ -13,6 +13,7 @@ import {
   finalizeAssistantMessage,
   isStopRequested,
 } from "@/lib/chat/persistence";
+import { checkAnonGate } from "@/lib/anon-limits";
 
 const openai = wrapOpenAI(new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -58,8 +59,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = (await req.json()) as { messages?: unknown; chatId?: string; messageIndex?: number; isPrivate?: boolean };
-    const { messages, chatId, messageIndex, isPrivate } = body;
+    const body = (await req.json()) as { messages?: unknown; chatId?: string; messageIndex?: number; isPrivate?: boolean; turnstileToken?: string | null };
+    const { messages, chatId, messageIndex, isPrivate, turnstileToken } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(
@@ -93,6 +94,22 @@ export async function POST(req: NextRequest) {
             extraUsageSpent: usageCheck.extraUsageSpent,
           }),
           { status: 402, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      // Anonymous: Turnstile + per-IP rate limit + global daily budget cap.
+      // Separate "in-book" pool so quota spent on the landing demo doesn't
+      // block a legitimate user who continues into a book.
+      const gate = await checkAnonGate(req, turnstileToken ?? null, "in-book");
+      if (!gate.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: gate.message,
+            anonGateDenied: true,
+            reason: gate.reason,
+            resetAt: gate.resetAt ?? null,
+          }),
+          { status: 429, headers: { "Content-Type": "application/json" } }
         );
       }
     }

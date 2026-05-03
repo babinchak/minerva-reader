@@ -5,6 +5,7 @@ import Script from "next/script";
 import { ArrowRight, Loader2, X } from "lucide-react";
 import { StreamingMarkdown, type PassageRef, type SectionBookInfo } from "@/components/markdown";
 import { ToolCallSteps, type MessageToolCall } from "@/components/tool-call-steps";
+import { useTurnstile } from "@/lib/use-turnstile";
 import { cn } from "@/lib/utils";
 
 interface AnonMessage {
@@ -22,30 +23,6 @@ interface LandingAnonChatProps {
   onClose: () => void;
 }
 
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (
-        container: string | HTMLElement,
-        opts: {
-          sitekey: string;
-          callback?: (token: string) => void;
-          "error-callback"?: () => void;
-          "expired-callback"?: () => void;
-          theme?: "light" | "dark" | "auto";
-          size?: "normal" | "compact" | "invisible";
-          appearance?: "always" | "execute" | "interaction-only";
-        }
-      ) => string;
-      reset: (id?: string) => void;
-      remove: (id?: string) => void;
-      getResponse: (id?: string) => string | undefined;
-    };
-  }
-}
-
 export function LandingAnonChat({
   collectionSlug,
   collectionName,
@@ -58,10 +35,9 @@ export function LandingAnonChat({
   const [error, setError] = useState<{ message: string; resetAt?: string | null; reason?: string } | null>(null);
   const [sectionBookMap, setSectionBookMap] = useState<Map<string, SectionBookInfo>>(new Map());
 
-  const turnstileTokenRef = useRef<string | null>(null);
-  const turnstileWidgetIdRef = useRef<string | null>(null);
-  const turnstileContainerRef = useRef<HTMLDivElement>(null);
-  const [turnstileReady, setTurnstileReady] = useState(!TURNSTILE_SITE_KEY);
+  // This component only renders for anon visitors, so Turnstile is always
+  // enabled (the hook itself no-ops when the site key env var is unset).
+  const turnstile = useTurnstile(true);
   const initialSentRef = useRef(false);
 
   // A question that's already been pushed to the UI (user msg + loading state)
@@ -75,44 +51,6 @@ export function LandingAnonChat({
     prior: AnonMessage[];
   } | null>(null);
 
-  // Render Turnstile widget when script loads
-  const renderTurnstile = useCallback(() => {
-    if (!TURNSTILE_SITE_KEY || !window.turnstile || !turnstileContainerRef.current) return;
-    if (turnstileWidgetIdRef.current) return;
-    try {
-      turnstileWidgetIdRef.current = window.turnstile.render(turnstileContainerRef.current, {
-        sitekey: TURNSTILE_SITE_KEY,
-        size: "invisible",
-        appearance: "interaction-only",
-        callback: (token) => {
-          turnstileTokenRef.current = token;
-          setTurnstileReady(true);
-        },
-        "error-callback": () => {
-          turnstileTokenRef.current = null;
-          setTurnstileReady(false);
-        },
-        "expired-callback": () => {
-          turnstileTokenRef.current = null;
-          setTurnstileReady(false);
-          if (turnstileWidgetIdRef.current && window.turnstile) {
-            window.turnstile.reset(turnstileWidgetIdRef.current);
-          }
-        },
-      });
-    } catch (err) {
-      console.error("Turnstile render failed:", err);
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (turnstileWidgetIdRef.current && window.turnstile) {
-        try { window.turnstile.remove(turnstileWidgetIdRef.current); } catch { /* noop */ }
-      }
-    };
-  }, []);
-
   /** Run the actual network call + SSE stream for an already-rendered question. */
   const runStream = useCallback(
     async (question: string, assistantId: string, priorMessages: AnonMessage[]) => {
@@ -120,6 +58,15 @@ export function LandingAnonChat({
         ...priorMessages.map((m) => ({ role: m.role, content: m.content })),
         { role: "user" as const, content: question },
       ];
+
+      const tokenAtSend = turnstile.tokenRef.current;
+      console.log("[anon-chat] runStream start", {
+        assistantId,
+        questionPrefix: question.slice(0, 40),
+        priorCount: priorMessages.length,
+        hasToken: !!tokenAtSend,
+        tokenPrefix: tokenAtSend ? tokenAtSend.slice(0, 16) : null,
+      });
 
       try {
         const res = await fetch("/api/chat/agentic", {
@@ -130,13 +77,20 @@ export function LandingAnonChat({
             curatedCollectionSlug: collectionSlug,
             scopeLabel: `curated collection "${collectionName}"`,
             isPrivate: true,
-            turnstileToken: turnstileTokenRef.current,
+            turnstileToken: tokenAtSend,
           }),
+        });
+
+        console.log("[anon-chat] fetch returned", {
+          status: res.status,
+          ok: res.ok,
+          hasBody: !!res.body,
         });
 
         if (!res.ok) {
           let body: { error?: string; anonGateDenied?: boolean; reason?: string; resetAt?: string | null } = {};
           try { body = await res.json(); } catch { /* noop */ }
+          console.log("[anon-chat] non-ok response body", body);
           setError({
             message: body.error || "Something went wrong. Please try again.",
             reason: body.reason,
@@ -158,10 +112,16 @@ export function LandingAnonChat({
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        let chunkCount = 0;
+        let eventCount = 0;
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log("[anon-chat] stream done", { chunkCount, eventCount });
+            break;
+          }
+          chunkCount++;
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
@@ -169,7 +129,9 @@ export function LandingAnonChat({
           for (const line of lines) {
             if (!line.startsWith("data: ")) continue;
             const data = line.slice(6);
+            eventCount++;
             if (data === "[DONE]") {
+              console.log("[anon-chat] received [DONE]");
               setIsLoading(false);
               continue;
             }
@@ -250,23 +212,20 @@ export function LandingAnonChat({
           }
         }
       } catch (err) {
-        console.error("Anon chat stream error:", err);
+        console.error("[anon-chat] stream error:", err);
         setError({ message: err instanceof Error ? err.message : "Stream failed" });
         setMessages((prev) => prev.filter((m) => m.id !== assistantId));
       } finally {
+        console.log("[anon-chat] runStream finally — resetting turnstile");
         setIsLoading(false);
         // Turnstile tokens are single-use. Reset the widget after every send
-        // (success OR failure) so the next submit gets a fresh token. Setting
-        // turnstileReady=false here makes the next enqueueQuestion wait for
-        // the new token to arrive via the widget callback.
-        if (turnstileWidgetIdRef.current && window.turnstile) {
-          try { window.turnstile.reset(turnstileWidgetIdRef.current); } catch { /* noop */ }
-        }
-        turnstileTokenRef.current = null;
-        if (TURNSTILE_SITE_KEY) setTurnstileReady(false);
+        // (success OR failure) so the next submit gets a fresh token. The
+        // hook also drops `ready` to false so the next enqueueQuestion waits
+        // for the new token to arrive via the widget callback.
+        turnstile.resetAfterSend();
       }
     },
-    [collectionSlug, collectionName]
+    [collectionSlug, collectionName, turnstile]
   );
 
   /** Push the user message + empty assistant placeholder synchronously, then either
@@ -296,14 +255,22 @@ export function LandingAnonChat({
       setMessages([...priorMessages, userMsg, assistantMsg]);
       setIsLoading(true);
 
-      if (turnstileReady) {
+      console.log("[anon-chat] enqueueQuestion", {
+        assistantId,
+        ready: turnstile.ready,
+        hasToken: !!turnstile.tokenRef.current,
+        priorCount: priorMessages.length,
+      });
+
+      if (turnstile.ready) {
         void runStream(trimmed, assistantId, priorMessages);
       } else {
         // Hold the question until Turnstile resolves; the effect below drains it.
+        console.log("[anon-chat] queueing as pending (turnstile not ready)");
         setPending({ question: trimmed, assistantId, prior: priorMessages });
       }
     },
-    [isLoading, messages, turnstileReady, runStream]
+    [isLoading, messages, turnstile.ready, turnstile.tokenRef, runStream]
   );
 
   // Auto-fire the initial question on mount (renders optimistic UI immediately,
@@ -321,12 +288,19 @@ export function LandingAnonChat({
   // current message state from inside a state updater (which would
   // double-fire runStream under React StrictMode).
   useEffect(() => {
-    if (!pending) return;
-    if (!turnstileReady) return;
+    if (!pending) {
+      console.log("[anon-chat] drain effect — no pending");
+      return;
+    }
+    if (!turnstile.ready) {
+      console.log("[anon-chat] drain effect — pending but turnstile not ready");
+      return;
+    }
     const { question, assistantId, prior } = pending;
+    console.log("[anon-chat] drain effect — firing runStream", { assistantId });
     setPending(null);
     void runStream(question, assistantId, prior);
-  }, [pending, turnstileReady, runStream]);
+  }, [pending, turnstile.ready, runStream]);
 
   const handleRefClick = useCallback((ref: PassageRef) => {
     const bid = ref.bookId || sectionBookMap.get(ref.sectionId)?.bookId;
@@ -378,15 +352,15 @@ export function LandingAnonChat({
 
   return (
     <div className="mx-auto w-full max-w-3xl">
-      {/* Cloudflare Turnstile script (loaded once, no-op when site key not set) */}
-      {TURNSTILE_SITE_KEY && (
+      {/* Cloudflare Turnstile (no-op when site key not set) */}
+      {turnstile.shouldRender && (
         <Script
-          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+          src={turnstile.scriptSrc}
           strategy="afterInteractive"
-          onLoad={renderTurnstile}
+          onLoad={turnstile.onScriptLoad}
         />
       )}
-      <div ref={turnstileContainerRef} className="hidden" aria-hidden />
+      <div ref={turnstile.containerRef} className="hidden" aria-hidden />
 
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">

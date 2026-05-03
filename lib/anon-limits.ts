@@ -36,9 +36,19 @@ export function getClientIp(req: Request): string {
   return "unknown";
 }
 
-export function hashIp(ip: string): string {
+/**
+ * Hash an IP for the per-IP rate-limit row key.
+ *
+ * `surface` is optional. When supplied, the surface name is folded into the
+ * hash so different surfaces (e.g. landing demo vs in-book quick chat) get
+ * independent counter rows in `anon_usage` — the same IP can spend its quota
+ * on each surface without sharing a pool. Omit it (or pass undefined) for the
+ * legacy single-pool key, which is what the landing route uses today.
+ */
+export function hashIp(ip: string, surface?: string): string {
   const salt = process.env.ANON_IP_SALT || "minerva-anon-default-salt";
-  return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 32);
+  const key = surface ? `${salt}:${surface}:${ip}` : `${salt}:${ip}`;
+  return createHash("sha256").update(key).digest("hex").slice(0, 32);
 }
 
 function todayUtcDate(): string {
@@ -134,10 +144,16 @@ export type AnonGateResult = AnonGateAllow | AnonGateDenial;
 /**
  * Run the full anon gate: kill switch, Turnstile, budget cap, IP rate limit.
  * Increments the IP counter on success. Increment is atomic (DB-side).
+ *
+ * `surface` opts the caller into a separate per-IP counter pool — the same IP
+ * gets its own ANON_DAILY_REQUESTS_PER_IP allowance on each surface. The
+ * global daily budget cap is shared across all surfaces (it's the real
+ * spend-cap safety net, not the per-IP limit).
  */
 export async function checkAnonGate(
   req: Request,
-  turnstileToken: string | null
+  turnstileToken: string | null,
+  surface?: string
 ): Promise<AnonGateResult> {
   if (!anonQueriesEnabled()) {
     return {
@@ -197,7 +213,7 @@ export async function checkAnonGate(
   }
 
   // Per-IP rate limit (atomic check + increment).
-  const ipHash = hashIp(ip);
+  const ipHash = hashIp(ip, surface);
   const { data: rateRow, error: rateErr } = await supabase.rpc(
     "check_and_increment_anon_request",
     {

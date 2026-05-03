@@ -2,6 +2,8 @@
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import Script from "next/script";
+import { useTurnstile } from "@/lib/use-turnstile";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
@@ -847,6 +849,11 @@ export function AIAgentPanel({
 
   const [authChecked, setAuthChecked] = useState(false);
 
+  // Cloudflare Turnstile for anon users hitting the in-book quick-mode
+  // endpoint. Only enables once auth resolves and we know the user is anon —
+  // logged-in users never load the Turnstile script.
+  const turnstile = useTurnstile(authChecked && !userId);
+
   // Fetch current user
   useEffect(() => {
     const init = async () => {
@@ -1683,6 +1690,9 @@ export function AIAgentPanel({
 
       const useAgentic = chatMode === "agentic" || isLibraryMode;
       const chatUrl = useAgentic ? "/api/chat/agentic" : "/api/chat";
+      // Anon: include Turnstile token so the server-side gate can verify.
+      // Logged-in users get null and the server skips the gate.
+      const anonTurnstileToken = !userId ? turnstile.tokenRef.current : null;
       const chatBody = useAgentic
         ? JSON.stringify({
             messages: messagesForAPI,
@@ -1692,12 +1702,14 @@ export function AIAgentPanel({
             messageIndex: assistantMsgIndex,
             isPrivate: isPrivateChat,
             scopeLabel: isLibraryMode ? (aiScope?.type === "collection" ? `collection "${aiScope.name}"` : aiScope?.type === "curated-library" ? "the curated library" : aiScope?.type === "curated-collection" ? `curated collection "${aiScope.name}"` : undefined) : undefined,
+            turnstileToken: anonTurnstileToken,
           })
         : JSON.stringify({
             messages: messagesForAPI,
             chatId: chatId ?? undefined,
             messageIndex: assistantMsgIndex,
             isPrivate: isPrivateChat,
+            turnstileToken: anonTurnstileToken,
           });
 
       const abortController = new AbortController();
@@ -1748,6 +1760,9 @@ export function AIAgentPanel({
     } finally {
       sendingRef.current = false;
       refreshCredits();
+      // Turnstile tokens are single-use — reset after every send so the next
+      // anon request gets a fresh token.
+      if (!userId) turnstile.resetAfterSend();
     }
   };
 
@@ -2071,6 +2086,9 @@ export function AIAgentPanel({
 
       const useAgentic = chatMode === "agentic" || isLibraryMode;
       const chatUrl = useAgentic ? "/api/chat/agentic" : "/api/chat";
+      // Anon: include Turnstile token so the server-side gate can verify.
+      // Logged-in users get null and the server skips the gate.
+      const anonTurnstileToken = !userId ? turnstile.tokenRef.current : null;
       const chatBody = useAgentic
         ? JSON.stringify({
             messages: messagesForAPI,
@@ -2080,12 +2098,14 @@ export function AIAgentPanel({
             messageIndex: assistantMsgIndex,
             isPrivate: isPrivateChat,
             scopeLabel: isLibraryMode ? (aiScope?.type === "collection" ? `collection "${aiScope.name}"` : aiScope?.type === "curated-library" ? "the curated library" : aiScope?.type === "curated-collection" ? `curated collection "${aiScope.name}"` : undefined) : undefined,
+            turnstileToken: anonTurnstileToken,
           })
         : JSON.stringify({
             messages: messagesForAPI,
             chatId: chatId ?? undefined,
             messageIndex: assistantMsgIndex,
             isPrivate: isPrivateChat,
+            turnstileToken: anonTurnstileToken,
           });
 
       const abortController = new AbortController();
@@ -2130,6 +2150,9 @@ export function AIAgentPanel({
       );
       setIsLoading(false);
       onActionComplete?.();
+    } finally {
+      // Turnstile tokens are single-use — reset after every anon send.
+      if (!userId) turnstile.resetAfterSend();
     }
   }, [
     bookAuthor,
@@ -2148,6 +2171,8 @@ export function AIAgentPanel({
     onActionComplete,
     onActionStart,
     ensureChat,
+    userId,
+    turnstile,
   ]);
 
   useEffect(() => {
@@ -2166,6 +2191,23 @@ export function AIAgentPanel({
         " min-h-0"
       }
     >
+      {/* Cloudflare Turnstile (anon users only). The widget is invisible; the
+          script + hidden container just need to exist so the SDK can render. */}
+      {turnstile.shouldRender && (
+        <>
+          <Script
+            src={turnstile.scriptSrc}
+            strategy="afterInteractive"
+            onLoad={turnstile.onScriptLoad}
+          />
+          <div
+            ref={turnstile.containerRef}
+            className="hidden"
+            aria-hidden
+          />
+        </>
+      )}
+
       {/* Header */}
       {showHeader && (
         <div className="flex flex-col border-b border-border">
