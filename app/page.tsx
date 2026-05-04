@@ -138,21 +138,14 @@ async function HomeContent({
 
   return (
     <div className="w-full max-w-7xl space-y-5 sm:space-y-6">
-      {/* 1. Search box with inline headline */}
+      {/* 1. Search box */}
       <section className="flex flex-col items-center pt-2 sm:pt-4">
-        <h1 className="text-center text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-          Trace the idea
-        </h1>
-        <div className="mt-4 w-full">
+        <div className="w-full">
           <LandingSearch collections={cards} />
         </div>
-        <p className="mt-5 text-center text-base text-muted-foreground">
-          Our mission: make reading{" "}
-          <span className="font-semibold text-foreground">addictive</span>.
-        </p>
         <Link
           href="/auth/sign-up"
-          className="mt-4 inline-flex items-center justify-center rounded-xl bg-primary px-8 py-3 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          className="mt-8 inline-flex items-center justify-center rounded-xl bg-primary px-8 py-3 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
         >
           Sign up free — build your library
         </Link>
